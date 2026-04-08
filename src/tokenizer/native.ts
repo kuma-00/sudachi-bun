@@ -3,11 +3,14 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { dlopen, suffix, type Pointer } from "bun:ffi";
 
-import type { TokenizerOptions } from "./types.ts";
+import type { NativeSudachiErrorCode, TokenizerLoadOptions } from "./types.ts";
+import { SudachiError } from "./types.ts";
 
 const MORPHEME_RESULT_LAYOUT_FIELD_COUNT = 18;
+export const MORPHEME_RESULT_LAYOUT_VERSION = 1;
 
 export interface MorphemeResultLayout {
+  layoutVersion: number;
   arrayLayoutKind: number;
   arrayItemsOffset: number;
   arrayLenOffset: number;
@@ -25,7 +28,6 @@ export interface MorphemeResultLayout {
   isOovOffset: number;
   synonymGroupIdsOffset: number;
   synonymGroupIdsLenOffset: number;
-  detailJsonOffset: number;
 }
 
 export interface NativeSudachiLibrary {
@@ -36,6 +38,7 @@ export interface NativeSudachiLibrary {
     sudachi_free_result: (result: Pointer | NodeJS.TypedArray | null) => void;
     sudachi_get_morpheme_result_layout: (outLayout: NodeJS.TypedArray | Pointer | null) => number;
     sudachi_get_last_error: () => import("bun:ffi").CString;
+    sudachi_status_code_name: (status: number) => import("bun:ffi").CString;
   };
   close(): void;
 }
@@ -79,7 +82,29 @@ function loadNativeLibraryPath(libraryPath?: string): string {
   );
 }
 
-export function loadNativeLibrary(options: TokenizerOptions): NativeSudachiLibrary {
+function validateMorphemeResultLayout(layout: MorphemeResultLayout): void {
+  if (layout.layoutVersion !== MORPHEME_RESULT_LAYOUT_VERSION) {
+    throw new SudachiError(
+      `Unsupported morpheme result layout version: expected ${MORPHEME_RESULT_LAYOUT_VERSION}, received ${layout.layoutVersion}.`,
+      { code: "LAYOUT_MISMATCH" },
+    );
+  }
+
+  if (layout.resultSize <= 0) {
+    throw new SudachiError("Received an invalid morpheme result layout size.", {
+      code: "LAYOUT_MISMATCH",
+    });
+  }
+
+  if (layout.arrayLayoutKind !== 0 && layout.arrayLayoutKind !== 1) {
+    throw new SudachiError(
+      `Unsupported morpheme result array layout kind: ${layout.arrayLayoutKind}.`,
+      { code: "LAYOUT_MISMATCH" },
+    );
+  }
+}
+
+export function loadNativeLibrary(options: TokenizerLoadOptions): NativeSudachiLibrary {
   const libraryPath = loadNativeLibraryPath(options.libraryPath);
 
   return dlopen(libraryPath, {
@@ -107,38 +132,11 @@ export function loadNativeLibrary(options: TokenizerOptions): NativeSudachiLibra
       args: [],
       returns: "cstring",
     },
+    sudachi_status_code_name: {
+      args: ["i32"],
+      returns: "cstring",
+    },
   }) as unknown as NativeSudachiLibrary;
-}
-
-export function readMorphemeResultLayout(library: NativeSudachiLibrary): MorphemeResultLayout {
-  const outLayout = new BigUint64Array(MORPHEME_RESULT_LAYOUT_FIELD_COUNT);
-  const status = library.symbols.sudachi_get_morpheme_result_layout(outLayout);
-  if (status !== 0) {
-    const message = readNativeError(library);
-    throw new Error(message || `Failed to read morpheme result layout (status ${status})`);
-  }
-
-  const values = Array.from(outLayout, (value) => Number(value));
-  return {
-    arrayLayoutKind: values[0] ?? 0,
-    arrayItemsOffset: values[1] ?? 0,
-    arrayLenOffset: values[2] ?? 0,
-    resultSize: values[3] ?? 0,
-    surfaceOffset: values[4] ?? 0,
-    normalizedOffset: values[5] ?? 0,
-    dictionaryFormOffset: values[6] ?? 0,
-    readingOffset: values[7] ?? 0,
-    posOffset: values[8] ?? 0,
-    beginOffset: values[9] ?? 0,
-    endOffset: values[10] ?? 0,
-    wordIdOffset: values[11] ?? 0,
-    posIdOffset: values[12] ?? 0,
-    dictionaryIdOffset: values[13] ?? 0,
-    isOovOffset: values[14] ?? 0,
-    synonymGroupIdsOffset: values[15] ?? 0,
-    synonymGroupIdsLenOffset: values[16] ?? 0,
-    detailJsonOffset: values[17] ?? 0,
-  };
 }
 
 export function readNativeError(library: NativeSudachiLibrary): string {
@@ -147,4 +145,71 @@ export function readNativeError(library: NativeSudachiLibrary): string {
   } catch {
     return "";
   }
+}
+
+export function readNativeStatusCodeName(
+  library: NativeSudachiLibrary,
+  status: number,
+): NativeSudachiErrorCode {
+  try {
+    const code = String(library.symbols.sudachi_status_code_name(status) ?? "UNKNOWN");
+    switch (code) {
+      case "OK":
+      case "NULL_POINTER":
+      case "INVALID_UTF8":
+      case "INVALID_MODE":
+      case "CONFIG":
+      case "TOKENIZE":
+      case "INTERNAL":
+        return code;
+      default:
+        return "UNKNOWN";
+    }
+  } catch {
+    return "UNKNOWN";
+  }
+}
+
+export function createNativeSudachiError(
+  library: NativeSudachiLibrary,
+  status: number,
+  fallbackMessage: string,
+): SudachiError {
+  return new SudachiError(readNativeError(library) || fallbackMessage, {
+    code: readNativeStatusCodeName(library, status),
+    nativeStatus: status,
+  });
+}
+
+export function readMorphemeResultLayout(library: NativeSudachiLibrary): MorphemeResultLayout {
+  const outLayout = new BigUint64Array(MORPHEME_RESULT_LAYOUT_FIELD_COUNT);
+  const status = library.symbols.sudachi_get_morpheme_result_layout(outLayout);
+  if (status !== 0) {
+    throw createNativeSudachiError(library, status, "Failed to read the morpheme result layout.");
+  }
+
+  const values = Array.from(outLayout, (value) => Number(value));
+  const layout = {
+    layoutVersion: values[0] ?? 0,
+    arrayLayoutKind: values[1] ?? 0,
+    arrayItemsOffset: values[2] ?? 0,
+    arrayLenOffset: values[3] ?? 0,
+    resultSize: values[4] ?? 0,
+    surfaceOffset: values[5] ?? 0,
+    normalizedOffset: values[6] ?? 0,
+    dictionaryFormOffset: values[7] ?? 0,
+    readingOffset: values[8] ?? 0,
+    posOffset: values[9] ?? 0,
+    beginOffset: values[10] ?? 0,
+    endOffset: values[11] ?? 0,
+    wordIdOffset: values[12] ?? 0,
+    posIdOffset: values[13] ?? 0,
+    dictionaryIdOffset: values[14] ?? 0,
+    isOovOffset: values[15] ?? 0,
+    synonymGroupIdsOffset: values[16] ?? 0,
+    synonymGroupIdsLenOffset: values[17] ?? 0,
+  } satisfies MorphemeResultLayout;
+
+  validateMorphemeResultLayout(layout);
+  return layout;
 }

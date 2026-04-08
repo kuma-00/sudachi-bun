@@ -11,6 +11,15 @@ pub const ERR_CONFIG: i32 = 4;
 pub const ERR_TOKENIZE: i32 = 5;
 pub const ERR_INTERNAL: i32 = 255;
 
+const OK_NAME: &[u8] = b"OK\0";
+const NULL_POINTER_NAME: &[u8] = b"NULL_POINTER\0";
+const INVALID_UTF8_NAME: &[u8] = b"INVALID_UTF8\0";
+const INVALID_MODE_NAME: &[u8] = b"INVALID_MODE\0";
+const CONFIG_NAME: &[u8] = b"CONFIG\0";
+const TOKENIZE_NAME: &[u8] = b"TOKENIZE\0";
+const INTERNAL_NAME: &[u8] = b"INTERNAL\0";
+const UNKNOWN_NAME: &[u8] = b"UNKNOWN\0";
+
 thread_local! {
     static LAST_ERROR: RefCell<Option<CString>> = const { RefCell::new(None) };
 }
@@ -41,6 +50,33 @@ pub(crate) fn last_error_ptr() -> *const c_char {
     })
 }
 
+#[cfg_attr(not(test), allow(dead_code))]
+pub(crate) fn status_code_name(code: i32) -> &'static str {
+    match code {
+        OK => "OK",
+        ERR_NULL_POINTER => "NULL_POINTER",
+        ERR_INVALID_UTF8 => "INVALID_UTF8",
+        ERR_INVALID_MODE => "INVALID_MODE",
+        ERR_CONFIG => "CONFIG",
+        ERR_TOKENIZE => "TOKENIZE",
+        ERR_INTERNAL => "INTERNAL",
+        _ => "UNKNOWN",
+    }
+}
+
+pub(crate) fn status_code_name_ptr(code: i32) -> *const c_char {
+    match code {
+        OK => OK_NAME.as_ptr().cast(),
+        ERR_NULL_POINTER => NULL_POINTER_NAME.as_ptr().cast(),
+        ERR_INVALID_UTF8 => INVALID_UTF8_NAME.as_ptr().cast(),
+        ERR_INVALID_MODE => INVALID_MODE_NAME.as_ptr().cast(),
+        ERR_CONFIG => CONFIG_NAME.as_ptr().cast(),
+        ERR_TOKENIZE => TOKENIZE_NAME.as_ptr().cast(),
+        ERR_INTERNAL => INTERNAL_NAME.as_ptr().cast(),
+        _ => UNKNOWN_NAME.as_ptr().cast(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -54,5 +90,11 @@ mod tests {
 
         let text = unsafe { CStr::from_ptr(err) };
         assert_eq!(text.to_str().unwrap(), "hello");
+    }
+
+    #[test]
+    fn status_code_names_are_stable() {
+        assert_eq!(status_code_name(ERR_TOKENIZE), "TOKENIZE");
+        assert_eq!(status_code_name(999), "UNKNOWN");
     }
 }

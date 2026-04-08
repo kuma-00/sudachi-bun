@@ -2,7 +2,7 @@ import { mkdir } from "node:fs/promises";
 
 export type DictionaryType = "core" | "small" | "full";
 
-type Options = {
+export type SetupDictionaryOptions = {
   type: DictionaryType;
   version: string;
   outDir: string;
@@ -18,6 +18,11 @@ type ReleaseMetadata = {
   tag_name: string;
   assets: ReleaseAsset[];
   html_url?: string;
+};
+
+type DictionaryDownload = {
+  name: string;
+  url: string;
 };
 
 const GITHUB_RELEASES_API = "https://api.github.com/repos/WorksApplications/SudachiDict/releases";
@@ -36,86 +41,91 @@ Examples:
 `);
 }
 
-function parseArgs(argv: string[]): Options {
-  const parsed: Partial<Options> = {
+function readOptionValue(argv: string[], index: number, flag: string): { value: string; nextIndex: number } {
+  const arg = argv[index];
+  if (!arg) {
+    throw new Error(`Missing value for ${flag}`);
+  }
+
+  const [rawFlag, inlineValue] = arg.includes("=") ? arg.split(/=(.*)/s, 2) : [arg, undefined];
+  if (rawFlag !== flag) {
+    throw new Error(`Unknown argument: ${arg}`);
+  }
+
+  if (inlineValue !== undefined) {
+    if (inlineValue.length === 0) {
+      throw new Error(`Missing value for ${flag}`);
+    }
+
+    return { value: inlineValue, nextIndex: index };
+  }
+
+  const nextValue = argv[index + 1];
+  if (!nextValue || nextValue.startsWith("-")) {
+    throw new Error(`Missing value for ${flag}`);
+  }
+
+  return { value: nextValue, nextIndex: index + 1 };
+}
+
+function normalizeType(input: string): DictionaryType {
+  if (VALID_TYPES.includes(input as DictionaryType)) {
+    return input as DictionaryType;
+  }
+
+  throw new Error(`Unsupported dictionary type: ${input}. Expected one of: ${VALID_TYPES.join(", ")}`);
+}
+
+export function parseSetupDictionaryArgs(argv: string[]): SetupDictionaryOptions {
+  const parsed: SetupDictionaryOptions = {
     type: "core",
     version: DEFAULT_VERSION,
     outDir: DEFAULT_OUT_DIR,
   };
 
-  for (let i = 0; i < argv.length; i += 1) {
-    const arg = argv[i];
-    if (!arg) continue;
+  for (let index = 0; index < argv.length; index += 1) {
+    const arg = argv[index];
+    if (!arg) {
+      continue;
+    }
 
     if (arg === "-h" || arg === "--help") {
       printHelp();
       process.exit(0);
     }
 
-    const [flag, inlineValue] = arg.includes("=") ? arg.split(/=(.*)/s, 2) : [arg, undefined];
-    const nextValue = inlineValue ?? argv[i + 1];
-    const hasNextValue = inlineValue === undefined && nextValue !== undefined && !nextValue.startsWith("-");
-
-    switch (flag) {
-      case "--type":
-        if (!hasNextValue && inlineValue === undefined) {
-          throw new Error("Missing value for --type");
-        }
-        parsed.type = normalizeType(nextValue ?? inlineValue);
-        if (inlineValue === undefined) i += 1;
-        break;
-      case "--version":
-        if (!hasNextValue && inlineValue === undefined) {
-          throw new Error("Missing value for --version");
-        }
-        parsed.version = nextValue ?? inlineValue ?? DEFAULT_VERSION;
-        if (inlineValue === undefined) i += 1;
-        break;
-      case "--out":
-        if (!hasNextValue && inlineValue === undefined) {
-          throw new Error("Missing value for --out");
-        }
-        parsed.outDir = nextValue ?? inlineValue ?? DEFAULT_OUT_DIR;
-        if (inlineValue === undefined) i += 1;
-        break;
-      case "--url":
-        if (!hasNextValue && inlineValue === undefined) {
-          throw new Error("Missing value for --url");
-        }
-        parsed.url = nextValue ?? inlineValue;
-        if (inlineValue === undefined) i += 1;
-        break;
-      default:
-        if (flag.startsWith("--type=")) {
-          parsed.type = normalizeType(flag.slice("--type=".length));
-        } else if (flag.startsWith("--version=")) {
-          parsed.version = flag.slice("--version=".length);
-        } else if (flag.startsWith("--out=")) {
-          parsed.outDir = flag.slice("--out=".length);
-        } else if (flag.startsWith("--url=")) {
-          parsed.url = flag.slice("--url=".length);
-        } else {
-          throw new Error(`Unknown argument: ${arg}`);
-        }
+    if (arg === "--type" || arg.startsWith("--type=")) {
+      const result = readOptionValue(argv, index, "--type");
+      parsed.type = normalizeType(result.value);
+      index = result.nextIndex;
+      continue;
     }
+
+    if (arg === "--version" || arg.startsWith("--version=")) {
+      const result = readOptionValue(argv, index, "--version");
+      parsed.version = result.value;
+      index = result.nextIndex;
+      continue;
+    }
+
+    if (arg === "--out" || arg.startsWith("--out=")) {
+      const result = readOptionValue(argv, index, "--out");
+      parsed.outDir = result.value;
+      index = result.nextIndex;
+      continue;
+    }
+
+    if (arg === "--url" || arg.startsWith("--url=")) {
+      const result = readOptionValue(argv, index, "--url");
+      parsed.url = result.value;
+      index = result.nextIndex;
+      continue;
+    }
+
+    throw new Error(`Unknown argument: ${arg}`);
   }
 
-  return {
-    type: parsed.type ?? "core",
-    version: parsed.version ?? DEFAULT_VERSION,
-    outDir: parsed.outDir ?? DEFAULT_OUT_DIR,
-    url: parsed.url,
-  };
-}
-
-function normalizeType(input: string | undefined): DictionaryType {
-  if (!input) {
-    throw new Error("Missing value for --type");
-  }
-  if (VALID_TYPES.includes(input as DictionaryType)) {
-    return input as DictionaryType;
-  }
-  throw new Error(`Unsupported dictionary type: ${input}. Expected one of: ${VALID_TYPES.join(", ")}`);
+  return parsed;
 }
 
 export function buildReleaseApiUrl(version: string): string {
@@ -131,10 +141,7 @@ export function buildExpectedAssetName(type: DictionaryType, releaseTag: string)
   return `sudachi-dictionary-${versionPart}-${type}.zip`;
 }
 
-export function resolveDictionaryAsset(
-  release: ReleaseMetadata,
-  type: DictionaryType,
-): ReleaseAsset {
+export function resolveDictionaryAsset(release: ReleaseMetadata, type: DictionaryType): ReleaseAsset {
   const expectedName = buildExpectedAssetName(type, release.tag_name);
   const match = release.assets.find((asset) => asset.name === expectedName);
   if (match) {
@@ -180,11 +187,33 @@ async function fetchReleaseMetadata(version: string): Promise<ReleaseMetadata> {
   return (await response.json()) as ReleaseMetadata;
 }
 
+function normalizeOutDir(outDir: string): string {
+  return outDir.replace(/\/$/, "");
+}
+
+export async function resolveDictionaryDownload(
+  options: SetupDictionaryOptions,
+): Promise<DictionaryDownload> {
+  if (options.url) {
+    return {
+      name: options.url.split("/").pop() ?? `sudachi-dictionary-${options.type}.zip`,
+      url: options.url,
+    };
+  }
+
+  const release = await fetchReleaseMetadata(options.version);
+  const asset = resolveDictionaryAsset(release, options.type);
+  return {
+    name: asset.name,
+    url: asset.browser_download_url,
+  };
+}
+
 async function ensureDirectory(path: string): Promise<void> {
   await mkdir(path, { recursive: true });
 }
 
-async function downloadArchive(url: string, archivePath: string): Promise<void> {
+export async function downloadArchive(url: string, archivePath: string): Promise<void> {
   let response: Response;
   try {
     response = await fetch(url);
@@ -204,7 +233,7 @@ async function downloadArchive(url: string, archivePath: string): Promise<void> 
   await Bun.write(archivePath, body);
 }
 
-async function unzipArchive(archivePath: string, outDir: string): Promise<void> {
+export async function unzipArchive(archivePath: string, outDir: string): Promise<void> {
   const unzip = Bun.spawn(["unzip", "-o", archivePath, "-d", outDir], {
     stdout: "inherit",
     stderr: "inherit",
@@ -219,26 +248,27 @@ async function unzipArchive(archivePath: string, outDir: string): Promise<void> 
   }
 }
 
-export async function main(): Promise<void> {
-  const options = parseArgs(process.argv.slice(2));
-  const outDir = options.outDir.replace(/\/$/, "");
-  const resolvedAsset = options.url
-    ? { name: options.url.split("/").pop() ?? `sudachi-dictionary-${options.type}.zip`, browser_download_url: options.url }
-    : resolveDictionaryAsset(await fetchReleaseMetadata(options.version), options.type);
-  const archivePath = `${outDir}/${resolvedAsset.name}`;
+export async function setupDictionary(options: SetupDictionaryOptions): Promise<void> {
+  const outDir = normalizeOutDir(options.outDir);
+  const download = await resolveDictionaryDownload(options);
+  const archivePath = `${outDir}/${download.name}`;
 
   await ensureDirectory(outDir);
 
-  console.log(`Downloading dictionary`);
+  console.log("Downloading dictionary");
   console.log(`  type: ${options.type}`);
   console.log(`  version: ${options.version}`);
-  console.log(`  url: ${resolvedAsset.browser_download_url}`);
+  console.log(`  url: ${download.url}`);
   console.log(`  out: ${outDir}`);
 
-  await downloadArchive(resolvedAsset.browser_download_url, archivePath);
+  await downloadArchive(download.url, archivePath);
   await unzipArchive(archivePath, outDir);
 
   console.log(`Dictionary setup complete: ${outDir}`);
+}
+
+export async function main(argv = process.argv.slice(2)): Promise<void> {
+  await setupDictionary(parseSetupDictionaryArgs(argv));
 }
 
 if (import.meta.main) {

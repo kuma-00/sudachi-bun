@@ -9,6 +9,7 @@ use sudachi::dic::dictionary::JapaneseDictionary;
 use crate::convert::{cstr_to_path, cstr_to_string, mode_from_raw};
 use crate::error::{
     ERR_CONFIG, ERR_NULL_POINTER, ERR_TOKENIZE, OK, clear_last_error, error, last_error_ptr,
+    status_code_name_ptr,
 };
 use crate::result::{
     MorphemeResult, MorphemeResultArray, MorphemeResultLayout, free_result_array,
@@ -26,10 +27,6 @@ fn free_partial_results(results: &mut [MorphemeResult]) {
     }
 }
 
-/// Load a tokenizer handle from a dictionary path and an optional config path.
-///
-/// The dictionary path is required in v1 so the Bun side can point at a locally
-/// downloaded dictionary file.
 #[unsafe(no_mangle)]
 pub extern "C" fn sudachi_create_tokenizer(
     dict_path: *const c_char,
@@ -178,4 +175,9 @@ pub extern "C" fn sudachi_get_morpheme_result_layout(out_layout: *mut MorphemeRe
 #[unsafe(no_mangle)]
 pub extern "C" fn sudachi_get_last_error() -> *const c_char {
     last_error_ptr()
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn sudachi_status_code_name(code: i32) -> *const c_char {
+    status_code_name_ptr(code)
 }

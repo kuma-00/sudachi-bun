@@ -1,15 +1,15 @@
 use std::ffi::CString;
+use std::mem::offset_of;
 use std::os::raw::c_char;
 use std::ptr;
-use std::mem::offset_of;
 use std::sync::Arc;
 
-use serde_json::json;
 use sudachi::dic::dictionary::JapaneseDictionary;
 
 use crate::error::{ERR_INTERNAL, error};
 
 pub const MORPHEME_RESULT_ARRAY_LAYOUT_CONTIGUOUS: u64 = 0;
+pub const MORPHEME_RESULT_LAYOUT_VERSION: u64 = 1;
 
 #[repr(C)]
 pub struct MorphemeResult {
@@ -26,7 +26,6 @@ pub struct MorphemeResult {
     pub is_oov: u8,
     pub synonym_group_ids: *mut u32,
     pub synonym_group_ids_len: usize,
-    pub detail_json: *mut c_char,
 }
 
 impl MorphemeResult {
@@ -45,7 +44,6 @@ impl MorphemeResult {
             is_oov: 0,
             synonym_group_ids: ptr::null_mut(),
             synonym_group_ids_len: 0,
-            detail_json: ptr::null_mut(),
         }
     }
 
@@ -56,7 +54,6 @@ impl MorphemeResult {
         free_c_string(self.reading);
         free_c_string(self.pos);
         free_c_string(self.word_id);
-        free_c_string(self.detail_json);
         free_u32_slice(self.synonym_group_ids, self.synonym_group_ids_len);
 
         self.surface = ptr::null_mut();
@@ -65,7 +62,6 @@ impl MorphemeResult {
         self.reading = ptr::null_mut();
         self.pos = ptr::null_mut();
         self.word_id = ptr::null_mut();
-        self.detail_json = ptr::null_mut();
         self.synonym_group_ids = ptr::null_mut();
         self.synonym_group_ids_len = 0;
     }
@@ -79,6 +75,7 @@ pub struct MorphemeResultArray {
 
 #[repr(C)]
 pub struct MorphemeResultLayout {
+    pub layout_version: u64,
     pub array_layout_kind: u64,
     pub array_items_offset: u64,
     pub array_len_offset: u64,
@@ -96,12 +93,12 @@ pub struct MorphemeResultLayout {
     pub is_oov_offset: u64,
     pub synonym_group_ids_offset: u64,
     pub synonym_group_ids_len_offset: u64,
-    pub detail_json_offset: u64,
 }
 
 impl MorphemeResultLayout {
     pub const fn new() -> Self {
         Self {
+            layout_version: MORPHEME_RESULT_LAYOUT_VERSION,
             array_layout_kind: MORPHEME_RESULT_ARRAY_LAYOUT_CONTIGUOUS,
             array_items_offset: offset_of!(MorphemeResultArray, items) as u64,
             array_len_offset: offset_of!(MorphemeResultArray, len) as u64,
@@ -119,7 +116,6 @@ impl MorphemeResultLayout {
             is_oov_offset: offset_of!(MorphemeResult, is_oov) as u64,
             synonym_group_ids_offset: offset_of!(MorphemeResult, synonym_group_ids) as u64,
             synonym_group_ids_len_offset: offset_of!(MorphemeResult, synonym_group_ids_len) as u64,
-            detail_json_offset: offset_of!(MorphemeResult, detail_json) as u64,
         }
     }
 }
@@ -132,39 +128,6 @@ fn string_to_c(ptr: String) -> Result<*mut c_char, i32> {
 
 fn clone_string(value: &str) -> Result<*mut c_char, i32> {
     string_to_c(value.to_owned())
-}
-
-fn build_detail_json(
-    surface: &str,
-    normalized: &str,
-    dictionary_form: &str,
-    reading: &str,
-    pos: &[String],
-    begin: usize,
-    end: usize,
-    word_id: &str,
-    pos_id: u16,
-    dictionary_id: i32,
-    is_oov: bool,
-    synonym_group_ids: &[u32],
-) -> Result<*mut c_char, i32> {
-    let payload = json!({
-        "surface": surface,
-        "raw_surface": surface,
-        "normalized_form": normalized,
-        "dictionary_form": dictionary_form,
-        "reading_form": reading,
-        "pos": pos,
-        "begin": begin,
-        "end": end,
-        "word_id": word_id,
-        "pos_id": u32::from(pos_id),
-        "dictionary_id": dictionary_id,
-        "is_oov": is_oov,
-        "synonym_group_ids": synonym_group_ids,
-    });
-
-    string_to_c(payload.to_string())
 }
 
 pub(crate) fn morpheme_to_result(
@@ -192,53 +155,20 @@ pub(crate) fn morpheme_to_result(
         }
     }
 
-    let surface = morpheme.surface().to_string();
-    let normalized = morpheme.normalized_form().to_string();
-    let dictionary_form = morpheme.dictionary_form().to_string();
-    let reading = morpheme.reading_form().to_string();
-    let pos: Vec<String> = morpheme
-        .part_of_speech()
-        .iter()
-        .map(|value| value.to_string())
-        .collect();
-    let pos_joined = pos.join(",");
-
-    let begin = morpheme.begin();
-    let end = morpheme.end();
-    let pos_id = morpheme.part_of_speech_id();
-    let dictionary_id = morpheme.dictionary_id();
-    let is_oov = u8::from(morpheme.is_oov());
-    let synonym_group_ids = morpheme.synonym_group_ids().to_vec();
-    let word_id = format!("{:?}", morpheme.word_id());
-
     let mut result = ResultGuard::new();
-    result.value.surface = clone_string(&surface)?;
-    result.value.normalized = clone_string(&normalized)?;
-    result.value.dictionary_form = clone_string(&dictionary_form)?;
-    result.value.reading = clone_string(&reading)?;
-    result.value.pos = clone_string(&pos_joined)?;
-    result.value.begin = begin;
-    result.value.end = end;
-    result.value.word_id = clone_string(&word_id)?;
-    result.value.pos_id = pos_id;
-    result.value.dictionary_id = dictionary_id;
-    result.value.is_oov = is_oov;
-    result.value.detail_json = build_detail_json(
-        &surface,
-        &normalized,
-        &dictionary_form,
-        &reading,
-        &pos,
-        begin,
-        end,
-        &word_id,
-        pos_id,
-        dictionary_id,
-        is_oov != 0,
-        &synonym_group_ids,
-    )?;
+    result.value.surface = clone_string(&morpheme.surface().to_string())?;
+    result.value.normalized = clone_string(&morpheme.normalized_form().to_string())?;
+    result.value.dictionary_form = clone_string(&morpheme.dictionary_form().to_string())?;
+    result.value.reading = clone_string(&morpheme.reading_form().to_string())?;
+    result.value.pos = clone_string(&morpheme.part_of_speech().join(","))?;
+    result.value.begin = morpheme.begin();
+    result.value.end = morpheme.end();
+    result.value.word_id = clone_string(&format!("{:?}", morpheme.word_id()))?;
+    result.value.pos_id = morpheme.part_of_speech_id();
+    result.value.dictionary_id = morpheme.dictionary_id();
+    result.value.is_oov = u8::from(morpheme.is_oov());
 
-    let mut synonym_group_ids = synonym_group_ids.into_boxed_slice();
+    let mut synonym_group_ids = morpheme.synonym_group_ids().to_vec().into_boxed_slice();
     let synonym_group_ids_len = synonym_group_ids.len();
     let synonym_group_ids_ptr = if synonym_group_ids_len == 0 {
         ptr::null_mut()
@@ -317,30 +247,19 @@ mod tests {
         result.synonym_group_ids = synonym_group_ids.as_mut_ptr();
         result.synonym_group_ids_len = synonym_group_ids.len();
         std::mem::forget(synonym_group_ids);
-        result.detail_json = CString::new(r#"{"ok":true}"#).unwrap().into_raw();
 
+        result.free_owned_fields();
         result.free_owned_fields();
 
         assert!(result.surface.is_null());
         assert!(result.reading.is_null());
         assert!(result.synonym_group_ids.is_null());
-        assert_eq!(result.synonym_group_ids_len, 0);
-        assert!(result.detail_json.is_null());
-
-        result.free_owned_fields();
     }
 
     #[test]
-    fn layout_matches_rust_offsets() {
-        let layout = MorphemeResultLayout::new();
-
-        assert_eq!(
-            layout.array_items_offset,
-            offset_of!(MorphemeResultArray, items) as u64
-        );
-        assert_eq!(layout.array_len_offset, offset_of!(MorphemeResultArray, len) as u64);
-        assert_eq!(layout.result_size, std::mem::size_of::<MorphemeResult>() as u64);
-        assert_eq!(layout.surface_offset, offset_of!(MorphemeResult, surface) as u64);
-        assert_eq!(layout.detail_json_offset, offset_of!(MorphemeResult, detail_json) as u64);
+    fn layout_version_is_stable() {
+        let layout = morpheme_result_layout();
+        assert_eq!(layout.layout_version, MORPHEME_RESULT_LAYOUT_VERSION);
+        assert!(layout.result_size > 0);
     }
 }
