@@ -37,3 +37,7 @@ report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 # Added by cargo
 
 /target
+sudachi-ffi/target
+sudachi-ffi/Cargo.lock
+
+tasks/done

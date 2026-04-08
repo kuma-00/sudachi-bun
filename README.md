@@ -6,6 +6,25 @@ To install dependencies:
 bun install
 ```
 
+Build the Rust FFI bridge:
+
+```bash
+cd sudachi-ffi
+cargo build --release
+```
+
+Download and unpack a Sudachi dictionary:
+
+```bash
+bun run setup:dict -- --type core --version latest --out ./dict
+```
+
+If your dictionary artifact is hosted elsewhere, override the URL explicitly:
+
+```bash
+bun run setup:dict -- --url https://example.com/sudachi-dictionary.zip --out ./dict
+```
+
 To run:
 
 ```bash

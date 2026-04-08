@@ -2,6 +2,9 @@
   "name": "sudachi-bun",
   "module": "index.ts",
   "type": "module",
+  "scripts": {
+    "setup:dict": "bun scripts/setup-dict.ts"
+  },
   "devDependencies": {
     "@types/bun": "latest"
   },

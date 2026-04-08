@@ -1,0 +1,55 @@
+use std::ffi::CStr;
+use std::os::raw::c_char;
+use std::path::PathBuf;
+
+use sudachi::analysis::Mode;
+
+use crate::error::{ERR_INVALID_MODE, ERR_INVALID_UTF8, ERR_NULL_POINTER, error};
+
+pub(crate) fn cstr_to_path(ptr: *const c_char) -> Result<PathBuf, i32> {
+    if ptr.is_null() {
+        return Err(error(ERR_NULL_POINTER, "path pointer was null"));
+    }
+
+    let path = unsafe { CStr::from_ptr(ptr) };
+    let text = path
+        .to_str()
+        .map_err(|_| error(ERR_INVALID_UTF8, "path was not valid UTF-8"))?;
+    Ok(PathBuf::from(text))
+}
+
+pub(crate) fn cstr_to_string(ptr: *const c_char) -> Result<String, i32> {
+    if ptr.is_null() {
+        return Err(error(ERR_NULL_POINTER, "string pointer was null"));
+    }
+
+    let text = unsafe { CStr::from_ptr(ptr) };
+    text.to_str()
+        .map(|s| s.to_owned())
+        .map_err(|_| error(ERR_INVALID_UTF8, "input text was not valid UTF-8"))
+}
+
+pub(crate) fn mode_from_raw(mode: i32) -> Result<Mode, i32> {
+    match mode {
+        0 => Ok(Mode::A),
+        1 => Ok(Mode::B),
+        2 => Ok(Mode::C),
+        _ => Err(error(
+            ERR_INVALID_MODE,
+            "mode must be 0 (A), 1 (B), or 2 (C)",
+        )),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn mode_mapping_is_stable() {
+        assert!(matches!(mode_from_raw(0), Ok(Mode::A)));
+        assert!(matches!(mode_from_raw(1), Ok(Mode::B)));
+        assert!(matches!(mode_from_raw(2), Ok(Mode::C)));
+        assert!(mode_from_raw(3).is_err());
+    }
+}
