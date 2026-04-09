@@ -1,6 +1,6 @@
 # sudachi.rs 差分の未実装チェックリスト
 
-- [ ] CLI: `build` / `ubuild` / `dump` サブコマンド対応
+- [x] CLI: `build` / `ubuild` / `dump` サブコマンド対応
 - [ ] CLI: `--wakati` / `--all` / `--output` 対応
 - [ ] CLI: `--split-sentences` / `--debug` / `--resource_dir` 対応
 - [ ] CLI: stdin / ファイル入力処理対応（`--text` 以外）
