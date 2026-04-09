@@ -5,7 +5,9 @@ export type TokenizeMode = (typeof TOKENIZE_MODES)[number];
 export interface TokenizerLoadOptions {
   dictPath: string;
   configPath?: string;
+  resourceDir?: string;
   libraryPath?: string;
+  debug?: boolean;
 }
 
 export type TokenizerOptions = TokenizerLoadOptions;

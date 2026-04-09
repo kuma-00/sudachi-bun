@@ -6,7 +6,7 @@ TypeScript から Rust FFI (`sudachi-ffi`) を呼び出して、日本語テキ�
 ## できること
 
 - Bun から Sudachi の形態素解析を実行
-- CLI で `--mode A|B|C` の分割モードや `--wakati` / `--output <path>` を指定して出力
+- CLI で `--mode A|B|C` の分割モードや `--wakati` / `--all` / `--output <path>`、`--split-sentences` / `--debug` / `--resource-dir` を指定して出力
 - TypeScript API (`Tokenizer`) から直接トークナイズ
 - Sudachi 辞書のダウンロードと展開を補助するセットアップスクリプトを提供
 
@@ -45,8 +45,12 @@ bun run setup:dict -- --type core --version latest --out ./dict
 ```bash
 bun run index.ts --dict-path ./dict/system_core.dic --text "すもももももももものうち"
 bun run index.ts --dict-path ./dict/system_core.dic --wakati --text "すもももももももものうち"
+bun run index.ts --dict-path ./dict/system_core.dic --all --text "すもももももももものうち"
 bun run index.ts --dict-path ./dict/system_core.dic --output - --text "すもももももももものうち"
 bun run index.ts --dict-path ./dict/system_core.dic --output ./tokens.json --text "すもももももももものうち"
+bun run index.ts --dict-path ./dict/system_core.dic --split-sentences --text "今日は晴れです。明日も晴れです。"
+bun run index.ts --dict-path ./dict/system_core.dic --debug --text "すもももももももものうち"
+bun run index.ts --dict-path ./dict/system_core.dic --resource-dir ./dict --text "すもももももももものうち"
 ```
 
 ## CLI 使い方
@@ -72,8 +76,12 @@ bun run index.ts dump --help
 - `--library-path <path>`: ネイティブライブラリの明示指定（任意）
 - `--mode <A|B|C>`: 分割モード（デフォルト: `C`）
 - `--wakati`: 分かち書きモードで出力
+- `--all`: すべてのトークン情報を出力
 - `--output <path>`: 出力先ファイルを指定。`-` を指定すると標準出力に出力
 - `--text "<text>"`: 解析対象テキスト（デフォルト: `すもももももももものうち`）
+- `--split-sentences`: 入力を文単位に分けて解析する
+- `--debug`: デバッグ情報を標準エラー出力に追加する。標準出力の解析結果はそのまま維持される
+- `--resource-dir <path>` / `--resource_dir <path>`: 辞書・設定の探索基準ディレクトリを指定する
 
 ### 環境変数
 

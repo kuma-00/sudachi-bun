@@ -33,8 +33,9 @@ function openNativeTokenizer(options: TokenizerLoadOptions): NativeTokenizerSess
     const layout = readMorphemeResultLayout(library);
     const handleOut = new BigUint64Array(1);
     const status = library.symbols.sudachi_create_tokenizer(
-      options.dictPath,
       options.configPath ?? null,
+      options.resourceDir ?? null,
+      options.dictPath,
       handleOut,
     );
 

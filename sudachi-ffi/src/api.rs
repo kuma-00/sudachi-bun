@@ -27,10 +27,12 @@ fn free_partial_results(results: &mut [MorphemeResult]) {
     }
 }
 
-#[unsafe(no_mangle)]
-pub extern "C" fn sudachi_create_tokenizer(
-    dict_path: *const c_char,
+const SUDACHI_FFI_ABI_VERSION: i32 = 2;
+
+fn create_tokenizer_impl(
     config_path: *const c_char,
+    resource_dir: *const c_char,
+    dict_path: *const c_char,
     out_handle: *mut *mut TokenizerHandle,
 ) -> i32 {
     clear_last_error();
@@ -51,8 +53,16 @@ pub extern "C" fn sudachi_create_tokenizer(
             Err(code) => return code,
         }
     };
+    let resource_dir = if resource_dir.is_null() {
+        None
+    } else {
+        match cstr_to_path(resource_dir) {
+            Ok(path) => Some(path),
+            Err(code) => return code,
+        }
+    };
 
-    let cfg = match Config::new(config_path, None, Some(dict_path)) {
+    let cfg = match Config::new(config_path, resource_dir, Some(dict_path)) {
         Ok(cfg) => cfg,
         Err(err) => return error(ERR_CONFIG, format!("failed to build sudachi config: {err}")),
     };
@@ -75,6 +85,21 @@ pub extern "C" fn sudachi_create_tokenizer(
     }
 
     OK
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn sudachi_create_tokenizer(
+    config_path: *const c_char,
+    resource_dir: *const c_char,
+    dict_path: *const c_char,
+    out_handle: *mut *mut TokenizerHandle,
+) -> i32 {
+    create_tokenizer_impl(config_path, resource_dir, dict_path, out_handle)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn sudachi_get_abi_version() -> i32 {
+    SUDACHI_FFI_ABI_VERSION
 }
 
 #[unsafe(no_mangle)]

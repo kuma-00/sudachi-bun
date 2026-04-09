@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { dlopen, suffix, type Pointer } from "bun:ffi";
+import { dlopen, suffix, type CString, type Pointer } from "bun:ffi";
 
 import type { NativeSudachiErrorCode, TokenizerLoadOptions } from "./types.ts";
 import { SudachiError } from "./types.ts";
@@ -32,16 +32,43 @@ export interface MorphemeResultLayout {
 
 export interface NativeSudachiLibrary {
   symbols: {
-    sudachi_create_tokenizer: (dictPath: string, configPath: string | null, outHandle: NodeJS.TypedArray | Pointer | null) => number;
+    sudachi_create_tokenizer: (
+      configPath: string | null,
+      resourceDir: string | null,
+      dictPath: string,
+      outHandle: NodeJS.TypedArray | Pointer | null,
+    ) => number;
     sudachi_free_tokenizer: (handle: Pointer | NodeJS.TypedArray | null) => void;
     sudachi_tokenize: (handle: Pointer | NodeJS.TypedArray | null, inputUtf8: string, mode: number, outResult: NodeJS.TypedArray | Pointer | null) => number;
     sudachi_free_result: (result: Pointer | NodeJS.TypedArray | null) => void;
     sudachi_get_morpheme_result_layout: (outLayout: NodeJS.TypedArray | Pointer | null) => number;
-    sudachi_get_last_error: () => import("bun:ffi").CString;
-    sudachi_status_code_name: (status: number) => import("bun:ffi").CString;
+    sudachi_get_last_error: () => CString;
+    sudachi_status_code_name: (status: number) => CString;
   };
   close(): void;
 }
+
+interface CommonNativeSymbols {
+  sudachi_create_tokenizer: (
+    configPath: string | null,
+    resourceDir: string | null,
+    dictPath: string,
+    outHandle: NodeJS.TypedArray | Pointer | null,
+  ) => number;
+  sudachi_free_tokenizer: (handle: Pointer | NodeJS.TypedArray | null) => void;
+  sudachi_tokenize: (
+    handle: Pointer | NodeJS.TypedArray | null,
+    inputUtf8: string,
+    mode: number,
+    outResult: NodeJS.TypedArray | Pointer | null,
+  ) => number;
+  sudachi_free_result: (result: Pointer | NodeJS.TypedArray | null) => void;
+  sudachi_get_morpheme_result_layout: (outLayout: NodeJS.TypedArray | Pointer | null) => number;
+  sudachi_get_last_error: () => CString;
+  sudachi_status_code_name: (status: number) => CString;
+}
+
+interface NativeSymbols extends CommonNativeSymbols {}
 
 const MODULE_DIR = dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = resolve(MODULE_DIR, "../..");
@@ -104,39 +131,72 @@ function validateMorphemeResultLayout(layout: MorphemeResultLayout): void {
   }
 }
 
-export function loadNativeLibrary(options: TokenizerLoadOptions): NativeSudachiLibrary {
-  const libraryPath = loadNativeLibraryPath(options.libraryPath);
+const COMMON_NATIVE_SYMBOL_DEFS = {
+  sudachi_free_tokenizer: {
+    args: ["ptr"],
+    returns: "void",
+  },
+  sudachi_tokenize: {
+    args: ["ptr", "cstring", "i32", "ptr"],
+    returns: "i32",
+  },
+  sudachi_free_result: {
+    args: ["ptr"],
+    returns: "void",
+  },
+  sudachi_get_morpheme_result_layout: {
+    args: ["ptr"],
+    returns: "i32",
+  },
+  sudachi_get_last_error: {
+    args: [],
+    returns: "cstring",
+  },
+  sudachi_status_code_name: {
+    args: ["i32"],
+    returns: "cstring",
+  },
+} as const;
 
-  return dlopen(libraryPath, {
-    sudachi_create_tokenizer: {
-      args: ["cstring", "cstring", "ptr"],
-      returns: "i32",
+const NATIVE_SYMBOL_DEFS = {
+  ...COMMON_NATIVE_SYMBOL_DEFS,
+  sudachi_create_tokenizer: {
+    args: ["cstring", "cstring", "cstring", "ptr"],
+    returns: "i32",
+  },
+} as const;
+
+type NativeLibraryLoader = (
+  libraryPath: string,
+  symbolDefinitions: typeof NATIVE_SYMBOL_DEFS,
+) => {
+  symbols: NativeSymbols;
+  close(): void;
+};
+
+function createNativeSudachiLibrary(symbols: NativeSymbols, close: () => void): NativeSudachiLibrary {
+  return {
+    symbols: {
+      sudachi_create_tokenizer: symbols.sudachi_create_tokenizer,
+      sudachi_free_tokenizer: symbols.sudachi_free_tokenizer,
+      sudachi_tokenize: symbols.sudachi_tokenize,
+      sudachi_free_result: symbols.sudachi_free_result,
+      sudachi_get_morpheme_result_layout: symbols.sudachi_get_morpheme_result_layout,
+      sudachi_get_last_error: symbols.sudachi_get_last_error,
+      sudachi_status_code_name: symbols.sudachi_status_code_name,
     },
-    sudachi_free_tokenizer: {
-      args: ["ptr"],
-      returns: "void",
-    },
-    sudachi_tokenize: {
-      args: ["ptr", "cstring", "i32", "ptr"],
-      returns: "i32",
-    },
-    sudachi_free_result: {
-      args: ["ptr"],
-      returns: "void",
-    },
-    sudachi_get_morpheme_result_layout: {
-      args: ["ptr"],
-      returns: "i32",
-    },
-    sudachi_get_last_error: {
-      args: [],
-      returns: "cstring",
-    },
-    sudachi_status_code_name: {
-      args: ["i32"],
-      returns: "cstring",
-    },
-  }) as unknown as NativeSudachiLibrary;
+    close,
+  };
+}
+
+export function loadNativeLibrary(
+  options: TokenizerLoadOptions,
+  openLibrary: NativeLibraryLoader = dlopen as NativeLibraryLoader,
+): NativeSudachiLibrary {
+  const libraryPath = loadNativeLibraryPath(options.libraryPath);
+  const loaded = openLibrary(libraryPath, NATIVE_SYMBOL_DEFS) as { symbols: NativeSymbols; close(): void };
+
+  return createNativeSudachiLibrary(loaded.symbols, () => loaded.close());
 }
 
 export function readNativeError(library: NativeSudachiLibrary): string {

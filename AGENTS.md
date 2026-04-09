@@ -1,0 +1,2 @@
+- By default, write code without prioritizing backward compatibility, even if changes are breaking.
+- If backward compatibility is required, ask the user before implementing.

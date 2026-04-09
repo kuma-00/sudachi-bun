@@ -1,4 +1,4 @@
-import { writeFileSync } from "node:fs";
+import { statSync, writeFileSync } from "node:fs";
 
 import { Tokenizer } from "./core.ts";
 import {
@@ -13,27 +13,31 @@ const KNOWN_VALUE_FLAGS = new Set([
   "dict-path",
   "config-path",
   "library-path",
+  "resource-dir",
+  "resource_dir",
   "mode",
   "text",
   "output",
 ]);
 
-const BOOLEAN_FLAGS = new Set(["wakati"]);
+const BOOLEAN_FLAGS = new Set(["wakati", "all", "split-sentences", "debug"]);
 
-const KNOWN_FLAGS = new Set([...KNOWN_VALUE_FLAGS, "wakati"]);
+const KNOWN_FLAGS = new Set([...KNOWN_VALUE_FLAGS, ...BOOLEAN_FLAGS]);
 
 const CLI_SUBCOMMANDS = ["build", "ubuild", "dump"] as const;
 type CliSubcommand = (typeof CLI_SUBCOMMANDS)[number];
 type CliCommandName = "tokenize" | CliSubcommand;
 type CliHelpTarget = "top-level" | CliCommandName;
-type TokenizeOutputFormat = "normal" | "wakati";
+type TokenizeOutputFormat = "normal" | "wakati" | "all";
 
 export interface TokenizeCliCommand extends TokenizerLoadOptions {
   mode: TokenizeMode;
   text: string;
+  splitSentences?: boolean;
 }
 
 interface TokenizeExecutionCommand extends TokenizeCliCommand {
+  splitSentences: boolean;
   format: TokenizeOutputFormat;
   outputPath?: string;
 }
@@ -73,6 +77,12 @@ function invalidBooleanFlagSyntaxError(name: string): SudachiError {
   });
 }
 
+function invalidResourceDirError(value: string): SudachiError {
+  return new SudachiError(`Invalid resource directory: ${value}`, {
+    code: "INVALID_ARGUMENT",
+  });
+}
+
 function isKnownFlagToken(value: string, knownFlags: ReadonlySet<string>): boolean {
   if (!value.startsWith("--")) {
     return false;
@@ -95,6 +105,64 @@ function isKnownSubcommand(value: string): value is CliSubcommand {
 function hasFlag(argv: string[], name: string): boolean {
   const prefix = `--${name}`;
   return argv.some((arg) => arg === prefix || arg.startsWith(`${prefix}=`));
+}
+
+function parseAliasedArgValue(
+  argv: string[],
+  names: readonly string[],
+  knownFlags: ReadonlySet<string> = KNOWN_FLAGS,
+): string | undefined {
+  for (const name of names) {
+    const value = parseArgValue(argv, name, knownFlags);
+    if (value !== undefined) {
+      return value;
+    }
+  }
+
+  return undefined;
+}
+
+function validateResourceDir(value: string | undefined): string | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  try {
+    if (!statSync(value).isDirectory()) {
+      throw invalidResourceDirError(value);
+    }
+  } catch {
+    throw invalidResourceDirError(value);
+  }
+
+  return value;
+}
+
+function isSentenceBoundaryChar(char: string): boolean {
+  return char === "。" || char === "！" || char === "？" || char === "!" || char === "?";
+}
+
+function splitTextIntoSentenceUnits(text: string): string[] {
+  const units: string[] = [];
+  let current = "";
+
+  for (const char of text) {
+    current += char;
+    if (isSentenceBoundaryChar(char)) {
+      units.push(current);
+      current = "";
+    }
+  }
+
+  if (current.length > 0) {
+    units.push(current);
+  }
+
+  return units.length > 0 ? units : [text];
+}
+
+function getSentenceUnitOffsetLength(unit: string): number {
+  return Buffer.byteLength(unit, "utf8");
 }
 
 function skipKnownFlagValue(argv: string[], index: number, knownFlags: ReadonlySet<string>): number {
@@ -223,10 +291,15 @@ function printUsage(io: Pick<CliIO, "log">, command: CliHelpTarget = "top-level"
     command === "tokenize"
       ? [
           "Usage:",
-          "  bun run index.ts --dict-path=/path/to/dictionary --library-path=/path/to/libsudachi_ffi.dylib --text='...' [--wakati] [--output <path>|-]",
+          "  bun run index.ts --dict-path=/path/to/dictionary --library-path=/path/to/libsudachi_ffi.dylib --text='...' [--wakati|--all] [--split-sentences] [--debug] [--resource-dir <path>|--resource_dir <path>] [--output <path>|-]",
           "",
           "Options:",
           "  --wakati          Output space-joined surfaces.",
+          "  --all             Use the explicit all output mode.",
+          "  --split-sentences Tokenize input sentence by sentence.",
+          "  --debug           Emit debug diagnostics to stderr.",
+          "  --resource-dir <path>, --resource_dir <path>",
+          "                    Use a custom resource directory.",
           "  --output <path>|- Write to a file, or stdout with -.",
           "",
           "Environment variables:",
@@ -259,21 +332,21 @@ function printUsage(io: Pick<CliIO, "log">, command: CliHelpTarget = "top-level"
               "  Not implemented yet. TODO delegate to dictionary layer.",
           ]
             : [
-                "Usage:",
-                "  bun run index.ts [build|ubuild|dump] --dict-path=/path/to/dictionary --library-path=/path/to/libsudachi_ffi.dylib --text='...' [--wakati] [--output <path>|-]",
-                "",
-                "Commands:",
-                "  build   Build a dictionary.",
-                "  ubuild  Build an Uber dictionary.",
-                "  dump    Dump dictionary contents.",
-                "",
-                "Use `--help` or `-h` after a command for command-specific help.",
-                "Tokenize options:",
-                "  --wakati, --output <path>|-",
-                "",
-                "Environment variables:",
-                "  SUDACHI_DICT_PATH",
-                "  SUDACHI_DICTIONARY_PATH",
+            "Usage:",
+            "  bun run index.ts [build|ubuild|dump] --dict-path=/path/to/dictionary --library-path=/path/to/libsudachi_ffi.dylib --text='...' [--wakati|--all] [--split-sentences] [--debug] [--resource-dir <path>|--resource_dir <path>] [--output <path>|-]",
+            "",
+            "Commands:",
+            "  build   Build a dictionary.",
+            "  ubuild  Build an Uber dictionary.",
+            "  dump    Dump dictionary contents.",
+            "",
+            "Use `--help` or `-h` after a command for command-specific help.",
+            "Tokenize options:",
+            "  --wakati, --all, --split-sentences, --debug, --resource-dir <path>, --resource_dir <path>, --output <path>|-",
+            "",
+            "Environment variables:",
+            "  SUDACHI_DICT_PATH",
+            "  SUDACHI_DICTIONARY_PATH",
                 "  SUDACHI_CONFIG_PATH",
                 "  SUDACHI_FFI_PATH",
                 "  SUDACHI_FFI_DIR",
@@ -292,13 +365,30 @@ export function parseCliArgs(
     throw missingArgumentError("dict-path");
   }
 
-  return {
+  const resourceDir = validateResourceDir(parseAliasedArgValue(argv, ["resource-dir", "resource_dir"], KNOWN_FLAGS));
+  const debug = hasFlag(argv, "debug");
+
+  const command: TokenizeCliCommand = {
     dictPath,
     configPath: parseArgValue(argv, "config-path", KNOWN_FLAGS) ?? env.SUDACHI_CONFIG_PATH,
     libraryPath: parseArgValue(argv, "library-path", KNOWN_FLAGS) ?? env.SUDACHI_FFI_PATH,
     mode: parseTokenizeMode(parseArgValue(argv, "mode", KNOWN_FLAGS) ?? "C"),
     text: parseArgValue(argv, "text", KNOWN_FLAGS) ?? "すもももももももものうち",
   };
+
+  if (resourceDir !== undefined) {
+    command.resourceDir = resourceDir;
+  }
+
+  if (hasFlag(argv, "split-sentences")) {
+    command.splitSentences = true;
+  }
+
+  if (debug) {
+    command.debug = true;
+  }
+
+  return command;
 }
 
 function parseTokenizeExecutionCommand(
@@ -307,10 +397,17 @@ function parseTokenizeExecutionCommand(
 ): TokenizeExecutionCommand {
   const command = parseCliArgs(argv, env);
   const wakati = hasFlag(argv, "wakati");
+  const all = hasFlag(argv, "all");
+  if (wakati && all) {
+    throw new SudachiError("Cannot combine --wakati and --all.", {
+      code: "INVALID_ARGUMENT",
+    });
+  }
 
   return {
     ...command,
-    format: wakati ? "wakati" : "normal",
+    splitSentences: Boolean(command.splitSentences),
+    format: all ? "all" : wakati ? "wakati" : "normal",
     outputPath: parseArgValue(argv, "output", KNOWN_FLAGS),
   };
 }
@@ -319,9 +416,43 @@ function formatTokenizeOutput(morphemes: Awaited<ReturnType<Tokenizer["tokenize"
   switch (format) {
     case "wakati":
       return morphemes.map((morpheme) => morpheme.surface).join(" ");
+    case "all":
     case "normal":
       return JSON.stringify(morphemes, null, 2);
   }
+}
+
+function tokenizeSentenceUnits(
+  tokenizer: Tokenizer,
+  text: string,
+  mode: TokenizeMode,
+  splitSentences: boolean,
+): Awaited<ReturnType<Tokenizer["tokenize"]>> {
+  if (!splitSentences) {
+    return tokenizer.tokenize(text, mode);
+  }
+
+  const units = splitTextIntoSentenceUnits(text);
+  const morphemes: Awaited<ReturnType<Tokenizer["tokenize"]>> = [];
+  let offset = 0;
+
+  for (const unit of units) {
+    const unitMorphemes = tokenizer.tokenize(unit, mode);
+    if (offset === 0) {
+      morphemes.push(...unitMorphemes);
+    } else {
+      morphemes.push(
+        ...unitMorphemes.map((morpheme) => ({
+          ...morpheme,
+          begin: morpheme.begin + offset,
+          end: morpheme.end + offset,
+        })),
+      );
+    }
+    offset += getSentenceUnitOffsetLength(unit);
+  }
+
+  return morphemes;
 }
 
 function writeTokenizeOutput(outputPath: string, output: string): void {
@@ -335,11 +466,32 @@ function writeTokenizeOutput(outputPath: string, output: string): void {
   }
 }
 
-export function runTokenizeCommand(command: TokenizeCliCommand, format: TokenizeOutputFormat = "normal"): string {
+export function runTokenizeCommand(
+  command: TokenizeCliCommand,
+  format: TokenizeOutputFormat = "normal",
+  io?: Pick<CliIO, "error">,
+): string {
   const tokenizer = Tokenizer.load(command);
 
   try {
-    return formatTokenizeOutput(tokenizer.tokenize(command.text, command.mode), format);
+    if (command.debug) {
+      io?.error(
+        [
+          `[debug] tokenize`,
+          `format=${format}`,
+          `splitSentences=${command.splitSentences ? "true" : "false"}`,
+          `resourceDir=${command.resourceDir ?? "(default)"}`,
+        ].join(" "),
+      );
+    }
+
+    const morphemes = tokenizeSentenceUnits(tokenizer, command.text, command.mode, Boolean(command.splitSentences));
+
+    if (command.debug) {
+      io?.error(`[debug] morphemes=${morphemes.length}`);
+    }
+
+    return formatTokenizeOutput(morphemes, format);
   } finally {
     tokenizer.close();
   }
@@ -370,7 +522,7 @@ export function runCli(
   try {
     if (discovery.command === "tokenize") {
       const command = parseTokenizeExecutionCommand(argv, env);
-      const output = runTokenizeCommand(command, command.format);
+      const output = runTokenizeCommand(command, command.format, io);
 
       if (command.outputPath && command.outputPath !== "-") {
         writeTokenizeOutput(command.outputPath, output);
