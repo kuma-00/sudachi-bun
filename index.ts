@@ -2,7 +2,7 @@ export { createTokenizer, Tokenizer } from "./src/core.ts";
 export { main, runCli, runTokenizeCommand } from "./src/cli.ts";
 export { createSentenceSplitter, SentenceSplitter } from "./src/sentence-splitter.ts";
 export { parseCliArgs } from "./src/cli/parser.ts";
-export { formatSudachiError, SudachiError } from "./src/types.ts";
+export { formatSudachiError, SudachiError, TOKENIZE_MODES } from "./src/types.ts";
 export type {
   Morpheme,
   NativeSudachiErrorCode,

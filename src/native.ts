@@ -58,6 +58,21 @@ export interface NativeSudachiLibrary {
       mode: number,
       outResult: NodeJS.TypedArray | Pointer | null,
     ) => number;
+    sudachi_split_morpheme: (
+      handle: Pointer | NodeJS.TypedArray | null,
+      inputUtf8: string,
+      sourceMode: number,
+      morphemeIndex: number,
+      splitMode: number,
+      outResult: NodeJS.TypedArray | Pointer | null,
+    ) => number;
+    sudachi_split_morphemes: (
+      handle: Pointer | NodeJS.TypedArray | null,
+      inputUtf8: string,
+      sourceMode: number,
+      splitMode: number,
+      outResult: NodeJS.TypedArray | Pointer | null,
+    ) => number;
     sudachi_free_result: (result: Pointer | NodeJS.TypedArray | null) => void;
     sudachi_get_morpheme_result_layout: (outLayout: NodeJS.TypedArray | Pointer | null) => number;
     sudachi_get_last_error: () => CString;
@@ -107,6 +122,21 @@ interface NativeSymbols extends CommonNativeSymbols {
     handle: Pointer | NodeJS.TypedArray | null,
     inputUtf8: string,
     mode: number,
+    outResult: NodeJS.TypedArray | Pointer | null,
+  ) => number;
+  sudachi_split_morpheme: (
+    handle: Pointer | NodeJS.TypedArray | null,
+    inputUtf8: string,
+    sourceMode: number,
+    morphemeIndex: number,
+    splitMode: number,
+    outResult: NodeJS.TypedArray | Pointer | null,
+  ) => number;
+  sudachi_split_morphemes: (
+    handle: Pointer | NodeJS.TypedArray | null,
+    inputUtf8: string,
+    sourceMode: number,
+    splitMode: number,
     outResult: NodeJS.TypedArray | Pointer | null,
   ) => number;
   sudachi_free_result: (result: Pointer | NodeJS.TypedArray | null) => void;
@@ -241,6 +271,14 @@ const TOKENIZER_NATIVE_SYMBOL_DEFS = {
     args: ["ptr", "cstring", "i32", "ptr"],
     returns: "i32",
   },
+  sudachi_split_morpheme: {
+    args: ["ptr", "cstring", "i32", "usize", "i32", "ptr"],
+    returns: "i32",
+  },
+  sudachi_split_morphemes: {
+    args: ["ptr", "cstring", "i32", "i32", "ptr"],
+    returns: "i32",
+  },
   sudachi_free_result: {
     args: ["ptr"],
     returns: "void",
@@ -297,6 +335,8 @@ function createNativeSudachiLibrary(symbols: NativeSymbols, close: () => void): 
       sudachi_create_tokenizer: symbols.sudachi_create_tokenizer,
       sudachi_free_tokenizer: symbols.sudachi_free_tokenizer,
       sudachi_tokenize: symbols.sudachi_tokenize,
+      sudachi_split_morpheme: symbols.sudachi_split_morpheme,
+      sudachi_split_morphemes: symbols.sudachi_split_morphemes,
       sudachi_free_result: symbols.sudachi_free_result,
       sudachi_get_morpheme_result_layout: symbols.sudachi_get_morpheme_result_layout,
       sudachi_get_last_error: symbols.sudachi_get_last_error,
@@ -366,9 +406,11 @@ export function readNativeStatusCodeName(
       case "NULL_POINTER":
       case "INVALID_UTF8":
       case "INVALID_MODE":
+      case "INVALID_INDEX":
       case "CONFIG":
       case "TOKENIZE":
       case "SPLIT":
+      case "MORPHEME_SPLIT":
       case "SENTENCE_SPLIT":
       case "INTERNAL":
         return code;

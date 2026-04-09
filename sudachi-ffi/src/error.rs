@@ -10,6 +10,8 @@ pub const ERR_INVALID_MODE: i32 = 3;
 pub const ERR_CONFIG: i32 = 4;
 pub const ERR_TOKENIZE: i32 = 5;
 pub const ERR_SENTENCE_SPLIT: i32 = 6;
+pub const ERR_INVALID_INDEX: i32 = 7;
+pub const ERR_MORPHEME_SPLIT: i32 = 8;
 pub const ERR_INTERNAL: i32 = 255;
 
 const OK_NAME: &[u8] = b"OK\0";
@@ -19,6 +21,8 @@ const INVALID_MODE_NAME: &[u8] = b"INVALID_MODE\0";
 const CONFIG_NAME: &[u8] = b"CONFIG\0";
 const TOKENIZE_NAME: &[u8] = b"TOKENIZE\0";
 const SENTENCE_SPLIT_NAME: &[u8] = b"SENTENCE_SPLIT\0";
+const INVALID_INDEX_NAME: &[u8] = b"INVALID_INDEX\0";
+const MORPHEME_SPLIT_NAME: &[u8] = b"MORPHEME_SPLIT\0";
 const INTERNAL_NAME: &[u8] = b"INTERNAL\0";
 const UNKNOWN_NAME: &[u8] = b"UNKNOWN\0";
 
@@ -62,6 +66,8 @@ pub(crate) fn status_code_name(code: i32) -> &'static str {
         ERR_CONFIG => "CONFIG",
         ERR_TOKENIZE => "TOKENIZE",
         ERR_SENTENCE_SPLIT => "SENTENCE_SPLIT",
+        ERR_INVALID_INDEX => "INVALID_INDEX",
+        ERR_MORPHEME_SPLIT => "MORPHEME_SPLIT",
         ERR_INTERNAL => "INTERNAL",
         _ => "UNKNOWN",
     }
@@ -76,6 +82,8 @@ pub(crate) fn status_code_name_ptr(code: i32) -> *const c_char {
         ERR_CONFIG => CONFIG_NAME.as_ptr().cast(),
         ERR_TOKENIZE => TOKENIZE_NAME.as_ptr().cast(),
         ERR_SENTENCE_SPLIT => SENTENCE_SPLIT_NAME.as_ptr().cast(),
+        ERR_INVALID_INDEX => INVALID_INDEX_NAME.as_ptr().cast(),
+        ERR_MORPHEME_SPLIT => MORPHEME_SPLIT_NAME.as_ptr().cast(),
         ERR_INTERNAL => INTERNAL_NAME.as_ptr().cast(),
         _ => UNKNOWN_NAME.as_ptr().cast(),
     }
@@ -100,6 +108,8 @@ mod tests {
     fn status_code_names_are_stable() {
         assert_eq!(status_code_name(ERR_TOKENIZE), "TOKENIZE");
         assert_eq!(status_code_name(ERR_SENTENCE_SPLIT), "SENTENCE_SPLIT");
+        assert_eq!(status_code_name(ERR_INVALID_INDEX), "INVALID_INDEX");
+        assert_eq!(status_code_name(ERR_MORPHEME_SPLIT), "MORPHEME_SPLIT");
         assert_eq!(status_code_name(999), "UNKNOWN");
     }
 }

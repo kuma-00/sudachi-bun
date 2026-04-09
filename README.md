@@ -10,6 +10,7 @@ TypeScript から Rust FFI (`sudachi-ffi`) を呼び出して、日本語テキ�
 - CLI の `tokenize` サブコマンドで `--mode A|B|C` の分割モードや `--wakati` / `--all` / `--output <path>`、`--split-sentences` / `--debug` / `--resource-dir` を指定して出力
 - CLI で `--text`、stdin、位置引数のファイル入力に対応
 - TypeScript API (`Tokenizer`, `SentenceSplitter`) から直接トークナイズ/文分割
+- TypeScript API から既存 morpheme の再分割（単一 morpheme / morpheme list）
 - Sudachi 辞書のダウンロードと展開を補助するセットアップスクリプトを提供
 
 ## 前提条件
@@ -153,6 +154,10 @@ const tokenizer = Tokenizer.load({
 
 try {
   const text = "今日は晴れです。明日も晴れです。";
+  const tokens = tokenizer.tokenize("東京都に", "C");
+  const finer = tokenizer.split(tokens[0], "A");
+  const flattened = tokenizer.splitInto(tokens, "A");
+  console.log(finer, flattened);
 
   for (const span of splitter.split(text)) {
     const morphemes = tokenizer.tokenize(span.text, "C");
@@ -165,6 +170,15 @@ try {
 ```
 
 `SentenceSplitter` は Rust FFI の sentence splitter ハンドルを保持し、`split(text)` で `SentenceSpan[]` を返します。各 span は文テキスト `text` と UTF-8 バイトオフセット `start` / `end` を持ちます。
+
+`Tokenizer` には Task-06 相当の再分割 API があります。
+
+- `tokenizer.split(morpheme, mode)`: 既存の単一 morpheme をより細かい `mode` へ再分割する
+- `tokenizer.splitInto(morphemes, mode)`: morpheme list 全体を再分割する
+
+どちらも `tokenize()` と同じ `Morpheme[]` を返し、内部では既存の morpheme 読み出し処理を再利用します。`splitInto()` は `tokenize()` や `split()` が返した配列をそのまま渡した場合はネイティブの list resplit を使い、コピー済み配列のように list コンテキストが失われた場合は各 morpheme の `split()` を順に適用します。
+
+`split()` / `splitInto()` は、同じ `Tokenizer` が生成した morpheme のみ受け付けます。`tokenize(text, mode)` との差分として、再分割は既存解析結果を起点にするため、元トークン境界に従って細分化されます。
 
 `Morpheme` は以下の情報を含みます。
 
@@ -183,7 +197,7 @@ try {
 ### テスト
 
 ```bash
-bun test src/sentence-splitter.test.ts src/cli.test.ts
+bun test
 ```
 
 sentence splitter のユニットテストはネイティブ動作をモックし、TypeScript 側では span 変換と CLI の offset 補正を検証します。

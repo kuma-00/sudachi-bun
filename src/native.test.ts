@@ -42,6 +42,8 @@ function createLibrary(
       sudachi_create_tokenizer: () => 0,
       sudachi_free_tokenizer: () => {},
       sudachi_tokenize: () => 0,
+      sudachi_split_morpheme: () => 0,
+      sudachi_split_morphemes: () => 0,
       sudachi_free_result: () => {},
       sudachi_get_morpheme_result_layout: (outLayout) => layoutWriter(outLayout as BigUint64Array),
       sudachi_get_last_error: () => "native error" as unknown as import("bun:ffi").CString,

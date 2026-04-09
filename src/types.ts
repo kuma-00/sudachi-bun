@@ -42,9 +42,11 @@ export type NativeSudachiErrorCode =
   | "NULL_POINTER"
   | "INVALID_UTF8"
   | "INVALID_MODE"
+  | "INVALID_INDEX"
   | "CONFIG"
   | "TOKENIZE"
   | "SPLIT"
+  | "MORPHEME_SPLIT"
   | "SENTENCE_SPLIT"
   | "INTERNAL"
   | "UNKNOWN";
