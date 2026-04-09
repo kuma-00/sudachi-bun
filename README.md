@@ -6,7 +6,7 @@ TypeScript から Rust FFI (`sudachi-ffi`) を呼び出して、日本語テキ�
 ## できること
 
 - Bun から Sudachi の形態素解析を実行
-- CLI で `--mode A|B|C` の分割モードを指定して JSON 出力
+- CLI で `--mode A|B|C` の分割モードや `--wakati` / `--output <path>` を指定して出力
 - TypeScript API (`Tokenizer`) から直接トークナイズ
 - Sudachi 辞書のダウンロードと展開を補助するセットアップスクリプトを提供
 
@@ -44,6 +44,9 @@ bun run setup:dict -- --type core --version latest --out ./dict
 
 ```bash
 bun run index.ts --dict-path ./dict/system_core.dic --text "すもももももももものうち"
+bun run index.ts --dict-path ./dict/system_core.dic --wakati --text "すもももももももものうち"
+bun run index.ts --dict-path ./dict/system_core.dic --output - --text "すもももももももものうち"
+bun run index.ts --dict-path ./dict/system_core.dic --output ./tokens.json --text "すもももももももものうち"
 ```
 
 ## CLI 使い方
@@ -68,6 +71,8 @@ bun run index.ts dump --help
 - `--config-path <path>`: Sudachi 設定ファイル（任意）
 - `--library-path <path>`: ネイティブライブラリの明示指定（任意）
 - `--mode <A|B|C>`: 分割モード（デフォルト: `C`）
+- `--wakati`: 分かち書きモードで出力
+- `--output <path>`: 出力先ファイルを指定。`-` を指定すると標準出力に出力
 - `--text "<text>"`: 解析対象テキスト（デフォルト: `すもももももももものうち`）
 
 ### 環境変数

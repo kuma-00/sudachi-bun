@@ -1,5 +1,6 @@
-import { expect, test } from "bun:test";
+import { expect, spyOn, test } from "bun:test";
 
+import { Tokenizer } from "./core.ts";
 import { parseArgValue, parseCliArgs, runCli } from "./cli.ts";
 import { SudachiError } from "./types.ts";
 
@@ -16,6 +17,67 @@ function createCapturedIo() {
     },
   };
 }
+
+const SAMPLE_MORPHEMES = [
+  {
+    surface: "すもも",
+    normalized: "すもも",
+    dictionaryForm: "すもも",
+    reading: "スモモ",
+    pos: "名詞",
+    begin: 0,
+    end: 3,
+    wordId: "1",
+    posId: 1,
+    dictionaryId: 0,
+    isOov: false,
+    synonymGroupIds: [],
+  },
+  {
+    surface: "もも",
+    normalized: "もも",
+    dictionaryForm: "もも",
+    reading: "モモ",
+    pos: "名詞",
+    begin: 3,
+    end: 5,
+    wordId: "2",
+    posId: 1,
+    dictionaryId: 0,
+    isOov: false,
+    synonymGroupIds: [],
+  },
+] as const;
+
+function createFakeTokenizer() {
+  let lastTokenizeArgs: { text: string; mode: string } | undefined;
+
+  return {
+    lastTokenizeArgs: () => lastTokenizeArgs,
+    tokenizer: {
+      tokenize(text: string, mode: string) {
+        lastTokenizeArgs = { text, mode };
+        return SAMPLE_MORPHEMES as unknown as ReturnType<Tokenizer["tokenize"]>;
+      },
+      close() {},
+    },
+  };
+}
+
+test("parseArgValue preserves --output - as the stdout marker", () => {
+  expect(parseArgValue(["--output", "-"], "output")).toBe("-");
+});
+
+test("parseArgValue treats known boolean flags as flags by default", () => {
+  try {
+    parseArgValue(["--text", "--wakati"], "text");
+    throw new Error("Expected parseArgValue to throw");
+  } catch (error) {
+    expect(error).toBeInstanceOf(SudachiError);
+    expect((error as SudachiError).code).toBe("MISSING_ARGUMENT");
+    expect((error as Error).message).toBe("Missing value for --text");
+  }
+});
 
 test("parseArgValue rejects missing value when next token is another flag", () => {
   try {
@@ -61,6 +123,121 @@ test("parseCliArgs resolves defaults from the environment", () => {
     mode: "C",
     text: "すもももももももものうち",
   });
+});
+
+test("runCli renders wakati output when --wakati is requested", () => {
+  const { io, logs, errors } = createCapturedIo();
+  const fakeTokenizer = createFakeTokenizer();
+  const loadSpy = spyOn(Tokenizer, "load").mockImplementation(() => fakeTokenizer.tokenizer as never);
+
+  try {
+    const exitCode = runCli(["--dict-path", "/tmp/dict", "--wakati", "--text", "ignored"], {}, io);
+
+    expect(exitCode).toBe(0);
+    expect(errors).toEqual([]);
+    expect(logs[0]).toBe("すもも もも");
+    expect(fakeTokenizer.lastTokenizeArgs()).toEqual({ text: "ignored", mode: "C" });
+    expect(loadSpy).toHaveBeenCalledTimes(1);
+  } finally {
+    loadSpy.mockRestore();
+  }
+});
+
+test("runCli rejects --all as an unknown flag", () => {
+  const { io, logs, errors } = createCapturedIo();
+  const fakeTokenizer = createFakeTokenizer();
+  const loadSpy = spyOn(Tokenizer, "load").mockImplementation(() => fakeTokenizer.tokenizer as never);
+
+  try {
+    const exitCode = runCli(["--dict-path", "/tmp/dict", "--all", "--text", "ignored"], {}, io);
+
+    expect(exitCode).toBe(1);
+    expect(errors[0]).toBe("[INVALID_ARGUMENT] Unknown flag: --all");
+    expect(logs[0]).toContain("Usage:");
+    expect(loadSpy).not.toHaveBeenCalled();
+    expect(fakeTokenizer.lastTokenizeArgs()).toBeUndefined();
+  } finally {
+    loadSpy.mockRestore();
+  }
+});
+
+for (const [flag, value] of [["--wakati", "true"]] as const) {
+  test(`runCli rejects ${flag}=${value} as invalid boolean flag syntax`, () => {
+    const { io, logs, errors } = createCapturedIo();
+    const fakeTokenizer = createFakeTokenizer();
+    const loadSpy = spyOn(Tokenizer, "load").mockImplementation(() => fakeTokenizer.tokenizer as never);
+
+    try {
+      const exitCode = runCli(["--dict-path", "/tmp/dict", `${flag}=${value}`, "--text", "ignored"], {}, io);
+
+      expect(exitCode).toBe(1);
+      expect(errors[0]).toBe(`[INVALID_ARGUMENT] Invalid boolean flag syntax: ${flag}=${value}`);
+      expect(logs[0]).toContain("Usage:");
+      expect(loadSpy).not.toHaveBeenCalled();
+      expect(fakeTokenizer.lastTokenizeArgs()).toBeUndefined();
+    } finally {
+      loadSpy.mockRestore();
+    }
+  });
+}
+
+for (const [flag, value] of [["--wakati", "false"]] as const) {
+  test(`runCli rejects ${flag} ${value} as invalid boolean flag syntax`, () => {
+    const { io, logs, errors } = createCapturedIo();
+    const fakeTokenizer = createFakeTokenizer();
+    const loadSpy = spyOn(Tokenizer, "load").mockImplementation(() => fakeTokenizer.tokenizer as never);
+
+    try {
+      const exitCode = runCli(["--dict-path", "/tmp/dict", flag, value, "--text", "ignored"], {}, io);
+
+      expect(exitCode).toBe(1);
+      expect(errors[0]).toBe(`[INVALID_ARGUMENT] Invalid boolean flag syntax: ${flag} ${value}`);
+      expect(logs[0]).toContain("Usage:");
+      expect(loadSpy).not.toHaveBeenCalled();
+      expect(fakeTokenizer.lastTokenizeArgs()).toBeUndefined();
+    } finally {
+      loadSpy.mockRestore();
+    }
+  });
+}
+
+test("runCli treats --output - as stdout", () => {
+  const { io, logs, errors } = createCapturedIo();
+  const fakeTokenizer = createFakeTokenizer();
+  const loadSpy = spyOn(Tokenizer, "load").mockImplementation(() => fakeTokenizer.tokenizer as never);
+
+  try {
+    const exitCode = runCli(["--dict-path", "/tmp/dict", "--wakati", "--output", "-", "--text", "ignored"], {}, io);
+
+    expect(exitCode).toBe(0);
+    expect(errors).toEqual([]);
+    expect(logs[0]).toBe("すもも もも");
+    expect(fakeTokenizer.lastTokenizeArgs()).toEqual({ text: "ignored", mode: "C" });
+    expect(loadSpy).toHaveBeenCalledTimes(1);
+  } finally {
+    loadSpy.mockRestore();
+  }
+});
+
+test("runCli reports a coded error when output file writing fails", () => {
+  const { io, logs, errors } = createCapturedIo();
+  const fakeTokenizer = createFakeTokenizer();
+  const loadSpy = spyOn(Tokenizer, "load").mockImplementation(() => fakeTokenizer.tokenizer as never);
+  const missingDir = `/tmp/sudachi-bun-missing-${crypto.randomUUID()}`;
+  const outputPath = `${missingDir}/tokens.json`;
+
+  try {
+    const exitCode = runCli(["--dict-path", "/tmp/dict", "--wakati", "--output", outputPath, "--text", "ignored"], {}, io);
+
+    expect(exitCode).toBe(1);
+    expect(errors[0]).toContain("[");
+    expect(errors[0]).toMatch(/no such file or directory|permission denied/i);
+    expect(logs[0]).toContain("Usage:");
+    expect(fakeTokenizer.lastTokenizeArgs()).toEqual({ text: "ignored", mode: "C" });
+    expect(loadSpy).toHaveBeenCalledTimes(1);
+  } finally {
+    loadSpy.mockRestore();
+  }
 });
 
 test("runCli prints a coded error when mode is invalid", () => {
