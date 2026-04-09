@@ -6,7 +6,7 @@ TypeScript から Rust FFI (`sudachi-ffi`) を呼び出して、日本語テキ�
 ## できること
 
 - Bun から Sudachi の形態素解析を実行
-- CLI で `--mode A|B|C` の分割モードや `--wakati` / `--all` / `--output <path>`、`--split-sentences` / `--debug` / `--resource-dir` を指定して出力
+- CLI の `tokenize` サブコマンドで `--mode A|B|C` の分割モードや `--wakati` / `--all` / `--output <path>`、`--split-sentences` / `--debug` / `--resource-dir` を指定して出力
 - CLI で `--text`、stdin、位置引数のファイル入力に対応
 - TypeScript API (`Tokenizer`) から直接トークナイズ
 - Sudachi 辞書のダウンロードと展開を補助するセットアップスクリプトを提供
@@ -44,17 +44,17 @@ bun run setup:dict -- --type core --version latest --out ./dict
 ### 4. CLI を実行
 
 ```bash
-bun run index.ts --dict-path ./dict/system_core.dic --text "すもももももももものうち"
-bun run index.ts --dict-path ./dict/system_core.dic --wakati --text "すもももももももものうち"
-bun run index.ts --dict-path ./dict/system_core.dic --all --text "すもももももももものうち"
-bun run index.ts --dict-path ./dict/system_core.dic --output - --text "すもももももももものうち"
-bun run index.ts --dict-path ./dict/system_core.dic --output ./tokens.json --text "すもももももももものうち"
-bun run index.ts --dict-path ./dict/system_core.dic --split-sentences --text "今日は晴れです。明日も晴れです。"
-bun run index.ts --dict-path ./dict/system_core.dic --debug --text "すもももももももものうち"
-bun run index.ts --dict-path ./dict/system_core.dic --resource-dir ./dict --text "すもももももももものうち"
-bun run index.ts --dict-path ./dict/system_core.dic input.txt
-bun run index.ts --dict-path ./dict/system_core.dic input-a.txt input-b.txt
-echo "すもももももももものうち" | bun run index.ts --dict-path ./dict/system_core.dic
+bun run index.ts tokenize --dict-path ./dict/system_core.dic --text "すもももももももものうち"
+bun run index.ts tokenize --dict-path ./dict/system_core.dic --wakati --text "すもももももももものうち"
+bun run index.ts tokenize --dict-path ./dict/system_core.dic --all --text "すもももももももものうち"
+bun run index.ts tokenize --dict-path ./dict/system_core.dic --output - --text "すもももももももものうち"
+bun run index.ts tokenize --dict-path ./dict/system_core.dic --output ./tokens.json --text "すもももももももものうち"
+bun run index.ts tokenize --dict-path ./dict/system_core.dic --split-sentences --text "今日は晴れです。明日も晴れです。"
+bun run index.ts tokenize --dict-path ./dict/system_core.dic --debug --text "すもももももももものうち"
+bun run index.ts tokenize --dict-path ./dict/system_core.dic --resource-dir ./dict --text "すもももももももものうち"
+bun run index.ts tokenize --dict-path ./dict/system_core.dic input.txt
+bun run index.ts tokenize --dict-path ./dict/system_core.dic input-a.txt input-b.txt
+echo "すもももももももものうち" | bun run index.ts tokenize --dict-path ./dict/system_core.dic
 ```
 
 ## CLI 使い方
@@ -62,10 +62,10 @@ echo "すもももももももものうち" | bun run index.ts --dict-path ./dic
 基本形式:
 
 ```bash
-bun run index.ts --dict-path <path-to-dic> [options] [input-file ...]
+bun run index.ts tokenize --dict-path <path-to-dic> [options] [input-file ...]
 ```
 
-現在、`build` / `ubuild` / `dump` のサブコマンドは scaffold 済みですが、まだ実装されていません。
+`tokenize` 以外に `build` / `ubuild` / `dump` サブコマンドがありますが、現在は scaffold のみで未実装です。これらのコマンドでは tokenize 用フラグ（例: `--dict-path`）は受け付けません。
 
 ```bash
 bun run index.ts build --help
@@ -82,10 +82,10 @@ bun run index.ts dump --help
 - `--wakati`: 分かち書きモードで出力
 - `--all`: すべてのトークン情報を出力
 - `--output <path>`: 出力先ファイルを指定。`-` を指定すると標準出力に出力
-- `--text "<text>"`: 解析対象テキスト（デフォルト: `すもももももももものうち`）
+- `--text "<text>"`: 解析対象テキスト（未指定時は位置引数ファイルまたは stdin から解決）
 - `--split-sentences`: 入力を文単位に分けて解析する
 - `--debug`: デバッグ情報を標準エラー出力に追加する。標準出力の解析結果はそのまま維持される
-- `--resource-dir <path>` / `--resource_dir <path>`: 辞書・設定の探索基準ディレクトリを指定する
+- `--resource-dir <path>`: 辞書・設定の探索基準ディレクトリを指定する
 
 ### 入力ソース
 

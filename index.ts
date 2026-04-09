@@ -1,5 +1,6 @@
 export { createTokenizer, Tokenizer } from "./src/core.ts";
-export { main, parseCliArgs, parseArgValue, runCli, runTokenizeCommand } from "./src/cli.ts";
+export { main, runCli, runTokenizeCommand } from "./src/cli.ts";
+export { parseCliArgs } from "./src/cli/parser.ts";
 export { formatSudachiError, SudachiError } from "./src/types.ts";
 export type {
   Morpheme,

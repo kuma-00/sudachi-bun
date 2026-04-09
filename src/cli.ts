@@ -1,45 +1,25 @@
-import { fstatSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { statSync, writeFileSync } from "node:fs";
 
 import { Tokenizer } from "./core.ts";
+import { renderCliHelp } from "./cli/help.ts";
+import { resolveInputText } from "./cli/input.ts";
+import { parseCliArgs } from "./cli/parser.ts";
+import type { CliSubcommand, CliTokenizeCommand } from "./cli/types.ts";
 import {
   formatSudachiError,
-  parseTokenizeMode,
   SudachiError,
+  type Morpheme,
   type TokenizeMode,
   type TokenizerLoadOptions,
 } from "./types.ts";
 
-const KNOWN_VALUE_FLAGS = new Set([
-  "dict-path",
-  "config-path",
-  "library-path",
-  "resource-dir",
-  "resource_dir",
-  "mode",
-  "text",
-  "output",
-]);
-
-const BOOLEAN_FLAGS = new Set(["wakati", "all", "split-sentences", "debug"]);
-
-const KNOWN_FLAGS = new Set([...KNOWN_VALUE_FLAGS, ...BOOLEAN_FLAGS]);
-
-const CLI_SUBCOMMANDS = ["build", "ubuild", "dump"] as const;
-type CliSubcommand = (typeof CLI_SUBCOMMANDS)[number];
-type CliCommandName = "tokenize" | CliSubcommand;
-type CliHelpTarget = "top-level" | CliCommandName;
-type TokenizeOutputFormat = "normal" | "wakati" | "all";
+export type TokenizeOutputFormat = "normal" | "wakati" | "all";
 
 export interface TokenizeCliCommand extends TokenizerLoadOptions {
   mode: TokenizeMode;
   text: string;
   splitSentences?: boolean;
-}
-
-interface TokenizeExecutionCommand extends TokenizeCliCommand {
-  splitSentences: boolean;
-  format: TokenizeOutputFormat;
-  outputPath?: string;
+  debug?: boolean;
 }
 
 interface CliIO {
@@ -47,79 +27,18 @@ interface CliIO {
   error(message: string): void;
 }
 
-function missingArgumentError(name: string): SudachiError {
-  return new SudachiError(`Missing value for --${name}`, {
-    code: "MISSING_ARGUMENT",
-  });
-}
-
-function unimplementedCommandError(name: CliSubcommand): SudachiError {
-  return new SudachiError(`The ${name} command is not implemented yet. TODO delegate to dictionary layer.`, {
-    code: "INVALID_ARGUMENT",
-  });
-}
-
-function invalidInputSourceError(message: string): SudachiError {
+function invalidArgumentError(message: string): SudachiError {
   return new SudachiError(message, {
     code: "INVALID_ARGUMENT",
   });
 }
 
-function unknownFlagError(name: string): SudachiError {
-  return new SudachiError(`Unknown flag: ${name}`, {
-    code: "INVALID_ARGUMENT",
-  });
-}
-
-function invalidBooleanFlagSyntaxError(name: string): SudachiError {
-  return new SudachiError(`Invalid boolean flag syntax: ${name}`, {
-    code: "INVALID_ARGUMENT",
-  });
+function unimplementedCommandError(name: Exclude<CliSubcommand, "tokenize">): SudachiError {
+  return invalidArgumentError(`The ${name} command is not implemented yet. TODO delegate to dictionary layer.`);
 }
 
 function invalidResourceDirError(value: string): SudachiError {
-  return new SudachiError(`Invalid resource directory: ${value}`, {
-    code: "INVALID_ARGUMENT",
-  });
-}
-
-function isKnownFlagToken(value: string, knownFlags: ReadonlySet<string>): boolean {
-  if (!value.startsWith("--")) {
-    return false;
-  }
-
-  const flagBody = value.slice(2);
-  const separatorIndex = flagBody.indexOf("=");
-  const flagName = separatorIndex === -1 ? flagBody : flagBody.slice(0, separatorIndex);
-  return knownFlags.has(flagName);
-}
-
-function isHelpToken(value: string): boolean {
-  return value === "-h" || value === "--help";
-}
-
-function isKnownSubcommand(value: string): value is CliSubcommand {
-  return CLI_SUBCOMMANDS.includes(value as CliSubcommand);
-}
-
-function hasFlag(argv: string[], name: string): boolean {
-  const prefix = `--${name}`;
-  return argv.some((arg) => arg === prefix || arg.startsWith(`${prefix}=`));
-}
-
-function parseAliasedArgValue(
-  argv: string[],
-  names: readonly string[],
-  knownFlags: ReadonlySet<string> = KNOWN_FLAGS,
-): string | undefined {
-  for (const name of names) {
-    const value = parseArgValue(argv, name, knownFlags);
-    if (value !== undefined) {
-      return value;
-    }
-  }
-
-  return undefined;
+  return invalidArgumentError(`Invalid resource directory: ${value}`);
 }
 
 function validateResourceDir(value: string | undefined): string | undefined {
@@ -165,343 +84,7 @@ function getSentenceUnitOffsetLength(unit: string): number {
   return Buffer.byteLength(unit, "utf8");
 }
 
-function skipKnownFlagValue(argv: string[], index: number, knownFlags: ReadonlySet<string>): number {
-  const arg = argv[index];
-  if (!arg || !arg.startsWith("--")) {
-    return index;
-  }
-
-  const flagBody = arg.slice(2);
-  const separatorIndex = flagBody.indexOf("=");
-  const flagName = separatorIndex === -1 ? flagBody : flagBody.slice(0, separatorIndex);
-  if (!knownFlags.has(flagName) || separatorIndex !== -1) {
-    return index;
-  }
-
-  return index + 1;
-}
-
-function discoverCliCommand(argv: string[]): {
-  command: CliCommandName;
-  helpTarget?: CliHelpTarget;
-  error?: SudachiError;
-} {
-  let command: CliCommandName = "tokenize";
-  const firstToken = argv[0];
-
-  if (firstToken && !firstToken.startsWith("--")) {
-    if (isKnownSubcommand(firstToken)) {
-      command = firstToken;
-    }
-  }
-
-  for (let index = 0; index < argv.length; index += 1) {
-    const arg = argv[index];
-    if (!arg) continue;
-
-    if (isHelpToken(arg)) {
-      return {
-        command,
-        helpTarget: command === "tokenize" ? "top-level" : command,
-      };
-    }
-
-    if (arg.startsWith("--")) {
-      if (!isKnownFlagToken(arg, KNOWN_FLAGS)) {
-        return {
-          command: "tokenize",
-          error: unknownFlagError(arg.includes("=") ? `--${arg.slice(2, arg.indexOf("="))}` : arg),
-          helpTarget: "top-level",
-        };
-      }
-
-      const flagBody = arg.slice(2);
-      const separatorIndex = flagBody.indexOf("=");
-      const flagName = separatorIndex === -1 ? flagBody : flagBody.slice(0, separatorIndex);
-      if (separatorIndex !== -1 && BOOLEAN_FLAGS.has(flagName)) {
-        return {
-          command: "tokenize",
-          error: invalidBooleanFlagSyntaxError(arg),
-          helpTarget: "top-level",
-        };
-      }
-
-      index = skipKnownFlagValue(argv, index, KNOWN_VALUE_FLAGS);
-      continue;
-    }
-  }
-
-  return {
-    command,
-  };
-}
-
-function collectPositionalInputPaths(argv: string[]): string[] {
-  const inputPaths: string[] = [];
-
-  for (let index = 0; index < argv.length; index += 1) {
-    const arg = argv[index];
-    if (!arg) continue;
-
-    if (isHelpToken(arg)) {
-      continue;
-    }
-
-    if (arg.startsWith("--")) {
-      index = skipKnownFlagValue(argv, index, KNOWN_VALUE_FLAGS);
-      continue;
-    }
-
-    inputPaths.push(arg);
-  }
-
-  return inputPaths;
-}
-
-export function parseArgValue(
-  argv: string[],
-  name: string,
-  knownFlags: ReadonlySet<string> = KNOWN_FLAGS,
-): string | undefined {
-  const prefix = `--${name}=`;
-  for (let index = 0; index < argv.length; index += 1) {
-    const arg = argv[index];
-    if (!arg) continue;
-
-    if (arg.startsWith(prefix)) {
-      const value = arg.slice(prefix.length);
-      if (value.length === 0) {
-        throw missingArgumentError(name);
-      }
-      return value;
-    }
-
-    if (arg === `--${name}`) {
-      const nextValue = argv[index + 1];
-      if (!nextValue) {
-        throw missingArgumentError(name);
-      }
-      if (isKnownFlagToken(nextValue, knownFlags)) {
-        throw missingArgumentError(name);
-      }
-      return nextValue;
-    }
-  }
-
-  return undefined;
-}
-
-function printUsage(io: Pick<CliIO, "log">, command: CliHelpTarget = "top-level"): void {
-  const lines =
-    command === "tokenize"
-      ? [
-          "Usage:",
-          "  bun run index.ts --dict-path=/path/to/dictionary --library-path=/path/to/libsudachi_ffi.dylib [--text='...' | input.txt [more.txt ...] | pipe] [--wakati|--all] [--split-sentences] [--debug] [--resource-dir <path>|--resource_dir <path>] [--output <path>|-]",
-          "",
-          "Options:",
-          "  --wakati          Output space-joined surfaces.",
-          "  --all             Use the explicit all output mode.",
-          "  --split-sentences Tokenize input sentence by sentence.",
-          "  --debug           Emit debug diagnostics to stderr.",
-          "  --resource-dir <path>, --resource_dir <path>",
-          "                    Use a custom resource directory.",
-          "  --output <path>|- Write to a file, or stdout with -.",
-          "",
-          "Environment variables:",
-          "  SUDACHI_DICT_PATH",
-          "  SUDACHI_CONFIG_PATH",
-          "  SUDACHI_FFI_PATH",
-        ]
-      : command === "build"
-        ? [
-            "Usage:",
-            "  bun run index.ts build [--help]",
-            "",
-            "Status:",
-            "  Not implemented yet. TODO delegate to dictionary layer.",
-          ]
-        : command === "ubuild"
-          ? [
-              "Usage:",
-              "  bun run index.ts ubuild [--help]",
-              "",
-              "Status:",
-              "  Not implemented yet. TODO delegate to dictionary layer.",
-            ]
-          : command === "dump"
-            ? [
-                "Usage:",
-                "  bun run index.ts dump [--help]",
-              "",
-              "Status:",
-              "  Not implemented yet. TODO delegate to dictionary layer.",
-          ]
-            : [
-                "Usage:",
-                "  bun run index.ts [build|ubuild|dump] --dict-path=/path/to/dictionary --library-path=/path/to/libsudachi_ffi.dylib [--text='...' | input.txt [more.txt ...] | pipe] [--wakati|--all] [--split-sentences] [--debug] [--resource-dir <path>|--resource_dir <path>] [--output <path>|-]",
-            "",
-            "Commands:",
-            "  build   Build a dictionary.",
-            "  ubuild  Build an Uber dictionary.",
-            "  dump    Dump dictionary contents.",
-            "",
-            "Use `--help` or `-h` after a command for command-specific help.",
-            "Tokenize options:",
-            "  --wakati, --all, --split-sentences, --debug, --resource-dir <path>, --resource_dir <path>, --output <path>|-",
-            "",
-            "Environment variables:",
-            "  SUDACHI_DICT_PATH",
-            "  SUDACHI_DICTIONARY_PATH",
-                "  SUDACHI_CONFIG_PATH",
-                "  SUDACHI_FFI_PATH",
-                "  SUDACHI_FFI_DIR",
-              ];
-
-  io.log(lines.join("\n"));
-}
-
-function readStdinText(): string | undefined {
-  if (process.stdin.isTTY === true) {
-    return undefined;
-  }
-
-  try {
-    return readFileSync(0, "utf8");
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    throw invalidInputSourceError(`Failed to read stdin: ${message}`);
-  }
-}
-
-function hasStdinInput(): boolean {
-  if (process.stdin.isTTY === true) {
-    return false;
-  }
-  if (process.stdin.isTTY === false) {
-    return true;
-  }
-
-  try {
-    return !fstatSync(0).isCharacterDevice();
-  } catch {
-    return false;
-  }
-}
-
-function readInputFiles(inputPaths: string[]): string {
-  const contents: string[] = [];
-
-  for (const inputPath of inputPaths) {
-    try {
-      contents.push(readFileSync(inputPath, "utf8"));
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      throw invalidInputSourceError(`Failed to read input file ${inputPath}: ${message}`);
-    }
-  }
-
-  // Multiple positional files are concatenated in argv order with a newline separator.
-  return contents.join("\n");
-}
-
-function resolveTokenizeInputText(argv: string[], command: TokenizeExecutionCommand): string {
-  const inputPaths = collectPositionalInputPaths(argv);
-  const stdinInputDetected = hasStdinInput();
-  const hasExplicitText = hasFlag(argv, "text");
-
-  if (hasExplicitText) {
-    if (inputPaths.length > 0) {
-      throw invalidInputSourceError("Cannot combine --text with positional file input.");
-    }
-    if (stdinInputDetected) {
-      throw invalidInputSourceError("Cannot combine --text with stdin input.");
-    }
-
-    return command.text;
-  }
-
-  if (inputPaths.length > 0) {
-    if (stdinInputDetected) {
-      throw invalidInputSourceError("Cannot combine positional file input with stdin input.");
-    }
-
-    const resolvedText = readInputFiles(inputPaths);
-    if (resolvedText.length === 0) {
-      throw invalidInputSourceError("No input was resolved from --text, positional file paths, or stdin.");
-    }
-
-    return resolvedText;
-  }
-
-  if (stdinInputDetected) {
-    const stdinText = readStdinText();
-    if (stdinText === undefined || stdinText.length === 0) {
-      throw invalidInputSourceError("No input was resolved from --text, positional file paths, or stdin.");
-    }
-    return stdinText ?? "";
-  }
-
-  throw invalidInputSourceError("No input was resolved from --text, positional file paths, or stdin.");
-}
-
-export function parseCliArgs(
-  argv: string[],
-  env: NodeJS.ProcessEnv = process.env,
-): TokenizeCliCommand {
-  const dictPath =
-    parseArgValue(argv, "dict-path", KNOWN_FLAGS) ?? env.SUDACHI_DICT_PATH ?? env.SUDACHI_DICTIONARY_PATH;
-  if (!dictPath) {
-    throw missingArgumentError("dict-path");
-  }
-
-  const resourceDir = validateResourceDir(parseAliasedArgValue(argv, ["resource-dir", "resource_dir"], KNOWN_FLAGS));
-  const debug = hasFlag(argv, "debug");
-
-  const command: TokenizeCliCommand = {
-    dictPath,
-    configPath: parseArgValue(argv, "config-path", KNOWN_FLAGS) ?? env.SUDACHI_CONFIG_PATH,
-    libraryPath: parseArgValue(argv, "library-path", KNOWN_FLAGS) ?? env.SUDACHI_FFI_PATH,
-    mode: parseTokenizeMode(parseArgValue(argv, "mode", KNOWN_FLAGS) ?? "C"),
-    text: parseArgValue(argv, "text", KNOWN_FLAGS) ?? "すもももももももものうち",
-  };
-
-  if (resourceDir !== undefined) {
-    command.resourceDir = resourceDir;
-  }
-
-  if (hasFlag(argv, "split-sentences")) {
-    command.splitSentences = true;
-  }
-
-  if (debug) {
-    command.debug = true;
-  }
-
-  return command;
-}
-
-function parseTokenizeExecutionCommand(
-  argv: string[],
-  env: NodeJS.ProcessEnv = process.env,
-): TokenizeExecutionCommand {
-  const command = parseCliArgs(argv, env);
-  const wakati = hasFlag(argv, "wakati");
-  const all = hasFlag(argv, "all");
-  if (wakati && all) {
-    throw new SudachiError("Cannot combine --wakati and --all.", {
-      code: "INVALID_ARGUMENT",
-    });
-  }
-
-  return {
-    ...command,
-    splitSentences: Boolean(command.splitSentences),
-    format: all ? "all" : wakati ? "wakati" : "normal",
-    outputPath: parseArgValue(argv, "output", KNOWN_FLAGS),
-  };
-}
-
-function formatTokenizeOutput(morphemes: Awaited<ReturnType<Tokenizer["tokenize"]>>, format: TokenizeOutputFormat): string {
+function formatTokenizeOutput(morphemes: Morpheme[], format: TokenizeOutputFormat): string {
   switch (format) {
     case "wakati":
       return morphemes.map((morpheme) => morpheme.surface).join(" ");
@@ -516,13 +99,13 @@ function tokenizeSentenceUnits(
   text: string,
   mode: TokenizeMode,
   splitSentences: boolean,
-): Awaited<ReturnType<Tokenizer["tokenize"]>> {
+): Morpheme[] {
   if (!splitSentences) {
     return tokenizer.tokenize(text, mode);
   }
 
   const units = splitTextIntoSentenceUnits(text);
-  const morphemes: Awaited<ReturnType<Tokenizer["tokenize"]>> = [];
+  const morphemes: Morpheme[] = [];
   let offset = 0;
 
   for (const unit of units) {
@@ -538,21 +121,11 @@ function tokenizeSentenceUnits(
         })),
       );
     }
+
     offset += getSentenceUnitOffsetLength(unit);
   }
 
   return morphemes;
-}
-
-function writeTokenizeOutput(outputPath: string, output: string): void {
-  try {
-    writeFileSync(outputPath, output);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    throw new SudachiError(`Failed to write output to ${outputPath}: ${message}`, {
-      code: "INVALID_ARGUMENT",
-    });
-  }
 }
 
 export function runTokenizeCommand(
@@ -586,7 +159,38 @@ export function runTokenizeCommand(
   }
 }
 
-function runSubcommand(command: CliSubcommand): string {
+function writeTokenizeOutput(outputPath: string, output: string): void {
+  try {
+    writeFileSync(outputPath, output);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw invalidArgumentError(`Failed to write output to ${outputPath}: ${message}`);
+  }
+}
+
+function normalizeTokenizeCommand(parsed: CliTokenizeCommand): TokenizeCliCommand {
+  if (parsed.wakati && parsed.all) {
+    throw invalidArgumentError("Cannot combine --wakati and --all.");
+  }
+
+  const text = resolveInputText({
+    text: parsed.text,
+    positionalFiles: parsed.positionals,
+  });
+
+  return {
+    dictPath: parsed.dictPath,
+    configPath: parsed.configPath,
+    libraryPath: parsed.libraryPath,
+    resourceDir: validateResourceDir(parsed.resourceDir),
+    mode: parsed.mode,
+    text,
+    splitSentences: parsed.splitSentences,
+    debug: parsed.debug,
+  };
+}
+
+function runSubcommand(command: Exclude<CliSubcommand, "tokenize">): string {
   throw unimplementedCommandError(command);
 }
 
@@ -595,38 +199,39 @@ export function runCli(
   env: NodeJS.ProcessEnv = process.env,
   io: CliIO = console,
 ): number {
-  const discovery = discoverCliCommand(argv);
+  const parsed = parseCliArgs(argv, env);
 
-  if (discovery.error) {
-    io.error(formatSudachiError(discovery.error));
-    printUsage(io, discovery.helpTarget);
+  if (parsed.kind === "help") {
+    io.log(renderCliHelp(parsed.target));
+    return 0;
+  }
+
+  if (parsed.kind === "error") {
+    io.error(formatSudachiError(parsed.error));
+    io.log(renderCliHelp(parsed.helpTarget));
     return 1;
   }
 
-  if (discovery.helpTarget) {
-    printUsage(io, discovery.helpTarget);
-    return 0;
-  }
-
   try {
-    if (discovery.command === "tokenize") {
-      const command = parseTokenizeExecutionCommand(argv, env);
-      command.text = resolveTokenizeInputText(argv, command);
-      const output = runTokenizeCommand(command, command.format, io);
+    if (parsed.command.kind === "tokenize") {
+      const command = normalizeTokenizeCommand(parsed.command);
+      const format: TokenizeOutputFormat = parsed.command.all ? "all" : parsed.command.wakati ? "wakati" : "normal";
+      const output = runTokenizeCommand(command, format, io);
 
-      if (command.outputPath && command.outputPath !== "-") {
-        writeTokenizeOutput(command.outputPath, output);
+      if (parsed.command.outputPath && parsed.command.outputPath !== "-") {
+        writeTokenizeOutput(parsed.command.outputPath, output);
       } else {
         io.log(output);
       }
+
       return 0;
     }
 
-    io.log(runSubcommand(discovery.command));
+    io.log(runSubcommand(parsed.command.kind));
     return 0;
   } catch (error) {
     io.error(formatSudachiError(error));
-    printUsage(io, discovery.command);
+    io.log(renderCliHelp(parsed.command.kind));
     return 1;
   }
 }
