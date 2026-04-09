@@ -2,10 +2,15 @@ import { expect, test } from "bun:test";
 
 import { renderCliHelp } from "./help.ts";
 import { parseArgValue, parseCliArgs } from "./parser.ts";
-import type { CliCommandResult, CliHelpResult, CliParseErrorResult } from "./types.ts";
-import { SudachiError } from "../types.ts";
+import type { CliCommandResult, CliHelpResult, CliHelpTarget, CliParseErrorResult } from "./types.ts";
+import { SudachiError, type SudachiErrorCode } from "../types.ts";
 
-function expectError(result: CliParseErrorResult, code: string, message: string, helpTarget: string): void {
+function expectError(
+  result: CliParseErrorResult,
+  code: SudachiErrorCode,
+  message: string,
+  helpTarget: CliHelpTarget,
+): void {
   expect(result.kind).toBe("error");
   expect(result.error).toBeInstanceOf(SudachiError);
   expect(result.error.code).toBe(code);

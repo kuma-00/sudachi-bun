@@ -2,7 +2,7 @@ import { expect, spyOn, test } from "bun:test";
 
 import * as ffi from "./ffi.ts";
 import * as native from "./native.ts";
-import { SentenceSplitter } from "./sentence-splitter.ts";
+import { SentenceSplitter, createSentenceSplitter } from "./sentence-splitter.ts";
 import type { NativeSentenceSplitterLibrary, SentenceSpanResultLayout } from "./native.ts";
 
 const SENTENCE_SPAN_LAYOUT: SentenceSpanResultLayout = {
@@ -36,12 +36,12 @@ function createMockLibrary(): NativeSentenceSplitterLibrary {
   };
 }
 
-test("SentenceSplitter.create returns a splitter instance", () => {
+test("createSentenceSplitter returns a splitter instance", () => {
   const loadSpy = spyOn(native, "loadSentenceSplitterLibrary").mockReturnValue(createMockLibrary());
   const layoutSpy = spyOn(native, "readSentenceSpanResultLayout").mockReturnValue(SENTENCE_SPAN_LAYOUT);
 
   try {
-    const splitter = SentenceSplitter.create({ dictPath: "/tmp/dict" });
+    const splitter = createSentenceSplitter({ dictPath: "/tmp/dict" });
 
     expect(splitter).toBeInstanceOf(SentenceSplitter);
     expect(loadSpy).toHaveBeenCalledTimes(1);
@@ -57,7 +57,7 @@ test("split returns no spans for an empty string", () => {
   const loadSpy = spyOn(native, "loadSentenceSplitterLibrary").mockReturnValue(createMockLibrary());
   const layoutSpy = spyOn(native, "readSentenceSpanResultLayout").mockReturnValue(SENTENCE_SPAN_LAYOUT);
   const readSpy = spyOn(ffi, "readSentenceSpanArray");
-  const splitter = SentenceSplitter.create({ dictPath: "/tmp/dict" });
+  const splitter = createSentenceSplitter({ dictPath: "/tmp/dict" });
 
   try {
     expect(splitter.split("")).toEqual([]);
@@ -80,7 +80,7 @@ test("split maps native UTF-8 byte spans back to text", () => {
   ]);
   const freeSpy = spyOn(library.symbols, "sudachi_free_sentence_spans");
   const splitSpy = spyOn(library.symbols, "sudachi_split_sentences");
-  const splitter = SentenceSplitter.create({ dictPath: "/tmp/dict" });
+  const splitter = createSentenceSplitter({ dictPath: "/tmp/dict" });
 
   try {
     expect(splitter.split("😀。 B？")).toEqual([
@@ -105,7 +105,7 @@ test("split rejects invalid UTF-8 byte boundaries from native", () => {
   const loadSpy = spyOn(native, "loadSentenceSplitterLibrary").mockReturnValue(createMockLibrary());
   const layoutSpy = spyOn(native, "readSentenceSpanResultLayout").mockReturnValue(SENTENCE_SPAN_LAYOUT);
   const readSpy = spyOn(ffi, "readSentenceSpanArray").mockReturnValue([{ start: 1, end: 7 }]);
-  const splitter = SentenceSplitter.create({ dictPath: "/tmp/dict" });
+  const splitter = createSentenceSplitter({ dictPath: "/tmp/dict" });
 
   try {
     expect(() => splitter.split("😀。")).toThrow("does not align to a UTF-8 boundary");
@@ -117,7 +117,7 @@ test("split rejects invalid UTF-8 byte boundaries from native", () => {
   }
 });
 
-test("SentenceSplitter.create closes the native library when initialization fails", () => {
+test("createSentenceSplitter closes the native library when initialization fails", () => {
   const library = createMockLibrary();
   const loadSpy = spyOn(native, "loadSentenceSplitterLibrary").mockReturnValue(library);
   const layoutSpy = spyOn(native, "readSentenceSpanResultLayout").mockReturnValue(SENTENCE_SPAN_LAYOUT);
@@ -125,7 +125,7 @@ test("SentenceSplitter.create closes the native library when initialization fail
   const closeSpy = spyOn(library, "close");
 
   try {
-    expect(() => SentenceSplitter.create({ dictPath: "/tmp/dict" })).toThrow(
+    expect(() => createSentenceSplitter({ dictPath: "/tmp/dict" })).toThrow(
       "native error",
     );
     expect(closeSpy).toHaveBeenCalledTimes(1);

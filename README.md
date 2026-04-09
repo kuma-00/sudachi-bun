@@ -9,7 +9,7 @@ TypeScript から Rust FFI (`sudachi-ffi`) を呼び出して、日本語テキ�
 - Rust 側の sentence splitter を通して `SentenceSpan[]` を取得し、UTF-8 バイトオフセットをそのまま扱う
 - CLI の `tokenize` サブコマンドで `--mode A|B|C` の分割モードや `--wakati` / `--all` / `--output <path>`、`--split-sentences` / `--debug` / `--resource-dir` を指定して出力
 - CLI で `--text`、stdin、位置引数のファイル入力に対応
-- TypeScript API (`Tokenizer`, `SentenceSplitter`) から直接トークナイズ/文分割
+- TypeScript API として package root の `createTokenizer` / `createSentenceSplitter` から直接トークナイズ/文分割
 - TypeScript API から既存 morpheme の再分割（単一 morpheme / morpheme list）
 - TypeScript API から辞書 lookup 候補を `LookupEntry[]` として取得
 - Sudachi 辞書のダウンロードと展開を補助するセットアップスクリプトを提供
@@ -142,13 +142,15 @@ bun run setup:dict -- --url https://example.com/sudachi-dictionary.zip --out ./d
 
 ## TypeScript API
 
-```ts
-import { SentenceSplitter, Tokenizer } from "sudachi-bun";
+`createTokenizer` / `createSentenceSplitter` を package root から import して使います。
 
-const splitter = SentenceSplitter.create({
+```ts
+import { createSentenceSplitter, createTokenizer } from "sudachi-bun";
+
+const splitter = createSentenceSplitter({
   dictPath: "./dict/system_core.dic",
 });
-const tokenizer = Tokenizer.load({
+const tokenizer = createTokenizer({
   dictPath: "./dict/system_core.dic",
   // configPath: "./dict/sudachi.json",
   // libraryPath: "./sudachi-ffi/target/release/libsudachi_ffi.dylib",
@@ -172,9 +174,9 @@ try {
 }
 ```
 
-`SentenceSplitter` は Rust FFI の sentence splitter ハンドルを保持し、`split(text)` で `SentenceSpan[]` を返します。各 span は文テキスト `text` と UTF-8 バイトオフセット `start` / `end` を持ちます。
+`createSentenceSplitter()` が返す `SentenceSplitter` は Rust FFI の sentence splitter ハンドルを保持し、`split(text)` で `SentenceSpan[]` を返します。各 span は文テキスト `text` と UTF-8 バイトオフセット `start` / `end` を持ちます。
 
-`Tokenizer` には Task-06 相当の再分割 API があります。
+`createTokenizer()` が返す `Tokenizer` には Task-06 相当の再分割 API があります。
 
 - `tokenizer.split(morpheme, mode)`: 既存の単一 morpheme をより細かい `mode` へ再分割する
 - `tokenizer.splitInto(morphemes, mode)`: morpheme list 全体を再分割する

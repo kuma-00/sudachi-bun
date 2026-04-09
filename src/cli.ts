@@ -1,27 +1,12 @@
-import { statSync, writeFileSync } from "node:fs";
+import { writeFileSync } from "node:fs";
 
-import { Tokenizer } from "./core.ts";
 import { renderCliHelp } from "./cli/help.ts";
-import { resolveInputText } from "./cli/input.ts";
+import { type TokenizeOutputFormat } from "./cli/output.ts";
+import { normalizeTokenizeCommand } from "./cli/normalize.ts";
+import { runTokenizeCommand } from "./cli/execute.ts";
 import { parseCliArgs } from "./cli/parser.ts";
-import { SentenceSplitter } from "./sentence-splitter.ts";
-import type { CliSubcommand, CliTokenizeCommand } from "./cli/types.ts";
-import {
-  formatSudachiError,
-  SudachiError,
-  type Morpheme,
-  type TokenizeMode,
-  type TokenizerLoadOptions,
-} from "./types.ts";
-
-export type TokenizeOutputFormat = "normal" | "wakati" | "all";
-
-export interface TokenizeCliCommand extends TokenizerLoadOptions {
-  mode: TokenizeMode;
-  text: string;
-  splitSentences?: boolean;
-  debug?: boolean;
-}
+import type { CliSubcommand } from "./cli/types.ts";
+import { formatSudachiError, SudachiError } from "./types.ts";
 
 interface CliIO {
   log(message: string): void;
@@ -38,120 +23,6 @@ function unimplementedCommandError(name: Exclude<CliSubcommand, "tokenize">): Su
   return invalidArgumentError(`The ${name} command is not implemented yet. TODO delegate to dictionary layer.`);
 }
 
-function invalidResourceDirError(value: string): SudachiError {
-  return invalidArgumentError(`Invalid resource directory: ${value}`);
-}
-
-function validateResourceDir(value: string | undefined): string | undefined {
-  if (value === undefined) {
-    return undefined;
-  }
-
-  try {
-    if (!statSync(value).isDirectory()) {
-      throw invalidResourceDirError(value);
-    }
-  } catch {
-    throw invalidResourceDirError(value);
-  }
-
-  return value;
-}
-
-function formatTokenizeOutput(morphemes: Morpheme[], format: TokenizeOutputFormat): string {
-  switch (format) {
-    case "wakati":
-      return morphemes.map((morpheme) => morpheme.surface).join(" ");
-    case "all":
-    case "normal":
-      return JSON.stringify(morphemes, null, 2);
-  }
-}
-
-function tokenizeSentenceUnits(
-  tokenizer: Tokenizer,
-  splitterOptions: TokenizerLoadOptions,
-  text: string,
-  mode: TokenizeMode,
-  splitSentences: boolean,
-): Morpheme[] {
-  if (!splitSentences) {
-    return tokenizer.tokenize(text, mode);
-  }
-
-  const splitter = SentenceSplitter.create(splitterOptions);
-  try {
-    const units = splitter.split(text);
-    if (units.length === 0) {
-      return tokenizer.tokenize(text, mode);
-    }
-
-    const morphemes: Morpheme[] = [];
-    for (const unit of units) {
-      const unitMorphemes = tokenizer.tokenize(unit.text, mode);
-      if (unit.start === 0) {
-        morphemes.push(...unitMorphemes);
-        continue;
-      }
-
-      morphemes.push(
-        ...unitMorphemes.map((morpheme) => ({
-          ...morpheme,
-          begin: morpheme.begin + unit.start,
-          end: morpheme.end + unit.start,
-        })),
-      );
-    }
-
-    return morphemes;
-  } finally {
-    splitter.close();
-  }
-}
-
-export function runTokenizeCommand(
-  command: TokenizeCliCommand,
-  format: TokenizeOutputFormat = "normal",
-  io?: Pick<CliIO, "error">,
-): string {
-  const tokenizer = Tokenizer.load(command);
-
-  try {
-    if (command.debug) {
-      io?.error(
-        [
-          `[debug] tokenize`,
-          `format=${format}`,
-          `splitSentences=${command.splitSentences ? "true" : "false"}`,
-          `resourceDir=${command.resourceDir ?? "(default)"}`,
-        ].join(" "),
-      );
-
-      try {
-        io?.error(`[debug] lookup=${JSON.stringify(tokenizer.lookup(command.text))}`);
-      } catch (error) {
-        io?.error(`[debug] lookup-unavailable=${formatSudachiError(error)}`);
-      }
-    }
-
-    const morphemes = tokenizeSentenceUnits(
-      tokenizer,
-      command,
-      command.text,
-      command.mode,
-      Boolean(command.splitSentences),
-    );
-
-    if (command.debug) {
-      io?.error(`[debug] morphemes=${morphemes.length}`);
-    }
-
-    return formatTokenizeOutput(morphemes, format);
-  } finally {
-    tokenizer.close();
-  }
-}
-
 function writeTokenizeOutput(outputPath: string, output: string): void {
   try {
     writeFileSync(outputPath, output);
@@ -159,28 +30,6 @@ function writeTokenizeOutput(outputPath: string, output: string): void {
     const message = error instanceof Error ? error.message : String(error);
     throw invalidArgumentError(`Failed to write output to ${outputPath}: ${message}`);
   }
-}
-
-function normalizeTokenizeCommand(parsed: CliTokenizeCommand): TokenizeCliCommand {
-  if (parsed.wakati && parsed.all) {
-    throw invalidArgumentError("Cannot combine --wakati and --all.");
-  }
-
-  const text = resolveInputText({
-    text: parsed.text,
-    positionalFiles: parsed.positionals,
-  });
-
-  return {
-    dictPath: parsed.dictPath,
-    configPath: parsed.configPath,
-    libraryPath: parsed.libraryPath,
-    resourceDir: validateResourceDir(parsed.resourceDir),
-    mode: parsed.mode,
-    text,
-    splitSentences: parsed.splitSentences,
-    debug: parsed.debug,
-  };
 }
 
 function runSubcommand(command: Exclude<CliSubcommand, "tokenize">): string {

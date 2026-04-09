@@ -1,0 +1,94 @@
+import { createTokenizer, type Tokenizer } from "../core.ts";
+import { createSentenceSplitter } from "../sentence-splitter.ts";
+import { formatSudachiError, type Morpheme, type TokenizeMode, type TokenizerOptions } from "../types.ts";
+import { formatTokenizeOutput, type TokenizeOutputFormat } from "./output.ts";
+
+import type { TokenizeCliCommand } from "./normalize.ts";
+
+interface CliIO {
+  error(message: string): void;
+}
+
+function tokenizeSentenceUnits(
+  tokenizer: Tokenizer,
+  splitterOptions: TokenizerOptions,
+  text: string,
+  mode: TokenizeMode,
+  splitSentences: boolean,
+): Morpheme[] {
+  if (!splitSentences) {
+    return tokenizer.tokenize(text, mode);
+  }
+
+  const splitter = createSentenceSplitter(splitterOptions);
+  try {
+    const units = splitter.split(text);
+    if (units.length === 0) {
+      return tokenizer.tokenize(text, mode);
+    }
+
+    const morphemes: Morpheme[] = [];
+    for (const unit of units) {
+      const unitMorphemes = tokenizer.tokenize(unit.text, mode);
+      if (unit.start === 0) {
+        morphemes.push(...unitMorphemes);
+        continue;
+      }
+
+      morphemes.push(
+        ...unitMorphemes.map((morpheme) => ({
+          ...morpheme,
+          begin: morpheme.begin + unit.start,
+          end: morpheme.end + unit.start,
+        })),
+      );
+    }
+
+    return morphemes;
+  } finally {
+    splitter.close();
+  }
+}
+
+export function runTokenizeCommand(
+  command: TokenizeCliCommand,
+  format: TokenizeOutputFormat = "normal",
+  io?: Pick<CliIO, "error">,
+): string {
+  const tokenizer = createTokenizer(command);
+
+  try {
+    if (command.debug) {
+      io?.error(
+        [
+          `[debug] tokenize`,
+          `format=${format}`,
+          `splitSentences=${command.splitSentences ? "true" : "false"}`,
+          `resourceDir=${command.resourceDir ?? "(default)"}`,
+        ].join(" "),
+      );
+
+      try {
+        io?.error(`[debug] lookup=${JSON.stringify(tokenizer.lookup(command.text))}`);
+      } catch (error) {
+        io?.error(`[debug] lookup-unavailable=${formatSudachiError(error)}`);
+      }
+    }
+
+    const morphemes = tokenizeSentenceUnits(
+      tokenizer,
+      command,
+      command.text,
+      command.mode,
+      Boolean(command.splitSentences),
+    );
+
+    if (command.debug) {
+      io?.error(`[debug] morphemes=${morphemes.length}`);
+    }
+
+    return formatTokenizeOutput(morphemes, format);
+  } finally {
+    tokenizer.close();
+  }
+}

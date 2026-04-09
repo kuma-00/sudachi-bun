@@ -1,6 +1,5 @@
 use std::os::raw::c_char;
 use std::panic::{AssertUnwindSafe, catch_unwind};
-use std::ptr::NonNull;
 use std::sync::Arc;
 
 use sudachi::analysis::mlist::MorphemeList;
@@ -13,13 +12,14 @@ use sudachi::sentence_splitter::{SentenceSplitter, SplitSentences};
 
 use crate::convert::{cstr_to_path, cstr_to_string, mode_from_raw};
 use crate::error::{
-    ERR_CONFIG, ERR_INVALID_INDEX, ERR_LOOKUP, ERR_MORPHEME_SPLIT, ERR_NULL_POINTER,
-    ERR_SENTENCE_SPLIT, ERR_TOKENIZE, OK, clear_last_error, error,
+    ERR_CONFIG, ERR_INVALID_INDEX, ERR_LOOKUP, ERR_MORPHEME_SPLIT, ERR_SENTENCE_SPLIT,
+    ERR_TOKENIZE, OK, clear_last_error, error,
 };
 use crate::result::{
     LookupResultArray, LookupResultLayout, MorphemeResultArray, MorphemeResultLayout, SentenceSpan,
     SentenceSpanArray, SentenceSpanLayout, boxed_slice_into_raw_parts, lookup_morpheme_to_result,
-    lookup_result_layout, morpheme_result_layout, morpheme_to_result, sentence_span_layout,
+    lookup_result_layout, morpheme_result_layout, morpheme_to_result, require_non_null,
+    sentence_span_layout, write_box_ptr, write_ptr,
 };
 
 #[repr(C)]
@@ -39,13 +39,11 @@ pub(crate) fn abi_version() -> i32 {
     SUDACHI_FFI_ABI_VERSION
 }
 
-fn require_non_null<T>(ptr: *mut T, message: &'static str) -> Result<NonNull<T>, i32> {
-    NonNull::new(ptr).ok_or_else(|| error(ERR_NULL_POINTER, message))
-}
-
-fn write_out<T>(out: *mut *mut T, value: Box<T>) {
-    unsafe {
-        *out = Box::into_raw(value);
+fn run_ffi(body: impl FnOnce() -> Result<(), i32>) -> i32 {
+    clear_last_error();
+    match body() {
+        Ok(()) => OK,
+        Err(code) => code,
     }
 }
 
@@ -204,25 +202,16 @@ pub(crate) fn create_tokenizer_impl(
     dict_path: *const c_char,
     out_handle: *mut *mut TokenizerHandle,
 ) -> i32 {
-    clear_last_error();
+    run_ffi(|| {
+        let dictionary = load_dictionary(config_path, resource_dir, dict_path)?;
+        let tokenizer = StatelessTokenizer::new(Arc::clone(&dictionary));
+        let handle = Box::new(TokenizerHandle {
+            dictionary,
+            tokenizer,
+        });
 
-    if out_handle.is_null() {
-        return error(ERR_NULL_POINTER, "out_handle pointer was null");
-    }
-
-    let dictionary = match load_dictionary(config_path, resource_dir, dict_path) {
-        Ok(dictionary) => dictionary,
-        Err(code) => return code,
-    };
-
-    let tokenizer = StatelessTokenizer::new(Arc::clone(&dictionary));
-    let handle = Box::new(TokenizerHandle {
-        dictionary,
-        tokenizer,
-    });
-
-    write_out(out_handle, handle);
-    OK
+        write_box_ptr(out_handle, handle, "out_handle pointer was null")
+    })
 }
 
 pub(crate) fn create_sentence_splitter_impl(
@@ -231,55 +220,37 @@ pub(crate) fn create_sentence_splitter_impl(
     dict_path: *const c_char,
     out_handle: *mut *mut SentenceSplitterHandle,
 ) -> i32 {
-    clear_last_error();
-
-    if out_handle.is_null() {
-        return error(ERR_NULL_POINTER, "out_handle pointer was null");
-    }
-
-    let dictionary = match load_dictionary(config_path, resource_dir, dict_path) {
-        Ok(dictionary) => dictionary,
-        Err(code) => return code,
-    };
-
-    let handle = Box::new(SentenceSplitterHandle { dictionary });
-    write_out(out_handle, handle);
-    OK
+    run_ffi(|| {
+        let dictionary = load_dictionary(config_path, resource_dir, dict_path)?;
+        let handle = Box::new(SentenceSplitterHandle { dictionary });
+        write_box_ptr(out_handle, handle, "out_handle pointer was null")
+    })
 }
 
 pub(crate) fn create_sentence_splitter_from_tokenizer_impl(
     tokenizer_handle: *const TokenizerHandle,
     out_handle: *mut *mut SentenceSplitterHandle,
 ) -> i32 {
-    clear_last_error();
+    run_ffi(|| {
+        let tokenizer = require_non_null(tokenizer_handle, "tokenizer_handle pointer was null")?;
+        let tokenizer = unsafe { tokenizer.as_ref() };
+        let handle = Box::new(SentenceSplitterHandle {
+            dictionary: Arc::clone(&tokenizer.dictionary),
+        });
 
-    if tokenizer_handle.is_null() {
-        return error(ERR_NULL_POINTER, "tokenizer_handle pointer was null");
-    }
-    if out_handle.is_null() {
-        return error(ERR_NULL_POINTER, "out_handle pointer was null");
-    }
-
-    let tokenizer = unsafe { &*tokenizer_handle };
-    let handle = Box::new(SentenceSplitterHandle {
-        dictionary: Arc::clone(&tokenizer.dictionary),
-    });
-
-    write_out(out_handle, handle);
-    OK
+        write_box_ptr(out_handle, handle, "out_handle pointer was null")
+    })
 }
 
 pub(crate) fn free_tokenizer_impl(handle: *mut TokenizerHandle) {
-    if handle.is_null() {
-        return;
-    }
-
-    unsafe {
-        drop(Box::from_raw(handle));
-    }
+    free_handle(handle);
 }
 
 pub(crate) fn free_sentence_splitter_impl(handle: *mut SentenceSplitterHandle) {
+    free_handle(handle);
+}
+
+fn free_handle<T>(handle: *mut T) {
     if handle.is_null() {
         return;
     }
@@ -295,36 +266,16 @@ pub(crate) fn tokenize_impl(
     mode: i32,
     out_result: *mut *mut MorphemeResultArray,
 ) -> i32 {
-    clear_last_error();
+    run_ffi(|| {
+        let tokenizer = require_non_null(handle, "tokenizer handle was null")?;
+        let tokenizer = unsafe { tokenizer.as_ref() };
+        let text = cstr_to_string(input_utf8)?;
+        let mode = mode_from_raw(mode)?;
+        let morpheme_list = tokenize_text(tokenizer, &text, mode)?;
+        let array = morpheme_list_to_array(&morpheme_list)?;
 
-    if handle.is_null() {
-        return error(ERR_NULL_POINTER, "tokenizer handle was null");
-    }
-    if out_result.is_null() {
-        return error(ERR_NULL_POINTER, "out_result pointer was null");
-    }
-
-    let text = match cstr_to_string(input_utf8) {
-        Ok(text) => text,
-        Err(code) => return code,
-    };
-    let mode = match mode_from_raw(mode) {
-        Ok(mode) => mode,
-        Err(code) => return code,
-    };
-
-    let tokenizer = unsafe { &*handle };
-    let morpheme_list = match tokenize_text(tokenizer, &text, mode) {
-        Ok(list) => list,
-        Err(code) => return code,
-    };
-    let array = match morpheme_list_to_array(&morpheme_list) {
-        Ok(array) => array,
-        Err(code) => return code,
-    };
-
-    write_out(out_result, array);
-    OK
+        write_box_ptr(out_result, array, "out_result pointer was null")
+    })
 }
 
 pub(crate) fn lookup_impl(
@@ -332,32 +283,15 @@ pub(crate) fn lookup_impl(
     input_utf8: *const c_char,
     out_result: *mut *mut LookupResultArray,
 ) -> i32 {
-    clear_last_error();
+    run_ffi(|| {
+        let tokenizer = require_non_null(handle, "tokenizer handle was null")?;
+        let tokenizer = unsafe { tokenizer.as_ref() };
+        let text = cstr_to_string(input_utf8)?;
+        let morpheme_list = lookup_text(tokenizer, &text)?;
+        let array = lookup_list_to_array(&morpheme_list)?;
 
-    if handle.is_null() {
-        return error(ERR_NULL_POINTER, "tokenizer handle was null");
-    }
-    if out_result.is_null() {
-        return error(ERR_NULL_POINTER, "out_result pointer was null");
-    }
-
-    let text = match cstr_to_string(input_utf8) {
-        Ok(text) => text,
-        Err(code) => return code,
-    };
-
-    let tokenizer = unsafe { &*handle };
-    let morpheme_list = match lookup_text(tokenizer, &text) {
-        Ok(list) => list,
-        Err(code) => return code,
-    };
-    let array = match lookup_list_to_array(&morpheme_list) {
-        Ok(array) => array,
-        Err(code) => return code,
-    };
-
-    write_out(out_result, array);
-    OK
+        write_box_ptr(out_result, array, "out_result pointer was null")
+    })
 }
 
 pub(crate) fn split_morpheme_impl(
@@ -368,44 +302,18 @@ pub(crate) fn split_morpheme_impl(
     split_mode: i32,
     out_result: *mut *mut MorphemeResultArray,
 ) -> i32 {
-    clear_last_error();
+    run_ffi(|| {
+        let tokenizer = require_non_null(handle, "tokenizer handle was null")?;
+        let tokenizer = unsafe { tokenizer.as_ref() };
+        let text = cstr_to_string(input_utf8)?;
+        let source_mode = mode_from_raw(source_mode)?;
+        let split_mode = mode_from_raw(split_mode)?;
+        let source_list = tokenize_text(tokenizer, &text, source_mode)?;
+        let split_list = split_single_morpheme(&source_list, split_mode, index)?;
+        let array = morpheme_list_to_array(&split_list)?;
 
-    if handle.is_null() {
-        return error(ERR_NULL_POINTER, "tokenizer handle was null");
-    }
-    if out_result.is_null() {
-        return error(ERR_NULL_POINTER, "out_result pointer was null");
-    }
-
-    let text = match cstr_to_string(input_utf8) {
-        Ok(text) => text,
-        Err(code) => return code,
-    };
-    let source_mode = match mode_from_raw(source_mode) {
-        Ok(mode) => mode,
-        Err(code) => return code,
-    };
-    let split_mode = match mode_from_raw(split_mode) {
-        Ok(mode) => mode,
-        Err(code) => return code,
-    };
-
-    let tokenizer = unsafe { &*handle };
-    let source_list = match tokenize_text(tokenizer, &text, source_mode) {
-        Ok(list) => list,
-        Err(code) => return code,
-    };
-    let split_list = match split_single_morpheme(&source_list, split_mode, index) {
-        Ok(list) => list,
-        Err(code) => return code,
-    };
-    let array = match morpheme_list_to_array(&split_list) {
-        Ok(array) => array,
-        Err(code) => return code,
-    };
-
-    write_out(out_result, array);
-    OK
+        write_box_ptr(out_result, array, "out_result pointer was null")
+    })
 }
 
 pub(crate) fn split_morphemes_impl(
@@ -415,44 +323,18 @@ pub(crate) fn split_morphemes_impl(
     split_mode: i32,
     out_result: *mut *mut MorphemeResultArray,
 ) -> i32 {
-    clear_last_error();
+    run_ffi(|| {
+        let tokenizer = require_non_null(handle, "tokenizer handle was null")?;
+        let tokenizer = unsafe { tokenizer.as_ref() };
+        let text = cstr_to_string(input_utf8)?;
+        let source_mode = mode_from_raw(source_mode)?;
+        let split_mode = mode_from_raw(split_mode)?;
+        let source_list = tokenize_text(tokenizer, &text, source_mode)?;
+        let split_list = split_all_morphemes(&source_list, split_mode)?;
+        let array = morpheme_list_to_array(&split_list)?;
 
-    if handle.is_null() {
-        return error(ERR_NULL_POINTER, "tokenizer handle was null");
-    }
-    if out_result.is_null() {
-        return error(ERR_NULL_POINTER, "out_result pointer was null");
-    }
-
-    let text = match cstr_to_string(input_utf8) {
-        Ok(text) => text,
-        Err(code) => return code,
-    };
-    let source_mode = match mode_from_raw(source_mode) {
-        Ok(mode) => mode,
-        Err(code) => return code,
-    };
-    let split_mode = match mode_from_raw(split_mode) {
-        Ok(mode) => mode,
-        Err(code) => return code,
-    };
-
-    let tokenizer = unsafe { &*handle };
-    let source_list = match tokenize_text(tokenizer, &text, source_mode) {
-        Ok(list) => list,
-        Err(code) => return code,
-    };
-    let split_list = match split_all_morphemes(&source_list, split_mode) {
-        Ok(list) => list,
-        Err(code) => return code,
-    };
-    let array = match morpheme_list_to_array(&split_list) {
-        Ok(array) => array,
-        Err(code) => return code,
-    };
-
-    write_out(out_result, array);
-    OK
+        write_box_ptr(out_result, array, "out_result pointer was null")
+    })
 }
 
 pub(crate) fn split_sentences_impl(
@@ -460,86 +342,63 @@ pub(crate) fn split_sentences_impl(
     input_utf8: *const c_char,
     out_result: *mut *mut SentenceSpanArray,
 ) -> i32 {
-    clear_last_error();
+    run_ffi(|| {
+        let handle = require_non_null(handle, "sentence splitter handle was null")?;
+        let handle = unsafe { handle.as_ref() };
+        let text = cstr_to_string(input_utf8)?;
+        let split_result = catch_unwind(AssertUnwindSafe(|| {
+            let splitter = SentenceSplitter::new().with_checker(handle.dictionary.lexicon());
+            let spans = splitter
+                .split(&text)
+                .map(|(range, _)| SentenceSpan {
+                    begin: range.start,
+                    end: range.end,
+                })
+                .collect::<Vec<_>>();
+            let (items, len) = boxed_slice_into_raw_parts(spans.into_boxed_slice());
+            Box::new(SentenceSpanArray { items, len })
+        }));
 
-    if handle.is_null() {
-        return error(ERR_NULL_POINTER, "sentence splitter handle was null");
-    }
-    if out_result.is_null() {
-        return error(ERR_NULL_POINTER, "out_result pointer was null");
-    }
+        let array = match split_result {
+            Ok(array) => array,
+            Err(_) => {
+                return Err(error(
+                    ERR_SENTENCE_SPLIT,
+                    "sentence split failed due to an internal panic",
+                ));
+            }
+        };
 
-    let text = match cstr_to_string(input_utf8) {
-        Ok(text) => text,
-        Err(code) => return code,
-    };
-
-    let handle = unsafe { &*handle };
-    let split_result = catch_unwind(AssertUnwindSafe(|| {
-        let splitter = SentenceSplitter::new().with_checker(handle.dictionary.lexicon());
-        let spans = splitter
-            .split(&text)
-            .map(|(range, _)| SentenceSpan {
-                begin: range.start,
-                end: range.end,
-            })
-            .collect::<Vec<_>>();
-        let (items, len) = boxed_slice_into_raw_parts(spans.into_boxed_slice());
-        Box::new(SentenceSpanArray { items, len })
-    }));
-
-    let array = match split_result {
-        Ok(array) => array,
-        Err(_) => {
-            return error(
-                ERR_SENTENCE_SPLIT,
-                "sentence split failed due to an internal panic",
-            );
-        }
-    };
-
-    write_out(out_result, array);
-    OK
+        write_box_ptr(out_result, array, "out_result pointer was null")
+    })
 }
 
 pub(crate) fn get_morpheme_result_layout_impl(out_layout: *mut MorphemeResultLayout) -> i32 {
-    clear_last_error();
-
-    if require_non_null(out_layout, "out_layout pointer was null").is_err() {
-        return ERR_NULL_POINTER;
-    }
-
-    unsafe {
-        *out_layout = morpheme_result_layout();
-    }
-
-    OK
+    run_ffi(|| {
+        write_ptr(
+            out_layout,
+            morpheme_result_layout(),
+            "out_layout pointer was null",
+        )
+    })
 }
 
 pub(crate) fn get_lookup_result_layout_impl(out_layout: *mut LookupResultLayout) -> i32 {
-    clear_last_error();
-
-    if require_non_null(out_layout, "out_layout pointer was null").is_err() {
-        return ERR_NULL_POINTER;
-    }
-
-    unsafe {
-        *out_layout = lookup_result_layout();
-    }
-
-    OK
+    run_ffi(|| {
+        write_ptr(
+            out_layout,
+            lookup_result_layout(),
+            "out_layout pointer was null",
+        )
+    })
 }
 
 pub(crate) fn get_sentence_span_layout_impl(out_layout: *mut SentenceSpanLayout) -> i32 {
-    clear_last_error();
-
-    if require_non_null(out_layout, "out_layout pointer was null").is_err() {
-        return ERR_NULL_POINTER;
-    }
-
-    unsafe {
-        *out_layout = sentence_span_layout();
-    }
-
-    OK
+    run_ffi(|| {
+        write_ptr(
+            out_layout,
+            sentence_span_layout(),
+            "out_layout pointer was null",
+        )
+    })
 }

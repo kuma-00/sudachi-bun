@@ -9,7 +9,7 @@ import {
   type NativeSentenceSplitterLibrary,
   type SentenceSpanResultLayout,
 } from "./native.ts";
-import { SudachiError, type SentenceSpan, type SentenceSplitterLoadOptions } from "./types.ts";
+import { SudachiError, type SentenceSpan, type SentenceSplitterOptions } from "./types.ts";
 
 function invalidSentenceSpan(message: string): never {
   throw new SudachiError(message, {
@@ -98,7 +98,7 @@ interface NativeSentenceSplitterSession {
   library: NativeSentenceSplitterLibrary;
 }
 
-function openNativeSentenceSplitter(options: SentenceSplitterLoadOptions): NativeSentenceSplitterSession {
+function openNativeSentenceSplitter(options: SentenceSplitterOptions): NativeSentenceSplitterSession {
   const library = loadSentenceSplitterLibrary(options);
   return openNativeHandleSession(
     library,
@@ -117,15 +117,11 @@ function openNativeSentenceSplitter(options: SentenceSplitterLoadOptions): Nativ
 }
 
 export class SentenceSplitter {
-  static create(options: SentenceSplitterLoadOptions): SentenceSplitter {
-    return new SentenceSplitter(openNativeSentenceSplitter(options));
-  }
-
   #library: NativeSentenceSplitterLibrary | null;
   #layout: SentenceSpanResultLayout | null;
   #handle: Pointer | null;
 
-  private constructor(session: NativeSentenceSplitterSession) {
+  constructor(session: NativeSentenceSplitterSession) {
     this.#library = session.library;
     this.#layout = session.layout;
     this.#handle = session.handle;
@@ -183,6 +179,6 @@ export class SentenceSplitter {
   }
 }
 
-export function createSentenceSplitter(options: SentenceSplitterLoadOptions): SentenceSplitter {
-  return SentenceSplitter.create(options);
+export function createSentenceSplitter(options: SentenceSplitterOptions): SentenceSplitter {
+  return new SentenceSplitter(openNativeSentenceSplitter(options));
 }

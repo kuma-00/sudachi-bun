@@ -7,14 +7,13 @@ export interface NativeLibraryLoadOptions {
   debug?: boolean;
 }
 
-export interface TokenizerLoadOptions extends NativeLibraryLoadOptions {
+export interface TokenizerOptions extends NativeLibraryLoadOptions {
   dictPath: string;
   configPath?: string;
   resourceDir?: string;
 }
 
-export type TokenizerOptions = TokenizerLoadOptions;
-export type SentenceSplitterLoadOptions = TokenizerLoadOptions;
+export type SentenceSplitterOptions = TokenizerOptions;
 
 export interface SentenceSpan {
   text: string;

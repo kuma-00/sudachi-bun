@@ -219,6 +219,18 @@ fn lookup_requires_non_null_pointers() {
 }
 
 #[test]
+fn tokenize_requires_output_pointer() {
+    with_test_tokenizer(|handle| {
+        let text = CString::new("東京都").unwrap();
+        let status = sudachi_tokenize(handle, text.as_ptr(), 0, ptr::null_mut());
+
+        assert_eq!(status, ERR_NULL_POINTER);
+        assert_eq!(status_code_name(status), "NULL_POINTER");
+        assert_eq!(last_error_message(), "out_result pointer was null");
+    });
+}
+
+#[test]
 fn get_lookup_result_layout_requires_output_pointer() {
     let status = sudachi_get_lookup_result_layout(ptr::null_mut());
 

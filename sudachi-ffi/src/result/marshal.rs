@@ -1,12 +1,12 @@
 use std::ffi::CString;
 use std::mem;
 use std::os::raw::c_char;
-use std::ptr;
+use std::ptr::{self, NonNull};
 use std::sync::Arc;
 
 use sudachi::dic::dictionary::JapaneseDictionary;
 
-use crate::error::{ERR_INTERNAL, error};
+use crate::error::{ERR_INTERNAL, ERR_NULL_POINTER, error};
 
 use super::{
     LookupResultItem, LookupResultLayout, MorphemeResult, MorphemeResultArray,
@@ -22,6 +22,30 @@ pub(crate) fn boxed_slice_into_raw_parts<T>(mut boxed: Box<[T]>) -> (*mut T, usi
     let items = boxed.as_mut_ptr();
     mem::forget(boxed);
     (items, len)
+}
+
+pub(crate) fn require_non_null<T>(ptr: *const T, message: &'static str) -> Result<NonNull<T>, i32> {
+    NonNull::new(ptr as *mut T).ok_or_else(|| error(ERR_NULL_POINTER, message))
+}
+
+pub(crate) fn write_ptr<T>(ptr: *mut T, value: T, message: &'static str) -> Result<(), i32> {
+    let ptr = require_non_null(ptr, message)?;
+    unsafe {
+        *ptr.as_ptr() = value;
+    }
+    Ok(())
+}
+
+pub(crate) fn write_box_ptr<T>(
+    ptr: *mut *mut T,
+    value: Box<T>,
+    message: &'static str,
+) -> Result<(), i32> {
+    let ptr = require_non_null(ptr, message)?;
+    unsafe {
+        *ptr.as_ptr() = Box::into_raw(value);
+    }
+    Ok(())
 }
 
 fn string_to_c(ptr: String) -> Result<*mut c_char, i32> {
@@ -51,6 +75,21 @@ fn free_boxed_slice<T>(ptr: *mut T, len: usize) {
 
     unsafe {
         let slice = ptr::slice_from_raw_parts_mut(ptr, len);
+        drop(Box::from_raw(slice));
+    }
+}
+
+fn free_result_items<T>(items: *mut T, len: usize, mut free_item: impl FnMut(&mut T)) {
+    if items.is_null() || len == 0 {
+        return;
+    }
+
+    unsafe {
+        let slice = ptr::slice_from_raw_parts_mut(items, len);
+        for item in (&mut *slice).iter_mut() {
+            free_item(item);
+        }
+
         drop(Box::from_raw(slice));
     }
 }
@@ -166,14 +205,7 @@ pub(crate) fn free_result_array(result: *mut MorphemeResultArray) {
 
     unsafe {
         let boxed = Box::from_raw(result);
-        if !boxed.items.is_null() && boxed.len != 0 {
-            let slice = std::slice::from_raw_parts_mut(boxed.items, boxed.len);
-            for item in slice.iter_mut() {
-                item.free_owned_fields();
-            }
-
-            free_boxed_slice(boxed.items, boxed.len);
-        }
+        free_result_items(boxed.items, boxed.len, |item| item.free_owned_fields());
     }
 }
 
@@ -188,14 +220,7 @@ pub(crate) fn free_lookup_result_array(result: *mut super::LookupResultArray) {
 
     unsafe {
         let boxed = Box::from_raw(result);
-        if !boxed.items.is_null() && boxed.len != 0 {
-            let slice = std::slice::from_raw_parts_mut(boxed.items, boxed.len);
-            for item in slice.iter_mut() {
-                item.free_owned_fields();
-            }
-
-            free_boxed_slice(boxed.items, boxed.len);
-        }
+        free_result_items(boxed.items, boxed.len, |item| item.free_owned_fields());
     }
 }
 
@@ -216,4 +241,30 @@ pub(crate) fn free_sentence_span_array(result: *mut SentenceSpanArray) {
 
 pub(crate) fn sentence_span_layout() -> SentenceSpanLayout {
     SentenceSpanLayout::new()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    struct DropCounter(Arc<AtomicUsize>);
+
+    impl Drop for DropCounter {
+        fn drop(&mut self) {
+            self.0.fetch_add(1, Ordering::SeqCst);
+        }
+    }
+
+    #[test]
+    fn write_box_ptr_drops_value_when_output_pointer_is_null() {
+        let drops = Arc::new(AtomicUsize::new(0));
+        let value = Box::new(DropCounter(Arc::clone(&drops)));
+
+        let status = write_box_ptr(std::ptr::null_mut(), value, "out pointer was null");
+
+        assert_eq!(status, Err(crate::error::ERR_NULL_POINTER));
+        assert_eq!(drops.load(Ordering::SeqCst), 1);
+    }
 }

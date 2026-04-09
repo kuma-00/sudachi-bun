@@ -2,7 +2,7 @@ import { expect, spyOn, test } from "bun:test";
 
 import * as ffi from "./ffi.ts";
 import * as native from "./native.ts";
-import { Tokenizer } from "./core.ts";
+import { Tokenizer, createTokenizer } from "./core.ts";
 import type { LookupEntry, Morpheme, TokenizeMode } from "./types.ts";
 import type { LookupResultLayout, MorphemeResultLayout, NativeLookupLibrary, NativeSudachiLibrary } from "./native.ts";
 
@@ -179,7 +179,7 @@ function withTokenizer(
         return [];
     }
   });
-  const tokenizer = Tokenizer.create({ dictPath: "/tmp/dict" });
+  const tokenizer = createTokenizer({ dictPath: "/tmp/dict" });
 
   try {
     run({
@@ -363,7 +363,7 @@ test("split rejects morphemes that were not created by the tokenizer", () => {
   });
 });
 
-test("Tokenizer.create closes the native library when initialization fails", () => {
+test("createTokenizer closes the native library when initialization fails", () => {
   const library = createMockLibrary();
   const loadSpy = spyOn(native, "loadNativeLibrary").mockReturnValue(library);
   const layoutSpy = spyOn(native, "readMorphemeResultLayout").mockReturnValue(MORPHEME_LAYOUT);
@@ -371,7 +371,7 @@ test("Tokenizer.create closes the native library when initialization fails", () 
   const closeSpy = spyOn(library, "close");
 
   try {
-    expect(() => Tokenizer.create({ dictPath: "/tmp/dict" })).toThrow("native error");
+    expect(() => createTokenizer({ dictPath: "/tmp/dict" })).toThrow("native error");
     expect(closeSpy).toHaveBeenCalledTimes(1);
     expect(createSpy).toHaveBeenCalledTimes(1);
   } finally {

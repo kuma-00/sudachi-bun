@@ -4,9 +4,10 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { Tokenizer } from "./core.ts";
+import * as core from "./core.ts";
 import { runCli } from "./cli.ts";
-import { SentenceSplitter } from "./sentence-splitter.ts";
+import * as sentenceSplitter from "./sentence-splitter.ts";
+import type { Tokenizer } from "./core.ts";
 
 function createCapturedIo() {
   const logs: string[] = [];
@@ -112,7 +113,7 @@ test("runCli requires an explicit subcommand", async () => {
 test("runCli tokenizes text when tokenize subcommand is specified", async () => {
   const { io, logs, errors } = createCapturedIo();
   const fakeTokenizer = createFakeTokenizer();
-  const loadSpy = spyOn(Tokenizer, "load").mockImplementation(() => fakeTokenizer.tokenizer as never);
+  const loadSpy = spyOn(core, "createTokenizer").mockImplementation(() => fakeTokenizer.tokenizer as never);
 
   try {
     const exitCode = await runCliMaybeAsync(["tokenize", "--dict-path", "/tmp/dict", "--text", "ignored"], {}, io);
@@ -130,7 +131,7 @@ test("runCli tokenizes text when tokenize subcommand is specified", async () => 
 test("runCli supports wakati output", async () => {
   const { io, logs, errors } = createCapturedIo();
   const fakeTokenizer = createFakeTokenizer();
-  const loadSpy = spyOn(Tokenizer, "load").mockImplementation(() => fakeTokenizer.tokenizer as never);
+  const loadSpy = spyOn(core, "createTokenizer").mockImplementation(() => fakeTokenizer.tokenizer as never);
 
   try {
     const exitCode = await runCliMaybeAsync(
@@ -198,8 +199,8 @@ test("runCli handles sentence splitting and byte offsets", async () => {
     split: spyOn(splitterTarget, "split"),
     close() {},
   };
-  const createSpy = spyOn(SentenceSplitter, "create").mockReturnValue(fakeSplitter as never);
-  const loadSpy = spyOn(Tokenizer, "load").mockImplementation(
+  const createSpy = spyOn(sentenceSplitter, "createSentenceSplitter").mockReturnValue(fakeSplitter as never);
+  const loadSpy = spyOn(core, "createTokenizer").mockImplementation(
     () =>
       ({
         tokenize(text: string, mode: string) {
@@ -250,7 +251,7 @@ test("runCli handles sentence splitting and byte offsets", async () => {
 test("runCli tokenizes positional file input", async () => {
   const { io, logs, errors } = createCapturedIo();
   const fakeTokenizer = createFakeTokenizer();
-  const loadSpy = spyOn(Tokenizer, "load").mockImplementation(() => fakeTokenizer.tokenizer as never);
+  const loadSpy = spyOn(core, "createTokenizer").mockImplementation(() => fakeTokenizer.tokenizer as never);
   const inputPath = createTempInputFile("input.txt", "file input");
 
   try {
@@ -268,7 +269,7 @@ test("runCli tokenizes positional file input", async () => {
 test("runCli emits lookup debug output via stderr", async () => {
   const { io, logs, errors } = createCapturedIo();
   const fakeTokenizer = createFakeTokenizer();
-  const loadSpy = spyOn(Tokenizer, "load").mockImplementation(() => fakeTokenizer.tokenizer as never);
+  const loadSpy = spyOn(core, "createTokenizer").mockImplementation(() => fakeTokenizer.tokenizer as never);
 
   try {
     const exitCode = await runCliMaybeAsync(
@@ -290,7 +291,7 @@ test("runCli emits lookup debug output via stderr", async () => {
 
 test("runCli keeps debug tokenize working when lookup is unavailable", async () => {
   const { io, logs, errors } = createCapturedIo();
-  const loadSpy = spyOn(Tokenizer, "load").mockImplementation(
+  const loadSpy = spyOn(core, "createTokenizer").mockImplementation(
     () =>
       ({
         tokenize() {

@@ -1,4 +1,4 @@
-import type { SudachiError, TokenizeMode, TokenizerLoadOptions } from "../types.ts";
+import type { SudachiError, TokenizeMode, TokenizerOptions } from "../types.ts";
 
 export const CLI_SUBCOMMANDS = ["tokenize", "build", "ubuild", "dump"] as const;
 
@@ -17,7 +17,7 @@ export interface CliParseErrorResult {
   helpTarget: CliHelpTarget;
 }
 
-export interface CliTokenizeCommand extends TokenizerLoadOptions {
+export interface CliTokenizeCommand extends TokenizerOptions {
   kind: "tokenize";
   mode: TokenizeMode;
   text?: string;
