@@ -3,7 +3,7 @@
 - [x] CLI: `build` / `ubuild` / `dump` サブコマンド対応
 - [x] CLI: `--wakati` / `--all` / `--output` 対応
 - [x] CLI: `--split-sentences` / `--debug` / `--resource_dir` 対応
-- [ ] CLI: stdin / ファイル入力処理対応（`--text` 以外）
+- [x] CLI: stdin / ファイル入力処理対応（`--text` 以外）
 - [ ] API: 文分割機能（`SentenceSplitter` 相当）公開
 - [ ] API: 形態素再分割（`Morpheme.split` / `MorphemeList.split_into` 相当）対応
 - [ ] API: 辞書直接検索（`lookup`）対応
