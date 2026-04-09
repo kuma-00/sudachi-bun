@@ -1,4 +1,4 @@
-import { statSync, writeFileSync } from "node:fs";
+import { fstatSync, readFileSync, statSync, writeFileSync } from "node:fs";
 
 import { Tokenizer } from "./core.ts";
 import {
@@ -59,8 +59,8 @@ function unimplementedCommandError(name: CliSubcommand): SudachiError {
   });
 }
 
-function unknownSubcommandError(name: string): SudachiError {
-  return new SudachiError(`Unknown subcommand: ${name}`, {
+function invalidInputSourceError(message: string): SudachiError {
+  return new SudachiError(message, {
     code: "INVALID_ARGUMENT",
   });
 }
@@ -187,6 +187,13 @@ function discoverCliCommand(argv: string[]): {
   error?: SudachiError;
 } {
   let command: CliCommandName = "tokenize";
+  const firstToken = argv[0];
+
+  if (firstToken && !firstToken.startsWith("--")) {
+    if (isKnownSubcommand(firstToken)) {
+      command = firstToken;
+    }
+  }
 
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
@@ -218,39 +225,37 @@ function discoverCliCommand(argv: string[]): {
           helpTarget: "top-level",
         };
       }
-      if (separatorIndex === -1 && BOOLEAN_FLAGS.has(flagName)) {
-        const nextToken = argv[index + 1];
-        if (nextToken && !nextToken.startsWith("--")) {
-          return {
-            command: "tokenize",
-            error: invalidBooleanFlagSyntaxError(`${arg} ${nextToken}`),
-            helpTarget: "top-level",
-          };
-        }
-      }
 
       index = skipKnownFlagValue(argv, index, KNOWN_VALUE_FLAGS);
       continue;
     }
-
-    if (command !== "tokenize") {
-      continue;
-    }
-
-    if (!isKnownSubcommand(arg)) {
-      return {
-        command: "tokenize",
-        error: unknownSubcommandError(arg),
-        helpTarget: "top-level",
-      };
-    }
-
-    command = arg;
   }
 
   return {
     command,
   };
+}
+
+function collectPositionalInputPaths(argv: string[]): string[] {
+  const inputPaths: string[] = [];
+
+  for (let index = 0; index < argv.length; index += 1) {
+    const arg = argv[index];
+    if (!arg) continue;
+
+    if (isHelpToken(arg)) {
+      continue;
+    }
+
+    if (arg.startsWith("--")) {
+      index = skipKnownFlagValue(argv, index, KNOWN_VALUE_FLAGS);
+      continue;
+    }
+
+    inputPaths.push(arg);
+  }
+
+  return inputPaths;
 }
 
 export function parseArgValue(
@@ -291,7 +296,7 @@ function printUsage(io: Pick<CliIO, "log">, command: CliHelpTarget = "top-level"
     command === "tokenize"
       ? [
           "Usage:",
-          "  bun run index.ts --dict-path=/path/to/dictionary --library-path=/path/to/libsudachi_ffi.dylib --text='...' [--wakati|--all] [--split-sentences] [--debug] [--resource-dir <path>|--resource_dir <path>] [--output <path>|-]",
+          "  bun run index.ts --dict-path=/path/to/dictionary --library-path=/path/to/libsudachi_ffi.dylib [--text='...' | input.txt [more.txt ...] | pipe] [--wakati|--all] [--split-sentences] [--debug] [--resource-dir <path>|--resource_dir <path>] [--output <path>|-]",
           "",
           "Options:",
           "  --wakati          Output space-joined surfaces.",
@@ -326,14 +331,14 @@ function printUsage(io: Pick<CliIO, "log">, command: CliHelpTarget = "top-level"
           : command === "dump"
             ? [
                 "Usage:",
-            "  bun run index.ts dump [--help]",
+                "  bun run index.ts dump [--help]",
               "",
               "Status:",
               "  Not implemented yet. TODO delegate to dictionary layer.",
           ]
             : [
-            "Usage:",
-            "  bun run index.ts [build|ubuild|dump] --dict-path=/path/to/dictionary --library-path=/path/to/libsudachi_ffi.dylib --text='...' [--wakati|--all] [--split-sentences] [--debug] [--resource-dir <path>|--resource_dir <path>] [--output <path>|-]",
+                "Usage:",
+                "  bun run index.ts [build|ubuild|dump] --dict-path=/path/to/dictionary --library-path=/path/to/libsudachi_ffi.dylib [--text='...' | input.txt [more.txt ...] | pipe] [--wakati|--all] [--split-sentences] [--debug] [--resource-dir <path>|--resource_dir <path>] [--output <path>|-]",
             "",
             "Commands:",
             "  build   Build a dictionary.",
@@ -353,6 +358,90 @@ function printUsage(io: Pick<CliIO, "log">, command: CliHelpTarget = "top-level"
               ];
 
   io.log(lines.join("\n"));
+}
+
+function readStdinText(): string | undefined {
+  if (process.stdin.isTTY === true) {
+    return undefined;
+  }
+
+  try {
+    return readFileSync(0, "utf8");
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw invalidInputSourceError(`Failed to read stdin: ${message}`);
+  }
+}
+
+function hasStdinInput(): boolean {
+  if (process.stdin.isTTY === true) {
+    return false;
+  }
+  if (process.stdin.isTTY === false) {
+    return true;
+  }
+
+  try {
+    return !fstatSync(0).isCharacterDevice();
+  } catch {
+    return false;
+  }
+}
+
+function readInputFiles(inputPaths: string[]): string {
+  const contents: string[] = [];
+
+  for (const inputPath of inputPaths) {
+    try {
+      contents.push(readFileSync(inputPath, "utf8"));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      throw invalidInputSourceError(`Failed to read input file ${inputPath}: ${message}`);
+    }
+  }
+
+  // Multiple positional files are concatenated in argv order with a newline separator.
+  return contents.join("\n");
+}
+
+function resolveTokenizeInputText(argv: string[], command: TokenizeExecutionCommand): string {
+  const inputPaths = collectPositionalInputPaths(argv);
+  const stdinInputDetected = hasStdinInput();
+  const hasExplicitText = hasFlag(argv, "text");
+
+  if (hasExplicitText) {
+    if (inputPaths.length > 0) {
+      throw invalidInputSourceError("Cannot combine --text with positional file input.");
+    }
+    if (stdinInputDetected) {
+      throw invalidInputSourceError("Cannot combine --text with stdin input.");
+    }
+
+    return command.text;
+  }
+
+  if (inputPaths.length > 0) {
+    if (stdinInputDetected) {
+      throw invalidInputSourceError("Cannot combine positional file input with stdin input.");
+    }
+
+    const resolvedText = readInputFiles(inputPaths);
+    if (resolvedText.length === 0) {
+      throw invalidInputSourceError("No input was resolved from --text, positional file paths, or stdin.");
+    }
+
+    return resolvedText;
+  }
+
+  if (stdinInputDetected) {
+    const stdinText = readStdinText();
+    if (stdinText === undefined || stdinText.length === 0) {
+      throw invalidInputSourceError("No input was resolved from --text, positional file paths, or stdin.");
+    }
+    return stdinText ?? "";
+  }
+
+  throw invalidInputSourceError("No input was resolved from --text, positional file paths, or stdin.");
 }
 
 export function parseCliArgs(
@@ -522,6 +611,7 @@ export function runCli(
   try {
     if (discovery.command === "tokenize") {
       const command = parseTokenizeExecutionCommand(argv, env);
+      command.text = resolveTokenizeInputText(argv, command);
       const output = runTokenizeCommand(command, command.format, io);
 
       if (command.outputPath && command.outputPath !== "-") {

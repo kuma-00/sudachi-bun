@@ -191,7 +191,7 @@ function createNativeSudachiLibrary(symbols: NativeSymbols, close: () => void): 
 
 export function loadNativeLibrary(
   options: TokenizerLoadOptions,
-  openLibrary: NativeLibraryLoader = dlopen as NativeLibraryLoader,
+  openLibrary: NativeLibraryLoader = dlopen as unknown as NativeLibraryLoader,
 ): NativeSudachiLibrary {
   const libraryPath = loadNativeLibraryPath(options.libraryPath);
   const loaded = openLibrary(libraryPath, NATIVE_SYMBOL_DEFS) as { symbols: NativeSymbols; close(): void };

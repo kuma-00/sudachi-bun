@@ -1,7 +1,8 @@
 import { expect, spyOn, test } from "bun:test";
+import * as fs from "node:fs";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 
 import { Tokenizer } from "./core.ts";
 import { parseArgValue, parseCliArgs, runCli } from "./cli.ts";
@@ -66,6 +67,49 @@ function createFakeTokenizer() {
       close() {},
     },
   };
+}
+
+async function runCliMaybeAsync(
+  argv: string[],
+  env: NodeJS.ProcessEnv = {},
+  io: { log(message: string): void; error(message: string): void } = console,
+): Promise<number> {
+  return await runCli(argv, env, io);
+}
+
+function createTempInputFile(name: string, contents: string): string {
+  const dir = mkdtempSync(join(tmpdir(), "sudachi-bun-cli-input-"));
+  const filePath = join(dir, name);
+  fs.writeFileSync(filePath, contents, "utf8");
+  return filePath;
+}
+
+async function withMockedStdin<T>(stdinText: string, callback: () => Promise<T>): Promise<T> {
+  const bunRuntime = Bun as typeof Bun & { stdin: typeof Bun.stdin };
+  const originalBunStdin = bunRuntime.stdin;
+  const originalIsTTY = Object.getOwnPropertyDescriptor(process.stdin, "isTTY");
+  const originalReadFileSync = fs.readFileSync;
+  const readFileSyncSpy = spyOn(fs, "readFileSync").mockImplementation(((path: fs.PathOrFileDescriptor, options?: fs.WriteFileOptions | BufferEncoding | null) => {
+    if (path === 0) {
+      return stdinText;
+    }
+    return originalReadFileSync(path, options as BufferEncoding);
+  }) as typeof fs.readFileSync);
+
+  try {
+    bunRuntime.stdin = { text: async () => stdinText } as typeof Bun.stdin;
+    Object.defineProperty(process.stdin, "isTTY", { configurable: true, value: false });
+    return await callback();
+  } finally {
+    bunRuntime.stdin = originalBunStdin;
+    readFileSyncSpy.mockRestore();
+
+    if (originalIsTTY) {
+      Object.defineProperty(process.stdin, "isTTY", originalIsTTY);
+    } else {
+      delete (process.stdin as { isTTY?: boolean }).isTTY;
+    }
+  }
 }
 
 test("parseArgValue preserves --output - as the stdout marker", () => {
@@ -161,13 +205,13 @@ test("parseCliArgs sets splitSentences when --split-sentences is provided", () =
   });
 });
 
-test("runCli forwards --split-sentences into sentence-aware tokenization", () => {
+test("runCli forwards --split-sentences into sentence-aware tokenization", async () => {
   const { io, logs, errors } = createCapturedIo();
   const fakeTokenizer = createFakeTokenizer();
   const loadSpy = spyOn(Tokenizer, "load").mockImplementation(() => fakeTokenizer.tokenizer as never);
 
   try {
-    const exitCode = runCli(["--dict-path", "/tmp/dict", "--split-sentences", "--text", "すもも。もも？"], {}, io);
+    const exitCode = await runCliMaybeAsync(["--dict-path", "/tmp/dict", "--split-sentences", "--text", "すもも。もも？"], {}, io);
 
     expect(exitCode).toBe(0);
     expect(errors).toEqual([]);
@@ -181,13 +225,13 @@ test("runCli forwards --split-sentences into sentence-aware tokenization", () =>
   }
 });
 
-test("runCli keeps whitespace intact when --split-sentences is enabled", () => {
+test("runCli keeps whitespace intact when --split-sentences is enabled", async () => {
   const { io, logs, errors } = createCapturedIo();
   const fakeTokenizer = createFakeTokenizer();
   const loadSpy = spyOn(Tokenizer, "load").mockImplementation(() => fakeTokenizer.tokenizer as never);
 
   try {
-    const exitCode = runCli(["--dict-path", "/tmp/dict", "--split-sentences", "--text", "A B。 C D？"], {}, io);
+    const exitCode = await runCliMaybeAsync(["--dict-path", "/tmp/dict", "--split-sentences", "--text", "A B。 C D？"], {}, io);
 
     expect(exitCode).toBe(0);
     expect(errors).toEqual([]);
@@ -201,7 +245,7 @@ test("runCli keeps whitespace intact when --split-sentences is enabled", () => {
   }
 });
 
-test("runCli offsets begin/end positions across sentence units when --split-sentences is enabled", () => {
+test("runCli offsets begin/end positions across sentence units when --split-sentences is enabled", async () => {
   const { io, logs, errors } = createCapturedIo();
   const tokenizeCalls: Array<{ text: string; mode: string }> = [];
   const loadSpy = spyOn(Tokenizer, "load").mockImplementation(
@@ -216,14 +260,14 @@ test("runCli offsets begin/end positions across sentence units when --split-sent
               begin: 0,
               end: Buffer.byteLength(text, "utf8"),
             },
-          ] as ReturnType<Tokenizer["tokenize"]>;
+          ] as unknown as ReturnType<Tokenizer["tokenize"]>;
         },
         close() {},
       }) as never,
   );
 
   try {
-    const exitCode = runCli(["--dict-path", "/tmp/dict", "--split-sentences", "--text", "A。B？"], {}, io);
+    const exitCode = await runCliMaybeAsync(["--dict-path", "/tmp/dict", "--split-sentences", "--text", "A。B？"], {}, io);
 
     expect(exitCode).toBe(0);
     expect(errors).toEqual([]);
@@ -242,7 +286,7 @@ test("runCli offsets begin/end positions across sentence units when --split-sent
   }
 });
 
-test("runCli offsets begin/end positions by UTF-8 bytes across sentence units with non-BMP characters", () => {
+test("runCli offsets begin/end positions by UTF-8 bytes across sentence units with non-BMP characters", async () => {
   const { io, logs, errors } = createCapturedIo();
   const tokenizeCalls: Array<{ text: string; mode: string }> = [];
   const loadSpy = spyOn(Tokenizer, "load").mockImplementation(
@@ -257,14 +301,14 @@ test("runCli offsets begin/end positions by UTF-8 bytes across sentence units wi
               begin: 0,
               end: Buffer.byteLength(text, "utf8"),
             },
-          ] as ReturnType<Tokenizer["tokenize"]>;
+          ] as unknown as ReturnType<Tokenizer["tokenize"]>;
         },
         close() {},
       }) as never,
   );
 
   try {
-    const exitCode = runCli(["--dict-path", "/tmp/dict", "--split-sentences", "--text", "😀。B？"], {}, io);
+    const exitCode = await runCliMaybeAsync(["--dict-path", "/tmp/dict", "--split-sentences", "--text", "😀。B？"], {}, io);
 
     expect(exitCode).toBe(0);
     expect(errors).toEqual([]);
@@ -283,13 +327,13 @@ test("runCli offsets begin/end positions by UTF-8 bytes across sentence units wi
   }
 });
 
-test("runCli emits debug information on stderr without changing stdout output", () => {
+test("runCli emits debug information on stderr without changing stdout output", async () => {
   const { io, logs, errors } = createCapturedIo();
   const fakeTokenizer = createFakeTokenizer();
   const loadSpy = spyOn(Tokenizer, "load").mockImplementation(() => fakeTokenizer.tokenizer as never);
 
   try {
-    const exitCode = runCli(["--dict-path", "/tmp/dict", "--wakati", "--debug", "--text", "ignored"], {}, io);
+    const exitCode = await runCliMaybeAsync(["--dict-path", "/tmp/dict", "--wakati", "--debug", "--text", "ignored"], {}, io);
 
     expect(exitCode).toBe(0);
     expect(logs[0]).toBe("すもも もも");
@@ -300,7 +344,7 @@ test("runCli emits debug information on stderr without changing stdout output", 
   }
 });
 
-test("runCli accepts --resource-dir and --resource_dir at the CLI level", () => {
+test("runCli accepts --resource-dir and --resource_dir at the CLI level", async () => {
   const resourceDir = mkdtempSync(join(tmpdir(), "sudachi-bun-resource-"));
 
   for (const flag of ["--resource-dir", "--resource_dir"] as const) {
@@ -309,7 +353,7 @@ test("runCli accepts --resource-dir and --resource_dir at the CLI level", () => 
     const loadSpy = spyOn(Tokenizer, "load").mockImplementation(() => fakeTokenizer.tokenizer as never);
 
     try {
-      const exitCode = runCli(["--dict-path", "/tmp/dict", flag, resourceDir, "--text", "ignored"], {}, io);
+      const exitCode = await runCliMaybeAsync(["--dict-path", "/tmp/dict", flag, resourceDir, "--text", "ignored"], {}, io);
 
       expect(exitCode).toBe(0);
       expect(errors).toEqual([]);
@@ -322,13 +366,13 @@ test("runCli accepts --resource-dir and --resource_dir at the CLI level", () => 
   }
 });
 
-test("runCli renders wakati output when --wakati is requested", () => {
+test("runCli renders wakati output when --wakati is requested", async () => {
   const { io, logs, errors } = createCapturedIo();
   const fakeTokenizer = createFakeTokenizer();
   const loadSpy = spyOn(Tokenizer, "load").mockImplementation(() => fakeTokenizer.tokenizer as never);
 
   try {
-    const exitCode = runCli(["--dict-path", "/tmp/dict", "--wakati", "--text", "ignored"], {}, io);
+    const exitCode = await runCliMaybeAsync(["--dict-path", "/tmp/dict", "--wakati", "--text", "ignored"], {}, io);
 
     expect(exitCode).toBe(0);
     expect(errors).toEqual([]);
@@ -340,13 +384,41 @@ test("runCli renders wakati output when --wakati is requested", () => {
   }
 });
 
-test("runCli renders all-field output when --all is requested", () => {
+for (const [flag, expectedFormat] of [
+  ["--wakati", "wakati"],
+  ["--split-sentences", "normal"],
+] as const) {
+  test(`runCli accepts positional file input after ${flag}`, async () => {
+    const { io, logs, errors } = createCapturedIo();
+    const fakeTokenizer = createFakeTokenizer();
+    const loadSpy = spyOn(Tokenizer, "load").mockImplementation(() => fakeTokenizer.tokenizer as never);
+    const inputText = "file input after boolean flag";
+    const inputPath = createTempInputFile(`input-${flag.slice(2)}.txt`, inputText);
+
+    try {
+      const exitCode = await runCliMaybeAsync(["--dict-path", "/tmp/dict", flag, inputPath], {}, io);
+
+      expect(exitCode).toBe(0);
+      expect(errors).toEqual([]);
+      expect(fakeTokenizer.lastTokenizeArgs()).toEqual({ text: inputText, mode: "C" });
+      if (expectedFormat === "wakati") {
+        expect(logs[0]).toBe("すもも もも");
+      } else {
+        expect(logs[0]).toBe(JSON.stringify(SAMPLE_MORPHEMES, null, 2));
+      }
+    } finally {
+      loadSpy.mockRestore();
+    }
+  });
+}
+
+test("runCli renders all-field output when --all is requested", async () => {
   const { io, logs, errors } = createCapturedIo();
   const fakeTokenizer = createFakeTokenizer();
   const loadSpy = spyOn(Tokenizer, "load").mockImplementation(() => fakeTokenizer.tokenizer as never);
 
   try {
-    const exitCode = runCli(["--dict-path", "/tmp/dict", "--all", "--text", "ignored"], {}, io);
+    const exitCode = await runCliMaybeAsync(["--dict-path", "/tmp/dict", "--all", "--text", "ignored"], {}, io);
 
     expect(exitCode).toBe(0);
     expect(errors).toEqual([]);
@@ -358,13 +430,13 @@ test("runCli renders all-field output when --all is requested", () => {
   }
 });
 
-test("runCli rejects --wakati and --all together", () => {
+test("runCli rejects --wakati and --all together", async () => {
   const { io, logs, errors } = createCapturedIo();
   const fakeTokenizer = createFakeTokenizer();
   const loadSpy = spyOn(Tokenizer, "load").mockImplementation(() => fakeTokenizer.tokenizer as never);
 
   try {
-    const exitCode = runCli(["--dict-path", "/tmp/dict", "--wakati", "--all", "--text", "ignored"], {}, io);
+    const exitCode = await runCliMaybeAsync(["--dict-path", "/tmp/dict", "--wakati", "--all", "--text", "ignored"], {}, io);
 
     expect(exitCode).toBe(1);
     expect(errors[0]).toContain("[INVALID_ARGUMENT] Cannot combine --wakati and --all.");
@@ -376,13 +448,13 @@ test("runCli rejects --wakati and --all together", () => {
 });
 
 for (const [flag, value] of [["--wakati", "true"]] as const) {
-  test(`runCli rejects ${flag}=${value} as invalid boolean flag syntax`, () => {
+  test(`runCli rejects ${flag}=${value} as invalid boolean flag syntax`, async () => {
     const { io, logs, errors } = createCapturedIo();
     const fakeTokenizer = createFakeTokenizer();
     const loadSpy = spyOn(Tokenizer, "load").mockImplementation(() => fakeTokenizer.tokenizer as never);
 
     try {
-      const exitCode = runCli(["--dict-path", "/tmp/dict", `${flag}=${value}`, "--text", "ignored"], {}, io);
+      const exitCode = await runCliMaybeAsync(["--dict-path", "/tmp/dict", `${flag}=${value}`, "--text", "ignored"], {}, io);
 
       expect(exitCode).toBe(1);
       expect(errors[0]).toBe(`[INVALID_ARGUMENT] Invalid boolean flag syntax: ${flag}=${value}`);
@@ -395,33 +467,13 @@ for (const [flag, value] of [["--wakati", "true"]] as const) {
   });
 }
 
-for (const [flag, value] of [["--wakati", "false"]] as const) {
-  test(`runCli rejects ${flag} ${value} as invalid boolean flag syntax`, () => {
-    const { io, logs, errors } = createCapturedIo();
-    const fakeTokenizer = createFakeTokenizer();
-    const loadSpy = spyOn(Tokenizer, "load").mockImplementation(() => fakeTokenizer.tokenizer as never);
-
-    try {
-      const exitCode = runCli(["--dict-path", "/tmp/dict", flag, value, "--text", "ignored"], {}, io);
-
-      expect(exitCode).toBe(1);
-      expect(errors[0]).toBe(`[INVALID_ARGUMENT] Invalid boolean flag syntax: ${flag} ${value}`);
-      expect(logs[0]).toContain("Usage:");
-      expect(loadSpy).not.toHaveBeenCalled();
-      expect(fakeTokenizer.lastTokenizeArgs()).toBeUndefined();
-    } finally {
-      loadSpy.mockRestore();
-    }
-  });
-}
-
-test("runCli treats --output - as stdout", () => {
+test("runCli treats --output - as stdout", async () => {
   const { io, logs, errors } = createCapturedIo();
   const fakeTokenizer = createFakeTokenizer();
   const loadSpy = spyOn(Tokenizer, "load").mockImplementation(() => fakeTokenizer.tokenizer as never);
 
   try {
-    const exitCode = runCli(["--dict-path", "/tmp/dict", "--wakati", "--output", "-", "--text", "ignored"], {}, io);
+    const exitCode = await runCliMaybeAsync(["--dict-path", "/tmp/dict", "--wakati", "--output", "-", "--text", "ignored"], {}, io);
 
     expect(exitCode).toBe(0);
     expect(errors).toEqual([]);
@@ -433,7 +485,7 @@ test("runCli treats --output - as stdout", () => {
   }
 });
 
-test("runCli reports a coded error when output file writing fails", () => {
+test("runCli reports a coded error when output file writing fails", async () => {
   const { io, logs, errors } = createCapturedIo();
   const fakeTokenizer = createFakeTokenizer();
   const loadSpy = spyOn(Tokenizer, "load").mockImplementation(() => fakeTokenizer.tokenizer as never);
@@ -441,7 +493,7 @@ test("runCli reports a coded error when output file writing fails", () => {
   const outputPath = `${missingDir}/tokens.json`;
 
   try {
-    const exitCode = runCli(["--dict-path", "/tmp/dict", "--wakati", "--output", outputPath, "--text", "ignored"], {}, io);
+    const exitCode = await runCliMaybeAsync(["--dict-path", "/tmp/dict", "--wakati", "--output", outputPath, "--text", "ignored"], {}, io);
 
     expect(exitCode).toBe(1);
     expect(errors[0]).toContain("[");
@@ -454,14 +506,14 @@ test("runCli reports a coded error when output file writing fails", () => {
   }
 });
 
-test("runCli rejects an invalid --resource-dir path with a coded error", () => {
+test("runCli rejects an invalid --resource-dir path with a coded error", async () => {
   const { io, logs, errors } = createCapturedIo();
   const fakeTokenizer = createFakeTokenizer();
   const loadSpy = spyOn(Tokenizer, "load").mockImplementation(() => fakeTokenizer.tokenizer as never);
   const missingDir = `/tmp/sudachi-bun-resource-missing-${crypto.randomUUID()}`;
 
   try {
-    const exitCode = runCli(["--dict-path", "/tmp/dict", "--resource-dir", missingDir, "--text", "ignored"], {}, io);
+    const exitCode = await runCliMaybeAsync(["--dict-path", "/tmp/dict", "--resource-dir", missingDir, "--text", "ignored"], {}, io);
 
     expect(exitCode).toBe(1);
     expect(errors[0]).toBe(`[INVALID_ARGUMENT] Invalid resource directory: ${missingDir}`);
@@ -472,11 +524,218 @@ test("runCli rejects an invalid --resource-dir path with a coded error", () => {
   }
 });
 
-test("runCli prints a coded error when mode is invalid", () => {
+test("runCli reads file input from a positional argument", async () => {
+  const { io, logs, errors } = createCapturedIo();
+  const fakeTokenizer = createFakeTokenizer();
+  const loadSpy = spyOn(Tokenizer, "load").mockImplementation(() => fakeTokenizer.tokenizer as never);
+  const inputText = "file input via positional arg";
+  const inputPath = createTempInputFile("input.txt", inputText);
+
+  try {
+    const exitCode = await runCliMaybeAsync(["--dict-path", "/tmp/dict", inputPath], {}, io);
+
+    expect(exitCode).toBe(0);
+    expect(errors).toEqual([]);
+    expect(fakeTokenizer.lastTokenizeArgs()).toEqual({ text: inputText, mode: "C" });
+    expect(logs[0]).toBe(JSON.stringify(SAMPLE_MORPHEMES, null, 2));
+  } finally {
+    loadSpy.mockRestore();
+  }
+});
+
+test("runCli reports a missing leading input file as an input read failure", async () => {
+  const { io, logs, errors } = createCapturedIo();
+  const missingPath = join(tmpdir(), `sudachi-bun-missing-${crypto.randomUUID()}.txt`);
+
+  const exitCode = await runCliMaybeAsync([missingPath, "--dict-path", "/tmp/dict"], {}, io);
+
+  expect(exitCode).toBe(1);
+  expect(errors[0]).toContain(`[INVALID_ARGUMENT] Failed to read input file ${missingPath}:`);
+  expect(logs[0]).toContain("Usage:");
+  expect(logs[0]).not.toContain("Commands:");
+});
+
+for (const name of ["build", "ubuild", "dump"] as const) {
+  test(`runCli treats ${name} as a positional file name when it is not the first token`, async () => {
+    const { io, logs, errors } = createCapturedIo();
+    const fakeTokenizer = createFakeTokenizer();
+    const loadSpy = spyOn(Tokenizer, "load").mockImplementation(() => fakeTokenizer.tokenizer as never);
+    const inputText = `positional file named ${name}`;
+    const inputPath = createTempInputFile(name, inputText);
+
+    try {
+      const exitCode = await runCliMaybeAsync(["--dict-path", "/tmp/dict", inputPath], {}, io);
+
+      expect(exitCode).toBe(0);
+      expect(errors).toEqual([]);
+      expect(fakeTokenizer.lastTokenizeArgs()).toEqual({ text: inputText, mode: "C" });
+      expect(logs[0]).toBe(JSON.stringify(SAMPLE_MORPHEMES, null, 2));
+    } finally {
+      loadSpy.mockRestore();
+    }
+  });
+}
+
+test("runCli treats buidl as a positional file name when it is the first token", async () => {
+  const { io, logs, errors } = createCapturedIo();
+  const fakeTokenizer = createFakeTokenizer();
+  const loadSpy = spyOn(Tokenizer, "load").mockImplementation(() => fakeTokenizer.tokenizer as never);
+  const inputText = "positional file named buidl";
+  const inputPath = createTempInputFile("buidl", inputText);
+  const originalCwd = process.cwd();
+
+  process.chdir(dirname(inputPath));
+
+  try {
+    const exitCode = await runCliMaybeAsync(["buidl", "--dict-path", "/tmp/dict"], {}, io);
+
+    expect(exitCode).toBe(0);
+    expect(errors).toEqual([]);
+    expect(fakeTokenizer.lastTokenizeArgs()).toEqual({ text: inputText, mode: "C" });
+    expect(logs[0]).toBe(JSON.stringify(SAMPLE_MORPHEMES, null, 2));
+  } finally {
+    process.chdir(originalCwd);
+    loadSpy.mockRestore();
+  }
+});
+
+test("runCli concatenates multiple positional files in order", async () => {
+  const { io, logs, errors } = createCapturedIo();
+  const fakeTokenizer = createFakeTokenizer();
+  const loadSpy = spyOn(Tokenizer, "load").mockImplementation(() => fakeTokenizer.tokenizer as never);
+  const firstPath = createTempInputFile("input-a.txt", "first");
+  const secondPath = createTempInputFile("input-b.txt", "second");
+  const combinedText = "first\nsecond";
+
+  try {
+    const exitCode = await runCliMaybeAsync(["--dict-path", "/tmp/dict", firstPath, secondPath], {}, io);
+
+    expect(exitCode).toBe(0);
+    expect(errors).toEqual([]);
+    expect(fakeTokenizer.lastTokenizeArgs()).toEqual({ text: combinedText, mode: "C" });
+    expect(logs[0]).toBe(JSON.stringify(SAMPLE_MORPHEMES, null, 2));
+  } finally {
+    loadSpy.mockRestore();
+  }
+});
+
+test("runCli reads piped stdin when no file arguments are present", async () => {
+  const { io, logs, errors } = createCapturedIo();
+  const fakeTokenizer = createFakeTokenizer();
+  const loadSpy = spyOn(Tokenizer, "load").mockImplementation(() => fakeTokenizer.tokenizer as never);
+  const inputText = "stdin input via pipe";
+
+  try {
+    await withMockedStdin(inputText, async () => {
+      const exitCode = await runCliMaybeAsync(["--dict-path", "/tmp/dict"], {}, io);
+
+      expect(exitCode).toBe(0);
+      expect(errors).toEqual([]);
+      expect(fakeTokenizer.lastTokenizeArgs()).toEqual({ text: inputText, mode: "C" });
+      expect(logs[0]).toBe(JSON.stringify(SAMPLE_MORPHEMES, null, 2));
+    });
+  } finally {
+    loadSpy.mockRestore();
+  }
+});
+
+test("runCli rejects combining --text with positional file input", async () => {
+  const { io, logs, errors } = createCapturedIo();
+  const fakeTokenizer = createFakeTokenizer();
+  const loadSpy = spyOn(Tokenizer, "load").mockImplementation(() => fakeTokenizer.tokenizer as never);
+  const inputPath = createTempInputFile("input.txt", "file input");
+  const explicitText = "explicit text wins";
+
+  try {
+    const exitCode = await runCliMaybeAsync(["--dict-path", "/tmp/dict", "--text", explicitText, inputPath], {}, io);
+
+    expect(exitCode).toBe(1);
+    expect(errors[0]).toBe("[INVALID_ARGUMENT] Cannot combine --text with positional file input.");
+    expect(logs[0]).toContain("Usage:");
+    expect(fakeTokenizer.lastTokenizeArgs()).toBeUndefined();
+  } finally {
+    loadSpy.mockRestore();
+  }
+});
+
+test("runCli rejects combining --text with piped stdin", async () => {
+  const { io, logs, errors } = createCapturedIo();
+  const fakeTokenizer = createFakeTokenizer();
+  const loadSpy = spyOn(Tokenizer, "load").mockImplementation(() => fakeTokenizer.tokenizer as never);
+  const explicitText = "explicit text wins";
+
+  try {
+    await withMockedStdin("stdin input", async () => {
+      const exitCode = await runCliMaybeAsync(["--dict-path", "/tmp/dict", "--text", explicitText], {}, io);
+
+      expect(exitCode).toBe(1);
+    });
+    expect(errors[0]).toBe("[INVALID_ARGUMENT] Cannot combine --text with stdin input.");
+    expect(logs[0]).toContain("Usage:");
+    expect(fakeTokenizer.lastTokenizeArgs()).toBeUndefined();
+  } finally {
+    loadSpy.mockRestore();
+  }
+});
+
+test("runCli rejects combining positional file input with piped stdin", async () => {
+  const { io, logs, errors } = createCapturedIo();
+  const fakeTokenizer = createFakeTokenizer();
+  const loadSpy = spyOn(Tokenizer, "load").mockImplementation(() => fakeTokenizer.tokenizer as never);
+  const inputPath = createTempInputFile("input.txt", "file input wins");
+  const stdinText = "stdin input loses";
+
+  try {
+    await withMockedStdin(stdinText, async () => {
+      const exitCode = await runCliMaybeAsync(["--dict-path", "/tmp/dict", inputPath], {}, io);
+
+      expect(exitCode).toBe(1);
+    });
+    expect(errors[0]).toBe("[INVALID_ARGUMENT] Cannot combine positional file input with stdin input.");
+    expect(logs[0]).toContain("Usage:");
+    expect(fakeTokenizer.lastTokenizeArgs()).toBeUndefined();
+  } finally {
+    loadSpy.mockRestore();
+  }
+});
+
+for (const [scenarioName, inputBuilder] of [
+  ["empty file input", async () => createTempInputFile("empty.txt", "")],
+  ["empty stdin input", async () => "stdin"],
+] as const) {
+  test(`runCli reports an error for ${scenarioName}`, async () => {
+    const { io, logs, errors } = createCapturedIo();
+    const fakeTokenizer = createFakeTokenizer();
+    const loadSpy = spyOn(Tokenizer, "load").mockImplementation(() => fakeTokenizer.tokenizer as never);
+
+    try {
+      if (scenarioName === "empty file input") {
+        const inputPath = await inputBuilder();
+        const exitCode = await runCliMaybeAsync(["--dict-path", "/tmp/dict", inputPath], {}, io);
+
+        expect(exitCode).toBe(1);
+      } else {
+        await withMockedStdin("", async () => {
+          const exitCode = await runCliMaybeAsync(["--dict-path", "/tmp/dict"], {}, io);
+
+          expect(exitCode).toBe(1);
+        });
+      }
+
+      expect(errors[0]).toMatch(/\b(empty|no input)\b/i);
+      expect(logs[0]).toContain("Usage:");
+      expect(fakeTokenizer.lastTokenizeArgs()).toBeUndefined();
+    } finally {
+      loadSpy.mockRestore();
+    }
+  });
+}
+
+test("runCli prints a coded error when mode is invalid", async () => {
   const logs: string[] = [];
   const errors: string[] = [];
 
-  const exitCode = runCli(
+  const exitCode = await runCliMaybeAsync(
     ["--dict-path", "/tmp/dict", "--mode", "Z"],
     {},
     {
@@ -490,20 +749,31 @@ test("runCli prints a coded error when mode is invalid", () => {
   expect(logs[0]).toContain("Usage:");
 });
 
-test("runCli prints a coded error when a required argument is missing", () => {
+test("runCli prints a coded error when a required argument is missing", async () => {
   const { io, logs, errors } = createCapturedIo();
 
-  const exitCode = runCli(["--dict-path", "--mode=C"], {}, io);
+  const exitCode = await runCliMaybeAsync(["--dict-path", "--mode=C"], {}, io);
 
   expect(exitCode).toBe(1);
   expect(errors[0]).toBe("[MISSING_ARGUMENT] Missing value for --dict-path");
   expect(logs[0]).toContain("Usage:");
 });
 
-test("runCli rejects an unknown flag before treating the next token as a subcommand", () => {
+test("runCli treats a leading typo-like token as positional input instead of an unknown subcommand", async () => {
   const { io, logs, errors } = createCapturedIo();
 
-  const exitCode = runCli(["--dic-path", "/tmp/a"], {}, io);
+  const exitCode = await runCliMaybeAsync(["buidl", "--dict-path", "/tmp/dict"], {}, io);
+
+  expect(exitCode).toBe(1);
+  expect(errors[0]).toContain("[INVALID_ARGUMENT] Failed to read input file buidl:");
+  expect(errors[0]).not.toContain("Unknown subcommand");
+  expect(logs[0]).toContain("Usage:");
+});
+
+test("runCli rejects an unknown flag before treating the next token as a subcommand", async () => {
+  const { io, logs, errors } = createCapturedIo();
+
+  const exitCode = await runCliMaybeAsync(["--dic-path", "/tmp/a"], {}, io);
 
   expect(exitCode).toBe(1);
   expect(errors[0]).toBe("[INVALID_ARGUMENT] Unknown flag: --dic-path");
@@ -511,10 +781,10 @@ test("runCli rejects an unknown flag before treating the next token as a subcomm
   expect(logs[0]).toContain("Commands:");
 });
 
-test("runCli rejects an unknown flag even when the next token looks like a subcommand", () => {
+test("runCli rejects an unknown flag even when the next token looks like a subcommand", async () => {
   const { io, logs, errors } = createCapturedIo();
 
-  const exitCode = runCli(["--unknown", "build", "--dict-path", "/tmp/dic"], {}, io);
+  const exitCode = await runCliMaybeAsync(["--unknown", "build", "--dict-path", "/tmp/dic"], {}, io);
 
   expect(exitCode).toBe(1);
   expect(errors[0]).toBe("[INVALID_ARGUMENT] Unknown flag: --unknown");
@@ -523,10 +793,10 @@ test("runCli rejects an unknown flag even when the next token looks like a subco
 });
 
 for (const command of ["build", "ubuild", "dump"] as const) {
-  test(`runCli prints help for ${command}`, () => {
+  test(`runCli prints help for ${command}`, async () => {
     const { io, logs, errors } = createCapturedIo();
 
-    const exitCode = runCli([command, "--help"], {}, io);
+    const exitCode = await runCliMaybeAsync([command, "--help"], {}, io);
 
     expect(exitCode).toBe(0);
     expect(errors).toEqual([]);
@@ -534,10 +804,10 @@ for (const command of ["build", "ubuild", "dump"] as const) {
   });
 }
 
-test("runCli returns an invalid argument error when build is requested without an implementation", () => {
+test("runCli returns an invalid argument error when build is requested without an implementation", async () => {
   const { io, logs, errors } = createCapturedIo();
 
-  const exitCode = runCli(["build"], {}, io);
+  const exitCode = await runCliMaybeAsync(["build"], {}, io);
 
   expect(exitCode).toBe(1);
   expect(errors[0]).toContain("[INVALID_ARGUMENT]");
