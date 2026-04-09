@@ -3,6 +3,20 @@ import { expect, test } from "bun:test";
 import { parseArgValue, parseCliArgs, runCli } from "./cli.ts";
 import { SudachiError } from "./types.ts";
 
+function createCapturedIo() {
+  const logs: string[] = [];
+  const errors: string[] = [];
+
+  return {
+    logs,
+    errors,
+    io: {
+      log: (message: string) => logs.push(message),
+      error: (message: string) => errors.push(message),
+    },
+  };
+}
+
 test("parseArgValue rejects missing value when next token is another flag", () => {
   try {
     parseArgValue(["--dict-path", "--mode", "C"], "dict-path");
@@ -68,19 +82,55 @@ test("runCli prints a coded error when mode is invalid", () => {
 });
 
 test("runCli prints a coded error when a required argument is missing", () => {
-  const logs: string[] = [];
-  const errors: string[] = [];
+  const { io, logs, errors } = createCapturedIo();
 
-  const exitCode = runCli(
-    ["--dict-path", "--mode=C"],
-    {},
-    {
-      log: (message) => logs.push(message),
-      error: (message) => errors.push(message),
-    },
-  );
+  const exitCode = runCli(["--dict-path", "--mode=C"], {}, io);
 
   expect(exitCode).toBe(1);
   expect(errors[0]).toBe("[MISSING_ARGUMENT] Missing value for --dict-path");
+  expect(logs[0]).toContain("Usage:");
+});
+
+test("runCli rejects an unknown flag before treating the next token as a subcommand", () => {
+  const { io, logs, errors } = createCapturedIo();
+
+  const exitCode = runCli(["--dic-path", "/tmp/a"], {}, io);
+
+  expect(exitCode).toBe(1);
+  expect(errors[0]).toBe("[INVALID_ARGUMENT] Unknown flag: --dic-path");
+  expect(logs[0]).toContain("Usage:");
+  expect(logs[0]).toContain("Commands:");
+});
+
+test("runCli rejects an unknown flag even when the next token looks like a subcommand", () => {
+  const { io, logs, errors } = createCapturedIo();
+
+  const exitCode = runCli(["--unknown", "build", "--dict-path", "/tmp/dic"], {}, io);
+
+  expect(exitCode).toBe(1);
+  expect(errors[0]).toBe("[INVALID_ARGUMENT] Unknown flag: --unknown");
+  expect(logs[0]).toContain("Usage:");
+  expect(logs[0]).toContain("Commands:");
+});
+
+for (const command of ["build", "ubuild", "dump"] as const) {
+  test(`runCli prints help for ${command}`, () => {
+    const { io, logs, errors } = createCapturedIo();
+
+    const exitCode = runCli([command, "--help"], {}, io);
+
+    expect(exitCode).toBe(0);
+    expect(errors).toEqual([]);
+    expect(logs.join("\n")).toContain("Usage:");
+  });
+}
+
+test("runCli returns an invalid argument error when build is requested without an implementation", () => {
+  const { io, logs, errors } = createCapturedIo();
+
+  const exitCode = runCli(["build"], {}, io);
+
+  expect(exitCode).toBe(1);
+  expect(errors[0]).toContain("[INVALID_ARGUMENT]");
   expect(logs[0]).toContain("Usage:");
 });

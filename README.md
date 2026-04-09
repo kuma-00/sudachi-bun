@@ -54,6 +54,14 @@ bun run index.ts --dict-path ./dict/system_core.dic --text "すももももも�
 bun run index.ts --dict-path <path-to-dic> [options]
 ```
 
+現在、`build` / `ubuild` / `dump` のサブコマンドは scaffold 済みですが、まだ実装されていません。
+
+```bash
+bun run index.ts build --help
+bun run index.ts ubuild --help
+bun run index.ts dump --help
+```
+
 ### 主なオプション
 
 - `--dict-path <path>`: Sudachi 辞書ファイル（必須）
