@@ -6,7 +6,7 @@
 - [x] CLI: stdin / ファイル入力処理対応（`--text` 以外）
 - [x] API: 文分割機能（`SentenceSplitter` 相当）公開
 - [x] API: 形態素再分割（`Morpheme.split` / `MorphemeList.split_into` 相当）対応
-- [ ] API: 辞書直接検索（`lookup`）対応
+- [x] API: 辞書直接検索（`lookup`）対応
 - [ ] API: POS matcher 相当の導入
 - [ ] API: フィールドサブセット指定（`InfoSubset` 相当）対応
 - [ ] API: Surface projection 対応
