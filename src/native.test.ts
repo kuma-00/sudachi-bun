@@ -1,9 +1,12 @@
 import { expect, test } from "bun:test";
 
 import {
+  LOOKUP_RESULT_LAYOUT_VERSION,
   MORPHEME_RESULT_LAYOUT_VERSION,
+  readLookupResultLayout,
   readMorphemeResultLayout,
   readNativeStatusCodeName,
+  type NativeLookupLibrary,
   type NativeSudachiLibrary,
 } from "./native.ts";
 
@@ -49,6 +52,41 @@ function createLibrary(
       sudachi_get_last_error: () => "native error" as unknown as import("bun:ffi").CString,
       sudachi_status_code_name: (status) =>
         (status === 5 ? "TOKENIZE" : "UNKNOWN") as unknown as import("bun:ffi").CString,
+    },
+    close: () => {},
+  };
+}
+
+function createLookupLibrary(
+  layoutWriter: (outLayout: BigUint64Array) => number = (outLayout) => {
+    const values = [
+      BigInt(LOOKUP_RESULT_LAYOUT_VERSION),
+      0n,
+      8n,
+      16n,
+      40n,
+      0n,
+      8n,
+      16n,
+      24n,
+      28n,
+    ];
+
+    values.forEach((value, index) => {
+      outLayout[index] = value;
+    });
+
+    return 0;
+  },
+): NativeLookupLibrary {
+  return {
+    symbols: {
+      sudachi_lookup: () => 0,
+      sudachi_free_lookup_result: () => {},
+      sudachi_get_lookup_result_layout: (outLayout) => layoutWriter(outLayout as BigUint64Array),
+      sudachi_get_last_error: () => "native error" as unknown as import("bun:ffi").CString,
+      sudachi_status_code_name: (status) =>
+        (status === 9 ? "LOOKUP" : "UNKNOWN") as unknown as import("bun:ffi").CString,
     },
     close: () => {},
   };
@@ -123,4 +161,30 @@ test("readMorphemeResultLayout rejects unsupported array layout kinds", () => {
 
 test("readNativeStatusCodeName uses the Rust-provided code names", () => {
   expect(readNativeStatusCodeName(createLibrary(), 5)).toBe("TOKENIZE");
+});
+
+test("readLookupResultLayout maps the Rust lookup layout buffer in order", () => {
+  expect(readLookupResultLayout(createLookupLibrary())).toEqual({
+    layoutVersion: LOOKUP_RESULT_LAYOUT_VERSION,
+    arrayLayoutKind: 0,
+    arrayItemsOffset: 8,
+    arrayLenOffset: 16,
+    resultSize: 40,
+    surfaceOffset: 0,
+    posOffset: 8,
+    wordIdOffset: 16,
+    dictionaryIdOffset: 24,
+    isOovOffset: 28,
+  });
+});
+
+test("readLookupResultLayout rejects unsupported layout versions", () => {
+  expect(() =>
+    readLookupResultLayout(
+      createLookupLibrary((outLayout) => {
+        outLayout[0] = 999n;
+        return 0;
+      }),
+    ),
+  ).toThrow("Unsupported lookup result layout version");
 });

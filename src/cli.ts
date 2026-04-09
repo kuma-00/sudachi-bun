@@ -126,6 +126,12 @@ export function runTokenizeCommand(
           `resourceDir=${command.resourceDir ?? "(default)"}`,
         ].join(" "),
       );
+
+      try {
+        io?.error(`[debug] lookup=${JSON.stringify(tokenizer.lookup(command.text))}`);
+      } catch (error) {
+        io?.error(`[debug] lookup-unavailable=${formatSudachiError(error)}`);
+      }
     }
 
     const morphemes = tokenizeSentenceUnits(

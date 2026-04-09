@@ -37,6 +37,14 @@ export interface Morpheme {
   synonymGroupIds: number[];
 }
 
+export interface LookupEntry {
+  surface: string;
+  pos: string;
+  wordId: string;
+  dictionaryId: number;
+  isOov: boolean;
+}
+
 export type NativeSudachiErrorCode =
   | "OK"
   | "NULL_POINTER"
@@ -46,6 +54,7 @@ export type NativeSudachiErrorCode =
   | "CONFIG"
   | "TOKENIZE"
   | "SPLIT"
+  | "LOOKUP"
   | "MORPHEME_SPLIT"
   | "SENTENCE_SPLIT"
   | "INTERNAL"

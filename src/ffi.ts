@@ -1,8 +1,8 @@
 import { CString, read, type Pointer } from "bun:ffi";
 
-import type { Morpheme, SudachiErrorCode } from "./types.ts";
+import type { LookupEntry, Morpheme, SudachiErrorCode } from "./types.ts";
 import { SudachiError } from "./types.ts";
-import type { MorphemeResultLayout, SentenceSpanResultLayout } from "./native.ts";
+import type { LookupResultLayout, MorphemeResultLayout, SentenceSpanResultLayout } from "./native.ts";
 
 export interface SentenceSpanOffsets {
   start: number;
@@ -135,6 +135,34 @@ export function readMorphemeArray(arrayPtr: Pointer, layout: MorphemeResultLayou
   const results = new Array<Morpheme>(entries.length);
   for (const { entryBase, index } of entries) {
     results[index] = readMorpheme(entryBase, layout);
+  }
+
+  return results;
+}
+
+function readLookupEntry(itemPtr: Pointer, layout: LookupResultLayout): LookupEntry {
+  return {
+    surface: readCStringField(itemPtr, layout.surfaceOffset),
+    pos: readCStringField(itemPtr, layout.posOffset),
+    wordId: readCStringField(itemPtr, layout.wordIdOffset),
+    dictionaryId: readNumberField(itemPtr, layout.dictionaryIdOffset),
+    isOov: readBoolField(itemPtr, layout.isOovOffset),
+  };
+}
+
+export function readLookupEntryArray(arrayPtr: Pointer, layout: LookupResultLayout): LookupEntry[] {
+  const entries = readArrayEntries(
+    arrayPtr,
+    layout.arrayItemsOffset,
+    layout.arrayLenOffset,
+    layout.resultSize,
+    layout.arrayLayoutKind,
+    "Lookup result layout",
+  );
+
+  const results = new Array<LookupEntry>(entries.length);
+  for (const { entryBase, index } of entries) {
+    results[index] = readLookupEntry(entryBase, layout);
   }
 
   return results;

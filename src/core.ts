@@ -1,14 +1,18 @@
 import { type Pointer } from "bun:ffi";
 
-import { readMorphemeArray } from "./ffi.ts";
+import { readLookupEntryArray, readMorphemeArray } from "./ffi.ts";
 import {
   createNativeSudachiError,
+  loadLookupLibrary,
   loadNativeLibrary,
+  readLookupResultLayout,
   readMorphemeResultLayout,
+  type LookupResultLayout,
+  type NativeLookupLibrary,
   type MorphemeResultLayout,
   type NativeSudachiLibrary,
 } from "./native.ts";
-import { SudachiError, type Morpheme, type TokenizeMode, type TokenizerLoadOptions } from "./types.ts";
+import { SudachiError, type LookupEntry, type Morpheme, type TokenizeMode, type TokenizerLoadOptions } from "./types.ts";
 
 const MODE_TO_NATIVE: Record<TokenizeMode, number> = {
   A: 0,
@@ -42,6 +46,11 @@ interface NativeTokenizerSession {
   handle: Pointer;
   layout: MorphemeResultLayout;
   library: NativeSudachiLibrary;
+}
+
+interface NativeLookupSession {
+  layout: LookupResultLayout;
+  library: NativeLookupLibrary;
 }
 
 function openNativeTokenizer(options: TokenizerLoadOptions): NativeTokenizerSession {
@@ -86,17 +95,23 @@ export class Tokenizer {
   }
 
   static load(options: TokenizerLoadOptions): Tokenizer {
-    return new Tokenizer(openNativeTokenizer(options));
+    return new Tokenizer(openNativeTokenizer(options), options);
   }
 
   #library: NativeSudachiLibrary | null;
   #layout: MorphemeResultLayout | null;
   #handle: Pointer | null;
+  #lookupLibrary: NativeLookupLibrary | null;
+  #lookupLayout: LookupResultLayout | null;
+  #loadOptions: TokenizerLoadOptions;
 
-  private constructor(session: NativeTokenizerSession) {
+  private constructor(session: NativeTokenizerSession, options: TokenizerLoadOptions) {
     this.#library = session.library;
     this.#layout = session.layout;
     this.#handle = session.handle;
+    this.#lookupLibrary = null;
+    this.#lookupLayout = null;
+    this.#loadOptions = { ...options };
   }
 
   get closed(): boolean {
@@ -113,6 +128,32 @@ export class Tokenizer {
     }
 
     return this.#readAndAttachFromOut(resultOut, "Tokenizer returned a null result pointer.", text, mode, "owned");
+  }
+
+  lookup(surface: string): LookupEntry[] {
+    const { handle } = this.#getOpenSession();
+    const { library, layout } = this.#getLookupSession();
+
+    const resultOut = new BigUint64Array(1);
+    const status = library.symbols.sudachi_lookup(handle, surface, resultOut);
+    if (status !== 0) {
+      throw createNativeSudachiError(library, status, "Lookup failed.");
+    }
+
+    const resultValue = resultOut[0] ?? 0n;
+    if (resultValue === 0n) {
+      throw new SudachiError("Lookup returned a null result pointer.", {
+        code: "INTERNAL",
+        nativeStatus: 255,
+      });
+    }
+
+    const resultPtr = toPointer(resultValue);
+    try {
+      return readLookupEntryArray(resultPtr, layout);
+    } finally {
+      library.symbols.sudachi_free_lookup_result(resultPtr);
+    }
   }
 
   split(morpheme: Morpheme, mode: TokenizeMode = "C"): Morpheme[] {
@@ -192,6 +233,13 @@ export class Tokenizer {
       return;
     }
 
+    if (this.#lookupLibrary !== null) {
+      this.#lookupLibrary.close();
+      this.#lookupLibrary = null;
+    }
+
+    this.#lookupLayout = null;
+
     if (this.#handle !== null) {
       this.#library.symbols.sudachi_free_tokenizer(this.#handle);
     }
@@ -217,6 +265,28 @@ export class Tokenizer {
     }
 
     return { library, layout, handle };
+  }
+
+  #getLookupSession(): NativeLookupSession {
+    this.#getOpenSession();
+
+    if (this.#lookupLibrary !== null && this.#lookupLayout !== null) {
+      return {
+        library: this.#lookupLibrary,
+        layout: this.#lookupLayout,
+      };
+    }
+
+    const library = loadLookupLibrary(this.#loadOptions);
+    try {
+      const layout = readLookupResultLayout(library);
+      this.#lookupLibrary = library;
+      this.#lookupLayout = layout;
+      return { library, layout };
+    } catch (error) {
+      library.close();
+      throw error;
+    }
   }
 
   #readAndAttachFromOut(

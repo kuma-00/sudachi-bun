@@ -10,6 +10,8 @@ use crate::error::{ERR_INTERNAL, error};
 
 pub const MORPHEME_RESULT_ARRAY_LAYOUT_CONTIGUOUS: u64 = 0;
 pub const MORPHEME_RESULT_LAYOUT_VERSION: u64 = 1;
+pub const LOOKUP_RESULT_ARRAY_LAYOUT_CONTIGUOUS: u64 = 0;
+pub const LOOKUP_RESULT_LAYOUT_VERSION: u64 = 1;
 pub const SENTENCE_SPAN_ARRAY_LAYOUT_CONTIGUOUS: u64 = 0;
 pub const SENTENCE_SPAN_LAYOUT_VERSION: u64 = 1;
 
@@ -76,6 +78,43 @@ pub struct MorphemeResultArray {
 }
 
 #[repr(C)]
+pub struct LookupResultItem {
+    pub surface: *mut c_char,
+    pub pos: *mut c_char,
+    pub word_id: *mut c_char,
+    pub dictionary_id: i32,
+    pub is_oov: u8,
+}
+
+impl LookupResultItem {
+    pub(crate) fn empty() -> Self {
+        Self {
+            surface: ptr::null_mut(),
+            pos: ptr::null_mut(),
+            word_id: ptr::null_mut(),
+            dictionary_id: 0,
+            is_oov: 0,
+        }
+    }
+
+    pub(crate) fn free_owned_fields(&mut self) {
+        free_c_string(self.surface);
+        free_c_string(self.pos);
+        free_c_string(self.word_id);
+
+        self.surface = ptr::null_mut();
+        self.pos = ptr::null_mut();
+        self.word_id = ptr::null_mut();
+    }
+}
+
+#[repr(C)]
+pub struct LookupResultArray {
+    pub items: *mut LookupResultItem,
+    pub len: usize,
+}
+
+#[repr(C)]
 pub struct SentenceSpan {
     pub begin: usize,
     pub end: usize,
@@ -107,6 +146,20 @@ pub struct MorphemeResultLayout {
     pub is_oov_offset: u64,
     pub synonym_group_ids_offset: u64,
     pub synonym_group_ids_len_offset: u64,
+}
+
+#[repr(C)]
+pub struct LookupResultLayout {
+    pub layout_version: u64,
+    pub array_layout_kind: u64,
+    pub array_items_offset: u64,
+    pub array_len_offset: u64,
+    pub result_size: u64,
+    pub surface_offset: u64,
+    pub pos_offset: u64,
+    pub word_id_offset: u64,
+    pub dictionary_id_offset: u64,
+    pub is_oov_offset: u64,
 }
 
 #[repr(C)]
@@ -155,6 +208,23 @@ impl SentenceSpanLayout {
             span_size: std::mem::size_of::<SentenceSpan>() as u64,
             begin_offset: offset_of!(SentenceSpan, begin) as u64,
             end_offset: offset_of!(SentenceSpan, end) as u64,
+        }
+    }
+}
+
+impl LookupResultLayout {
+    pub const fn new() -> Self {
+        Self {
+            layout_version: LOOKUP_RESULT_LAYOUT_VERSION,
+            array_layout_kind: LOOKUP_RESULT_ARRAY_LAYOUT_CONTIGUOUS,
+            array_items_offset: offset_of!(LookupResultArray, items) as u64,
+            array_len_offset: offset_of!(LookupResultArray, len) as u64,
+            result_size: std::mem::size_of::<LookupResultItem>() as u64,
+            surface_offset: offset_of!(LookupResultItem, surface) as u64,
+            pos_offset: offset_of!(LookupResultItem, pos) as u64,
+            word_id_offset: offset_of!(LookupResultItem, word_id) as u64,
+            dictionary_id_offset: offset_of!(LookupResultItem, dictionary_id) as u64,
+            is_oov_offset: offset_of!(LookupResultItem, is_oov) as u64,
         }
     }
 }
@@ -223,6 +293,40 @@ pub(crate) fn morpheme_to_result(
     Ok(result.into_inner())
 }
 
+pub(crate) fn lookup_morpheme_to_result(
+    morpheme: &sudachi::analysis::morpheme::Morpheme<'_, Arc<JapaneseDictionary>>,
+) -> Result<LookupResultItem, i32> {
+    struct ResultGuard {
+        value: LookupResultItem,
+    }
+
+    impl ResultGuard {
+        fn new() -> Self {
+            Self {
+                value: LookupResultItem::empty(),
+            }
+        }
+
+        fn into_inner(mut self) -> LookupResultItem {
+            std::mem::replace(&mut self.value, LookupResultItem::empty())
+        }
+    }
+
+    impl Drop for ResultGuard {
+        fn drop(&mut self) {
+            self.value.free_owned_fields();
+        }
+    }
+
+    let mut result = ResultGuard::new();
+    result.value.surface = clone_string(&morpheme.surface().to_string())?;
+    result.value.pos = clone_string(&morpheme.part_of_speech().join(","))?;
+    result.value.word_id = clone_string(&format!("{:?}", morpheme.word_id()))?;
+    result.value.dictionary_id = morpheme.dictionary_id();
+    result.value.is_oov = u8::from(morpheme.is_oov());
+    Ok(result.into_inner())
+}
+
 pub(crate) fn free_c_string(ptr: *mut c_char) {
     if ptr.is_null() {
         return;
@@ -268,6 +372,28 @@ pub(crate) fn free_result_array(result: *mut MorphemeResultArray) {
 
 pub(crate) fn morpheme_result_layout() -> MorphemeResultLayout {
     MorphemeResultLayout::new()
+}
+
+pub(crate) fn free_lookup_result_array(result: *mut LookupResultArray) {
+    if result.is_null() {
+        return;
+    }
+
+    unsafe {
+        let boxed = Box::from_raw(result);
+        if !boxed.items.is_null() && boxed.len != 0 {
+            let slice = std::slice::from_raw_parts_mut(boxed.items, boxed.len);
+            for item in slice.iter_mut() {
+                item.free_owned_fields();
+            }
+
+            free_boxed_slice(boxed.items, boxed.len);
+        }
+    }
+}
+
+pub(crate) fn lookup_result_layout() -> LookupResultLayout {
+    LookupResultLayout::new()
 }
 
 pub(crate) fn free_sentence_span_array(result: *mut SentenceSpanArray) {
@@ -317,6 +443,32 @@ mod tests {
     fn layout_version_is_stable() {
         let layout = morpheme_result_layout();
         assert_eq!(layout.layout_version, MORPHEME_RESULT_LAYOUT_VERSION);
+        assert!(layout.result_size > 0);
+    }
+
+    #[test]
+    fn free_lookup_result_accepts_null() {
+        free_lookup_result_array(ptr::null_mut());
+    }
+
+    #[test]
+    fn free_lookup_owned_fields_is_idempotent_for_partial_results() {
+        let mut result = LookupResultItem::empty();
+        result.surface = CString::new("surface").unwrap().into_raw();
+        result.pos = CString::new("pos").unwrap().into_raw();
+
+        result.free_owned_fields();
+        result.free_owned_fields();
+
+        assert!(result.surface.is_null());
+        assert!(result.pos.is_null());
+        assert!(result.word_id.is_null());
+    }
+
+    #[test]
+    fn lookup_layout_version_is_stable() {
+        let layout = lookup_result_layout();
+        assert_eq!(layout.layout_version, LOOKUP_RESULT_LAYOUT_VERSION);
         assert!(layout.result_size > 0);
     }
 

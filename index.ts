@@ -4,6 +4,7 @@ export { createSentenceSplitter, SentenceSplitter } from "./src/sentence-splitte
 export { parseCliArgs } from "./src/cli/parser.ts";
 export { formatSudachiError, SudachiError, TOKENIZE_MODES } from "./src/types.ts";
 export type {
+  LookupEntry,
   Morpheme,
   NativeSudachiErrorCode,
   SentenceSpan,

@@ -11,6 +11,7 @@ TypeScript から Rust FFI (`sudachi-ffi`) を呼び出して、日本語テキ�
 - CLI で `--text`、stdin、位置引数のファイル入力に対応
 - TypeScript API (`Tokenizer`, `SentenceSplitter`) から直接トークナイズ/文分割
 - TypeScript API から既存 morpheme の再分割（単一 morpheme / morpheme list）
+- TypeScript API から辞書 lookup 候補を `LookupEntry[]` として取得
 - Sudachi 辞書のダウンロードと展開を補助するセットアップスクリプトを提供
 
 ## 前提条件
@@ -87,6 +88,7 @@ bun run index.ts dump --help
 - `--text "<text>"`: 解析対象テキスト（未指定時は位置引数ファイルまたは stdin から解決）
 - `--split-sentences`: 入力を文単位に分けて解析する。文境界の byte offset は Rust 側 sentence splitter の結果をそのまま使う
 - `--debug`: デバッグ情報を標準エラー出力に追加する。標準出力の解析結果はそのまま維持される
+  lookup シンボルが利用可能なライブラリでは、入力文字列に対する `Tokenizer.lookup()` の結果も stderr に JSON で出力する
 - `--resource-dir <path>`: 辞書・設定の探索基準ディレクトリを指定する
 
 ### 入力ソース
@@ -155,9 +157,10 @@ const tokenizer = Tokenizer.load({
 try {
   const text = "今日は晴れです。明日も晴れです。";
   const tokens = tokenizer.tokenize("東京都に", "C");
+  const lookup = tokenizer.lookup("東京");
   const finer = tokenizer.split(tokens[0], "A");
   const flattened = tokenizer.splitInto(tokens, "A");
-  console.log(finer, flattened);
+  console.log(lookup, finer, flattened);
 
   for (const span of splitter.split(text)) {
     const morphemes = tokenizer.tokenize(span.text, "C");
@@ -179,6 +182,12 @@ try {
 どちらも `tokenize()` と同じ `Morpheme[]` を返し、内部では既存の morpheme 読み出し処理を再利用します。`splitInto()` は `tokenize()` や `split()` が返した配列をそのまま渡した場合はネイティブの list resplit を使い、コピー済み配列のように list コンテキストが失われた場合は各 morpheme の `split()` を順に適用します。
 
 `split()` / `splitInto()` は、同じ `Tokenizer` が生成した morpheme のみ受け付けます。`tokenize(text, mode)` との差分として、再分割は既存解析結果を起点にするため、元トークン境界に従って細分化されます。
+
+Task-07 相当の lookup API も利用できます。
+
+- `tokenizer.lookup(surface)`: 入力 surface に一致する辞書候補を `LookupEntry[]` として返す
+
+`LookupEntry` は `surface`, `pos`, `wordId`, `dictionaryId`, `isOov` を持ちます。lookup 用の Rust FFI シンボルが未実装または古いライブラリでは `lookup()` が失敗するため、その場合は最新の `sudachi-ffi` をビルドしてください。
 
 `Morpheme` は以下の情報を含みます。
 

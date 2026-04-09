@@ -10,17 +10,21 @@ use sudachi::analysis::mlist::MorphemeList;
 use sudachi::analysis::stateless_tokenizer::StatelessTokenizer;
 use sudachi::config::Config;
 use sudachi::dic::dictionary::JapaneseDictionary;
+use sudachi::dic::subset::InfoSubset;
 use sudachi::sentence_splitter::{SentenceSplitter, SplitSentences};
 
 use crate::convert::{cstr_to_path, cstr_to_string, mode_from_raw};
 use crate::error::{
-    ERR_CONFIG, ERR_INVALID_INDEX, ERR_MORPHEME_SPLIT, ERR_NULL_POINTER, ERR_SENTENCE_SPLIT,
-    ERR_TOKENIZE, OK, clear_last_error, error, last_error_ptr, status_code_name_ptr,
+    ERR_CONFIG, ERR_INVALID_INDEX, ERR_LOOKUP, ERR_MORPHEME_SPLIT, ERR_NULL_POINTER,
+    ERR_SENTENCE_SPLIT, ERR_TOKENIZE, OK, clear_last_error, error, last_error_ptr,
+    status_code_name_ptr,
 };
 use crate::result::{
-    MorphemeResult, MorphemeResultArray, MorphemeResultLayout, SentenceSpan, SentenceSpanArray,
-    SentenceSpanLayout, free_result_array, free_sentence_span_array, morpheme_result_layout,
-    morpheme_to_result, sentence_span_layout,
+    LookupResultArray, LookupResultItem, LookupResultLayout, MorphemeResult, MorphemeResultArray,
+    MorphemeResultLayout, SentenceSpan, SentenceSpanArray, SentenceSpanLayout,
+    free_lookup_result_array, free_result_array, free_sentence_span_array,
+    lookup_morpheme_to_result, lookup_result_layout, morpheme_result_layout, morpheme_to_result,
+    sentence_span_layout,
 };
 
 #[repr(C)]
@@ -40,7 +44,13 @@ fn free_partial_results(results: &mut [MorphemeResult]) {
     }
 }
 
-const SUDACHI_FFI_ABI_VERSION: i32 = 4;
+fn free_partial_lookup_results(results: &mut [LookupResultItem]) {
+    for result in results.iter_mut() {
+        result.free_owned_fields();
+    }
+}
+
+const SUDACHI_FFI_ABI_VERSION: i32 = 5;
 
 fn load_dictionary(
     config_path: *const c_char,
@@ -117,9 +127,54 @@ fn morpheme_list_to_array(
     Ok(Box::new(MorphemeResultArray { items, len }))
 }
 
+fn lookup_text(
+    tokenizer: &TokenizerHandle,
+    text: &str,
+) -> Result<MorphemeList<Arc<JapaneseDictionary>>, i32> {
+    let mut morpheme_list = MorphemeList::empty(Arc::clone(&tokenizer.dictionary));
+    morpheme_list
+        .lookup(text, InfoSubset::all())
+        .map_err(|err| {
+            error(
+                ERR_LOOKUP,
+                format!("dictionary lookup failed for surface {text:?}: {err}"),
+            )
+        })?;
+    Ok(morpheme_list)
+}
+
+fn lookup_list_to_array(
+    morpheme_list: &MorphemeList<Arc<JapaneseDictionary>>,
+) -> Result<Box<LookupResultArray>, i32> {
+    let mut results = Vec::with_capacity(morpheme_list.len());
+    for morpheme in morpheme_list.iter() {
+        match lookup_morpheme_to_result(&morpheme) {
+            Ok(result) => results.push(result),
+            Err(code) => {
+                free_partial_lookup_results(&mut results);
+                return Err(code);
+            }
+        }
+    }
+
+    let (items, len) = boxed_slice_into_raw_parts(results.into_boxed_slice());
+    Ok(Box::new(LookupResultArray { items, len }))
+}
+
 fn assign_result_array(
     out_result: *mut *mut MorphemeResultArray,
     array: Box<MorphemeResultArray>,
+) -> i32 {
+    unsafe {
+        *out_result = Box::into_raw(array);
+    }
+
+    OK
+}
+
+fn assign_lookup_result_array(
+    out_result: *mut *mut LookupResultArray,
+    array: Box<LookupResultArray>,
 ) -> i32 {
     unsafe {
         *out_result = Box::into_raw(array);
@@ -346,6 +401,39 @@ pub extern "C" fn sudachi_tokenize(
 }
 
 #[unsafe(no_mangle)]
+pub extern "C" fn sudachi_lookup(
+    handle: *mut TokenizerHandle,
+    input_utf8: *const c_char,
+    out_result: *mut *mut LookupResultArray,
+) -> i32 {
+    clear_last_error();
+
+    if handle.is_null() {
+        return error(ERR_NULL_POINTER, "tokenizer handle was null");
+    }
+    if out_result.is_null() {
+        return error(ERR_NULL_POINTER, "out_result pointer was null");
+    }
+
+    let text = match cstr_to_string(input_utf8) {
+        Ok(text) => text,
+        Err(code) => return code,
+    };
+
+    let tokenizer = unsafe { &*handle };
+    let morpheme_list = match lookup_text(tokenizer, &text) {
+        Ok(list) => list,
+        Err(code) => return code,
+    };
+    let array = match lookup_list_to_array(&morpheme_list) {
+        Ok(array) => array,
+        Err(code) => return code,
+    };
+
+    assign_lookup_result_array(out_result, array)
+}
+
+#[unsafe(no_mangle)]
 pub extern "C" fn sudachi_split_morpheme(
     handle: *mut TokenizerHandle,
     input_utf8: *const c_char,
@@ -497,6 +585,11 @@ pub extern "C" fn sudachi_free_result(result: *mut MorphemeResultArray) {
 }
 
 #[unsafe(no_mangle)]
+pub extern "C" fn sudachi_free_lookup_result(result: *mut LookupResultArray) {
+    free_lookup_result_array(result);
+}
+
+#[unsafe(no_mangle)]
 pub extern "C" fn sudachi_free_sentence_spans(result: *mut SentenceSpanArray) {
     free_sentence_span_array(result);
 }
@@ -511,6 +604,21 @@ pub extern "C" fn sudachi_get_morpheme_result_layout(out_layout: *mut MorphemeRe
 
     unsafe {
         *out_layout = morpheme_result_layout();
+    }
+
+    OK
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn sudachi_get_lookup_result_layout(out_layout: *mut LookupResultLayout) -> i32 {
+    clear_last_error();
+
+    if out_layout.is_null() {
+        return error(ERR_NULL_POINTER, "out_layout pointer was null");
+    }
+
+    unsafe {
+        *out_layout = lookup_result_layout();
     }
 
     OK
@@ -679,6 +787,29 @@ mod tests {
         }
     }
 
+    fn collect_lookup_values(
+        result: *mut LookupResultArray,
+    ) -> Vec<(String, String, String, i32, u8)> {
+        assert!(!result.is_null());
+
+        unsafe {
+            let array = &*result;
+            if array.len == 0 {
+                return Vec::new();
+            }
+            let items = std::slice::from_raw_parts(array.items, array.len);
+            items
+                .iter()
+                .map(|item| {
+                    let surface = CStr::from_ptr(item.surface).to_str().unwrap().to_owned();
+                    let pos = CStr::from_ptr(item.pos).to_str().unwrap().to_owned();
+                    let word_id = CStr::from_ptr(item.word_id).to_str().unwrap().to_owned();
+                    (surface, pos, word_id, item.dictionary_id, item.is_oov)
+                })
+                .collect()
+        }
+    }
+
     fn last_error_message() -> String {
         let ptr = sudachi_get_last_error();
         if ptr.is_null() {
@@ -718,6 +849,89 @@ mod tests {
             crate::result::SENTENCE_SPAN_LAYOUT_VERSION
         );
         assert!(layout.span_size > 0);
+    }
+
+    #[test]
+    fn lookup_requires_non_null_pointers() {
+        let text = CString::new("東京都").unwrap();
+        let mut out_result = ptr::null_mut();
+
+        let status = sudachi_lookup(ptr::null_mut(), text.as_ptr(), &mut out_result);
+        assert_eq!(status, ERR_NULL_POINTER);
+        assert_eq!(status_code_name(status), "NULL_POINTER");
+        assert!(out_result.is_null());
+
+        with_test_tokenizer(|handle| {
+            let status = sudachi_lookup(handle, ptr::null(), &mut out_result);
+            assert_eq!(status, ERR_NULL_POINTER);
+            assert_eq!(status_code_name(status), "NULL_POINTER");
+            assert!(out_result.is_null());
+
+            let status = sudachi_lookup(handle, text.as_ptr(), ptr::null_mut());
+            assert_eq!(status, ERR_NULL_POINTER);
+            assert_eq!(status_code_name(status), "NULL_POINTER");
+        });
+    }
+
+    #[test]
+    fn get_lookup_result_layout_requires_output_pointer() {
+        let status = sudachi_get_lookup_result_layout(ptr::null_mut());
+
+        assert_eq!(status, ERR_NULL_POINTER);
+        assert_eq!(status_code_name(status), "NULL_POINTER");
+    }
+
+    #[test]
+    fn get_lookup_result_layout_returns_stable_offsets() {
+        let mut layout = MaybeUninit::<LookupResultLayout>::uninit();
+        let status = sudachi_get_lookup_result_layout(layout.as_mut_ptr());
+
+        assert_eq!(status, OK);
+        let layout = unsafe { layout.assume_init() };
+        assert_eq!(
+            layout.layout_version,
+            crate::result::LOOKUP_RESULT_LAYOUT_VERSION
+        );
+        assert!(layout.result_size > 0);
+    }
+
+    #[test]
+    fn lookup_returns_complete_match_dictionary_entries() {
+        with_test_tokenizer(|handle| {
+            let text = CString::new("東京都").unwrap();
+            let mut out_result = ptr::null_mut();
+            let status = sudachi_lookup(handle, text.as_ptr(), &mut out_result);
+
+            assert_eq!(status, OK, "{}", last_error_message());
+            let values = collect_lookup_values(out_result);
+            sudachi_free_lookup_result(out_result);
+
+            assert_eq!(
+                values,
+                vec![(
+                    "東京都".to_owned(),
+                    "名詞,固有名詞,地名,一般,*,*".to_owned(),
+                    "(0, 6)".to_owned(),
+                    0,
+                    0,
+                )]
+            );
+        });
+    }
+
+    #[test]
+    fn lookup_returns_empty_array_when_no_complete_match_exists() {
+        with_test_tokenizer(|handle| {
+            let text = CString::new("東京都に").unwrap();
+            let mut out_result = ptr::null_mut();
+            let status = sudachi_lookup(handle, text.as_ptr(), &mut out_result);
+
+            assert_eq!(status, OK, "{}", last_error_message());
+            let values = collect_lookup_values(out_result);
+            sudachi_free_lookup_result(out_result);
+
+            assert!(values.is_empty());
+        });
     }
 
     #[test]

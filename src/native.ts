@@ -7,9 +7,11 @@ import type { NativeLibraryLoadOptions, NativeSudachiErrorCode } from "./types.t
 import { SudachiError } from "./types.ts";
 
 const MORPHEME_RESULT_LAYOUT_FIELD_COUNT = 18;
+const LOOKUP_RESULT_LAYOUT_FIELD_COUNT = 10;
 const SENTENCE_SPAN_RESULT_LAYOUT_FIELD_COUNT = 7;
 
 export const MORPHEME_RESULT_LAYOUT_VERSION = 1;
+export const LOOKUP_RESULT_LAYOUT_VERSION = 1;
 export const SENTENCE_SPAN_RESULT_LAYOUT_VERSION = 1;
 
 export interface MorphemeResultLayout {
@@ -41,6 +43,19 @@ export interface SentenceSpanResultLayout {
   resultSize: number;
   startOffset: number;
   endOffset: number;
+}
+
+export interface LookupResultLayout {
+  layoutVersion: number;
+  arrayLayoutKind: number;
+  arrayItemsOffset: number;
+  arrayLenOffset: number;
+  resultSize: number;
+  surfaceOffset: number;
+  posOffset: number;
+  wordIdOffset: number;
+  dictionaryIdOffset: number;
+  isOovOffset: number;
 }
 
 export interface NativeSudachiLibrary {
@@ -81,6 +96,21 @@ export interface NativeSudachiLibrary {
   close(): void;
 }
 
+export interface NativeLookupLibrary {
+  symbols: {
+    sudachi_lookup: (
+      handle: Pointer | NodeJS.TypedArray | null,
+      surface: string,
+      outResult: NodeJS.TypedArray | Pointer | null,
+    ) => number;
+    sudachi_free_lookup_result: (result: Pointer | NodeJS.TypedArray | null) => void;
+    sudachi_get_lookup_result_layout: (outLayout: NodeJS.TypedArray | Pointer | null) => number;
+    sudachi_get_last_error: () => CString;
+    sudachi_status_code_name: (status: number) => CString;
+  };
+  close(): void;
+}
+
 export interface NativeSentenceSplitterLibrary {
   symbols: {
     sudachi_create_sentence_splitter: (
@@ -108,7 +138,7 @@ interface CommonNativeSymbols {
   sudachi_status_code_name: (status: number) => CString;
 }
 
-type NativeErrorLibrary = NativeSudachiLibrary | NativeSentenceSplitterLibrary;
+type NativeErrorLibrary = NativeLookupLibrary | NativeSudachiLibrary | NativeSentenceSplitterLibrary;
 
 interface NativeSymbols extends CommonNativeSymbols {
   sudachi_create_tokenizer: (
@@ -158,6 +188,16 @@ interface NativeSentenceSplitterSymbols extends CommonNativeSymbols {
   ) => number;
   sudachi_free_sentence_spans: (result: Pointer | NodeJS.TypedArray | null) => void;
   sudachi_get_sentence_span_layout: (outLayout: NodeJS.TypedArray | Pointer | null) => number;
+}
+
+interface NativeLookupSymbols extends CommonNativeSymbols {
+  sudachi_lookup: (
+    handle: Pointer | NodeJS.TypedArray | null,
+    surface: string,
+    outResult: NodeJS.TypedArray | Pointer | null,
+  ) => number;
+  sudachi_free_lookup_result: (result: Pointer | NodeJS.TypedArray | null) => void;
+  sudachi_get_lookup_result_layout: (outLayout: NodeJS.TypedArray | Pointer | null) => number;
 }
 
 const MODULE_DIR = dirname(fileURLToPath(import.meta.url));
@@ -246,6 +286,16 @@ function validateSentenceSpanResultLayout(layout: SentenceSpanResultLayout): voi
   );
 }
 
+function validateLookupResultLayout(layout: LookupResultLayout): void {
+  validateArrayLayout(
+    layout.layoutVersion,
+    LOOKUP_RESULT_LAYOUT_VERSION,
+    layout.resultSize,
+    layout.arrayLayoutKind,
+    "lookup result layout",
+  );
+}
+
 const COMMON_NATIVE_SYMBOL_DEFS = {
   sudachi_get_last_error: {
     args: [],
@@ -313,6 +363,22 @@ const SENTENCE_SPLITTER_NATIVE_SYMBOL_DEFS = {
   },
 } as const;
 
+const LOOKUP_NATIVE_SYMBOL_DEFS = {
+  ...COMMON_NATIVE_SYMBOL_DEFS,
+  sudachi_lookup: {
+    args: ["ptr", "cstring", "ptr"],
+    returns: "i32",
+  },
+  sudachi_free_lookup_result: {
+    args: ["ptr"],
+    returns: "void",
+  },
+  sudachi_get_lookup_result_layout: {
+    args: ["ptr"],
+    returns: "i32",
+  },
+} as const;
+
 type NativeLibraryLoader = (
   libraryPath: string,
   symbolDefinitions: typeof TOKENIZER_NATIVE_SYMBOL_DEFS,
@@ -329,6 +395,14 @@ type NativeSentenceSplitterLibraryLoader = (
   close(): void;
 };
 
+type NativeLookupLibraryLoader = (
+  libraryPath: string,
+  symbolDefinitions: typeof LOOKUP_NATIVE_SYMBOL_DEFS,
+) => {
+  symbols: NativeLookupSymbols;
+  close(): void;
+};
+
 function createNativeSudachiLibrary(symbols: NativeSymbols, close: () => void): NativeSudachiLibrary {
   return {
     symbols: {
@@ -339,6 +413,19 @@ function createNativeSudachiLibrary(symbols: NativeSymbols, close: () => void): 
       sudachi_split_morphemes: symbols.sudachi_split_morphemes,
       sudachi_free_result: symbols.sudachi_free_result,
       sudachi_get_morpheme_result_layout: symbols.sudachi_get_morpheme_result_layout,
+      sudachi_get_last_error: symbols.sudachi_get_last_error,
+      sudachi_status_code_name: symbols.sudachi_status_code_name,
+    },
+    close,
+  };
+}
+
+function createNativeLookupLibrary(symbols: NativeLookupSymbols, close: () => void): NativeLookupLibrary {
+  return {
+    symbols: {
+      sudachi_lookup: symbols.sudachi_lookup,
+      sudachi_free_lookup_result: symbols.sudachi_free_lookup_result,
+      sudachi_get_lookup_result_layout: symbols.sudachi_get_lookup_result_layout,
       sudachi_get_last_error: symbols.sudachi_get_last_error,
       sudachi_status_code_name: symbols.sudachi_status_code_name,
     },
@@ -372,6 +459,19 @@ export function loadNativeLibrary(
   const loaded = openLibrary(libraryPath, TOKENIZER_NATIVE_SYMBOL_DEFS) as { symbols: NativeSymbols; close(): void };
 
   return createNativeSudachiLibrary(loaded.symbols, () => loaded.close());
+}
+
+export function loadLookupLibrary(
+  options: NativeLibraryLoadOptions = {},
+  openLibrary: NativeLookupLibraryLoader = dlopen as unknown as NativeLookupLibraryLoader,
+): NativeLookupLibrary {
+  const libraryPath = loadNativeLibraryPath(options.libraryPath);
+  const loaded = openLibrary(libraryPath, LOOKUP_NATIVE_SYMBOL_DEFS) as {
+    symbols: NativeLookupSymbols;
+    close(): void;
+  };
+
+  return createNativeLookupLibrary(loaded.symbols, () => loaded.close());
 }
 
 export function loadSentenceSplitterLibrary(
@@ -410,6 +510,7 @@ export function readNativeStatusCodeName(
       case "CONFIG":
       case "TOKENIZE":
       case "SPLIT":
+      case "LOOKUP":
       case "MORPHEME_SPLIT":
       case "SENTENCE_SPLIT":
       case "INTERNAL":
@@ -463,6 +564,31 @@ export function readMorphemeResultLayout(library: NativeSudachiLibrary): Morphem
   } satisfies MorphemeResultLayout;
 
   validateMorphemeResultLayout(layout);
+  return layout;
+}
+
+export function readLookupResultLayout(library: NativeLookupLibrary): LookupResultLayout {
+  const outLayout = new BigUint64Array(LOOKUP_RESULT_LAYOUT_FIELD_COUNT);
+  const status = library.symbols.sudachi_get_lookup_result_layout(outLayout);
+  if (status !== 0) {
+    throw createNativeSudachiError(library, status, "Failed to read the lookup result layout.");
+  }
+
+  const values = Array.from(outLayout, (value) => Number(value));
+  const layout = {
+    layoutVersion: values[0] ?? 0,
+    arrayLayoutKind: values[1] ?? 0,
+    arrayItemsOffset: values[2] ?? 0,
+    arrayLenOffset: values[3] ?? 0,
+    resultSize: values[4] ?? 0,
+    surfaceOffset: values[5] ?? 0,
+    posOffset: values[6] ?? 0,
+    wordIdOffset: values[7] ?? 0,
+    dictionaryIdOffset: values[8] ?? 0,
+    isOovOffset: values[9] ?? 0,
+  } satisfies LookupResultLayout;
+
+  validateLookupResultLayout(layout);
   return layout;
 }
 

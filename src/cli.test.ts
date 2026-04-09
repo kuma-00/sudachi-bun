@@ -55,14 +55,28 @@ const SAMPLE_MORPHEMES = [
 
 function createFakeTokenizer() {
   const tokenizeCalls: Array<{ text: string; mode: string }> = [];
+  const lookupCalls: string[] = [];
 
   return {
     lastTokenizeArgs: () => tokenizeCalls[tokenizeCalls.length - 1],
+    lookupCalls: () => [...lookupCalls],
     tokenizeCalls: () => [...tokenizeCalls],
     tokenizer: {
       tokenize(text: string, mode: string) {
         tokenizeCalls.push({ text, mode });
         return SAMPLE_MORPHEMES as unknown as ReturnType<Tokenizer["tokenize"]>;
+      },
+      lookup(text: string) {
+        lookupCalls.push(text);
+        return [
+          {
+            surface: text,
+            pos: "名詞,普通名詞,一般,*,*,*",
+            wordId: "(0, 1)",
+            dictionaryId: 0,
+            isOov: false,
+          },
+        ] as ReturnType<Tokenizer["lookup"]>;
       },
       close() {},
     },
@@ -172,15 +186,16 @@ test("runCli rejects unknown subcommand typos", async () => {
 test("runCli handles sentence splitting and byte offsets", async () => {
   const { io, logs, errors } = createCapturedIo();
   const tokenizeCalls: Array<{ text: string; mode: string }> = [];
+  const splitterTarget = {
+    split(_text: string) {
+      return [
+        { text: "😀。", start: 0, end: 7 },
+        { text: "B？", start: 7, end: 11 },
+      ];
+    },
+  };
   const fakeSplitter = {
-    split: spyOn({
-      split(_text: string) {
-        return [
-          { text: "😀。", start: 0, end: 7 },
-          { text: "B？", start: 7, end: 11 },
-        ];
-      },
-    }, "split"),
+    split: spyOn(splitterTarget, "split"),
     close() {},
   };
   const createSpy = spyOn(SentenceSplitter, "create").mockReturnValue(fakeSplitter as never);
@@ -245,6 +260,59 @@ test("runCli tokenizes positional file input", async () => {
     expect(errors).toEqual([]);
     expect(fakeTokenizer.lastTokenizeArgs()).toEqual({ text: "file input", mode: "C" });
     expect(logs[0]).toBe(JSON.stringify(SAMPLE_MORPHEMES, null, 2));
+  } finally {
+    loadSpy.mockRestore();
+  }
+});
+
+test("runCli emits lookup debug output via stderr", async () => {
+  const { io, logs, errors } = createCapturedIo();
+  const fakeTokenizer = createFakeTokenizer();
+  const loadSpy = spyOn(Tokenizer, "load").mockImplementation(() => fakeTokenizer.tokenizer as never);
+
+  try {
+    const exitCode = await runCliMaybeAsync(
+      ["tokenize", "--dict-path", "/tmp/dict", "--debug", "--text", "東京"],
+      {},
+      io,
+    );
+
+    expect(exitCode).toBe(0);
+    expect(logs[0]).toBe(JSON.stringify(SAMPLE_MORPHEMES, null, 2));
+    expect(fakeTokenizer.lookupCalls()).toEqual(["東京"]);
+    expect(errors).toContain(
+      "[debug] lookup=[{\"surface\":\"東京\",\"pos\":\"名詞,普通名詞,一般,*,*,*\",\"wordId\":\"(0, 1)\",\"dictionaryId\":0,\"isOov\":false}]",
+    );
+  } finally {
+    loadSpy.mockRestore();
+  }
+});
+
+test("runCli keeps debug tokenize working when lookup is unavailable", async () => {
+  const { io, logs, errors } = createCapturedIo();
+  const loadSpy = spyOn(Tokenizer, "load").mockImplementation(
+    () =>
+      ({
+        tokenize() {
+          return SAMPLE_MORPHEMES as unknown as ReturnType<Tokenizer["tokenize"]>;
+        },
+        lookup() {
+          throw new Error("missing lookup symbols");
+        },
+        close() {},
+      }) as never,
+  );
+
+  try {
+    const exitCode = await runCliMaybeAsync(
+      ["tokenize", "--dict-path", "/tmp/dict", "--debug", "--text", "東京"],
+      {},
+      io,
+    );
+
+    expect(exitCode).toBe(0);
+    expect(logs[0]).toBe(JSON.stringify(SAMPLE_MORPHEMES, null, 2));
+    expect(errors).toContain("[debug] lookup-unavailable=missing lookup symbols");
   } finally {
     loadSpy.mockRestore();
   }
