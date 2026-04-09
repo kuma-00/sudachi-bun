@@ -2,7 +2,12 @@ import { CString, read, type Pointer } from "bun:ffi";
 
 import type { LookupEntry, Morpheme, SudachiErrorCode } from "./types.ts";
 import { SudachiError } from "./types.ts";
-import type { LookupResultLayout, MorphemeResultLayout, SentenceSpanResultLayout } from "./native.ts";
+import type {
+  LookupResultLayout,
+  MorphemeResultLayout,
+  PosMatcherResultLayout,
+  SentenceSpanResultLayout,
+} from "./native.ts";
 
 export interface SentenceSpanOffsets {
   start: number;
@@ -145,6 +150,7 @@ function readLookupEntry(itemPtr: Pointer, layout: LookupResultLayout): LookupEn
     surface: readCStringField(itemPtr, layout.surfaceOffset),
     pos: readCStringField(itemPtr, layout.posOffset),
     wordId: readCStringField(itemPtr, layout.wordIdOffset),
+    posId: readUnsigned16Field(itemPtr, layout.posIdOffset),
     dictionaryId: readNumberField(itemPtr, layout.dictionaryIdOffset),
     isOov: readBoolField(itemPtr, layout.isOovOffset),
   };
@@ -163,6 +169,24 @@ export function readLookupEntryArray(arrayPtr: Pointer, layout: LookupResultLayo
   const results = new Array<LookupEntry>(entries.length);
   for (const { entryBase, index } of entries) {
     results[index] = readLookupEntry(entryBase, layout);
+  }
+
+  return results;
+}
+
+export function readPosMatcherIdArray(arrayPtr: Pointer, layout: PosMatcherResultLayout): number[] {
+  const entries = readArrayEntries(
+    arrayPtr,
+    layout.arrayItemsOffset,
+    layout.arrayLenOffset,
+    layout.resultSize,
+    layout.arrayLayoutKind,
+    "POS matcher result layout",
+  );
+
+  const results = new Array<number>(entries.length);
+  for (const { entryBase, index } of entries) {
+    results[index] = readUnsigned16Field(entryBase, 0);
   }
 
   return results;

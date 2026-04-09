@@ -2,13 +2,16 @@ use std::mem::{offset_of, size_of};
 
 use super::{
     LookupResultArray, LookupResultItem, LookupResultLayout, MorphemeResult, MorphemeResultArray,
-    MorphemeResultLayout, SentenceSpan, SentenceSpanArray, SentenceSpanLayout,
+    MorphemeResultLayout, PosMatcherResultArray, PosMatcherResultLayout, SentenceSpan,
+    SentenceSpanArray, SentenceSpanLayout,
 };
 
 pub const MORPHEME_RESULT_ARRAY_LAYOUT_CONTIGUOUS: u64 = 0;
 pub const MORPHEME_RESULT_LAYOUT_VERSION: u64 = 1;
 pub const LOOKUP_RESULT_ARRAY_LAYOUT_CONTIGUOUS: u64 = 0;
-pub const LOOKUP_RESULT_LAYOUT_VERSION: u64 = 1;
+pub const LOOKUP_RESULT_LAYOUT_VERSION: u64 = 2;
+pub const POS_MATCHER_RESULT_ARRAY_LAYOUT_CONTIGUOUS: u64 = 0;
+pub const POS_MATCHER_RESULT_LAYOUT_VERSION: u64 = 1;
 pub const SENTENCE_SPAN_ARRAY_LAYOUT_CONTIGUOUS: u64 = 0;
 pub const SENTENCE_SPAN_LAYOUT_VERSION: u64 = 1;
 
@@ -62,8 +65,21 @@ impl LookupResultLayout {
             surface_offset: offset_of!(LookupResultItem, surface) as u64,
             pos_offset: offset_of!(LookupResultItem, pos) as u64,
             word_id_offset: offset_of!(LookupResultItem, word_id) as u64,
+            pos_id_offset: offset_of!(LookupResultItem, pos_id) as u64,
             dictionary_id_offset: offset_of!(LookupResultItem, dictionary_id) as u64,
             is_oov_offset: offset_of!(LookupResultItem, is_oov) as u64,
+        }
+    }
+}
+
+impl PosMatcherResultLayout {
+    pub const fn new() -> Self {
+        Self {
+            layout_version: POS_MATCHER_RESULT_LAYOUT_VERSION,
+            array_layout_kind: POS_MATCHER_RESULT_ARRAY_LAYOUT_CONTIGUOUS,
+            array_items_offset: offset_of!(PosMatcherResultArray, items) as u64,
+            array_len_offset: offset_of!(PosMatcherResultArray, len) as u64,
+            result_size: size_of::<u16>() as u64,
         }
     }
 }

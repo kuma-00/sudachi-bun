@@ -2,9 +2,15 @@ import { expect, spyOn, test } from "bun:test";
 
 import * as ffi from "./ffi.ts";
 import * as native from "./native.ts";
-import { Tokenizer, createTokenizer } from "./core.ts";
-import type { LookupEntry, Morpheme, TokenizeMode } from "./types.ts";
-import type { LookupResultLayout, MorphemeResultLayout, NativeLookupLibrary, NativeSudachiLibrary } from "./native.ts";
+import { PosMatcher, Tokenizer, createTokenizer } from "./core.ts";
+import type { LookupEntry, Morpheme } from "./types.ts";
+import type {
+  LookupResultLayout,
+  MorphemeResultLayout,
+  NativeLookupLibrary,
+  NativeSudachiLibrary,
+  PosMatcherResultLayout,
+} from "./native.ts";
 
 const MORPHEME_LAYOUT: MorphemeResultLayout = {
   layoutVersion: 1,
@@ -36,11 +42,20 @@ const LOOKUP_LAYOUT: LookupResultLayout = {
   surfaceOffset: 0,
   posOffset: 8,
   wordIdOffset: 16,
-  dictionaryIdOffset: 24,
-  isOovOffset: 28,
+  posIdOffset: 24,
+  dictionaryIdOffset: 28,
+  isOovOffset: 32,
 };
 
-function createMorpheme(surface: string, begin: number, end: number): Morpheme {
+const POS_MATCHER_LAYOUT: PosMatcherResultLayout = {
+  layoutVersion: 1,
+  arrayLayoutKind: 0,
+  arrayItemsOffset: 0,
+  arrayLenOffset: 8,
+  resultSize: 2,
+};
+
+function createMorpheme(surface: string, begin: number, end: number, posId = 0): Morpheme {
   return {
     surface,
     normalized: surface,
@@ -50,18 +65,19 @@ function createMorpheme(surface: string, begin: number, end: number): Morpheme {
     begin,
     end,
     wordId: `${surface}-${begin}`,
-    posId: 0,
+    posId,
     dictionaryId: 0,
     isOov: false,
     synonymGroupIds: [],
   };
 }
 
-function createLookupEntry(surface: string, wordId: string, dictionaryId: number, isOov: boolean): LookupEntry {
+function createLookupEntry(surface: string, wordId: string, dictionaryId: number, isOov: boolean, posId = 0): LookupEntry {
   return {
     surface,
     pos: "名詞,普通名詞,一般,*,*,*",
     wordId,
+    posId,
     dictionaryId,
     isOov,
   };
@@ -107,8 +123,14 @@ function createMockLibrary(): NativeSudachiLibrary {
         (outResult as BigUint64Array)[0] = 40n;
         return 0;
       },
+      sudachi_compile_pos_matcher: (_handle, _patternsJson, outResult) => {
+        (outResult as BigUint64Array)[0] = 60n;
+        return 0;
+      },
       sudachi_free_result: () => {},
+      sudachi_free_pos_matcher_result: () => {},
       sudachi_get_morpheme_result_layout: () => 0,
+      sudachi_get_pos_matcher_result_layout: () => 0,
       sudachi_get_last_error: () => "native error" as never,
       sudachi_status_code_name: () => "UNKNOWN" as never,
     },
@@ -139,10 +161,12 @@ function withTokenizer(
     tokenizer: Tokenizer;
     readSpy: ReturnType<typeof spyOn<typeof ffi, "readMorphemeArray">>;
     readLookupSpy: ReturnType<typeof spyOn<typeof ffi, "readLookupEntryArray">>;
+    readPosMatcherSpy: ReturnType<typeof spyOn<typeof ffi, "readPosMatcherIdArray">>;
     loadSpy: ReturnType<typeof spyOn<typeof native, "loadNativeLibrary">>;
     lookupLoadSpy: ReturnType<typeof spyOn<typeof native, "loadLookupLibrary">>;
     layoutSpy: ReturnType<typeof spyOn<typeof native, "readMorphemeResultLayout">>;
     lookupLayoutSpy: ReturnType<typeof spyOn<typeof native, "readLookupResultLayout">>;
+    posMatcherLayoutSpy: ReturnType<typeof spyOn<typeof native, "readPosMatcherResultLayout">>;
   }) => void,
 ): void {
   const library = createMockLibrary();
@@ -151,6 +175,7 @@ function withTokenizer(
   const lookupLoadSpy = spyOn(native, "loadLookupLibrary").mockReturnValue(lookupLibrary);
   const layoutSpy = spyOn(native, "readMorphemeResultLayout").mockReturnValue(MORPHEME_LAYOUT);
   const lookupLayoutSpy = spyOn(native, "readLookupResultLayout").mockReturnValue(LOOKUP_LAYOUT);
+  const posMatcherLayoutSpy = spyOn(native, "readPosMatcherResultLayout").mockReturnValue(POS_MATCHER_LAYOUT);
   const readSpy = spyOn(ffi, "readMorphemeArray").mockImplementation((resultPtr) => {
     switch (Number(resultPtr)) {
       case 2:
@@ -179,6 +204,14 @@ function withTokenizer(
         return [];
     }
   });
+  const readPosMatcherSpy = spyOn(ffi, "readPosMatcherIdArray").mockImplementation((resultPtr) => {
+    switch (Number(resultPtr)) {
+      case 60:
+        return [1, 3];
+      default:
+        return [];
+    }
+  });
   const tokenizer = createTokenizer({ dictPath: "/tmp/dict" });
 
   try {
@@ -188,15 +221,19 @@ function withTokenizer(
       tokenizer,
       readSpy,
       readLookupSpy,
+      readPosMatcherSpy,
       loadSpy,
       lookupLoadSpy,
       layoutSpy,
       lookupLayoutSpy,
+      posMatcherLayoutSpy,
     });
   } finally {
     tokenizer.close();
+    readPosMatcherSpy.mockRestore();
     readLookupSpy.mockRestore();
     lookupLayoutSpy.mockRestore();
+    posMatcherLayoutSpy.mockRestore();
     lookupLoadSpy.mockRestore();
     readSpy.mockRestore();
     layoutSpy.mockRestore();
@@ -222,6 +259,62 @@ test("lookup uses the dedicated native lookup symbol and decoder", () => {
     } finally {
       freeSpy.mockRestore();
       lookupSpy.mockRestore();
+    }
+  });
+});
+
+test("createPosMatcher compiles native POS matcher ids and filters morphemes and lookup entries", () => {
+  withTokenizer(({ library, tokenizer, readPosMatcherSpy }) => {
+    const compileSpy = spyOn(library.symbols, "sudachi_compile_pos_matcher");
+    const freeSpy = spyOn(library.symbols, "sudachi_free_pos_matcher_result");
+
+    try {
+      const matcher = tokenizer.createPosMatcher([["名詞"], [null, null, null, null, null, "終止形-一般"]]);
+      expect(matcher).toBeInstanceOf(PosMatcher);
+      expect(compileSpy).toHaveBeenCalledTimes(1);
+      expect(compileSpy).toHaveBeenCalledWith(
+        1 as never,
+        JSON.stringify([["名詞", null, null, null, null, null], [null, null, null, null, null, "終止形-一般"]]),
+        expect.any(BigUint64Array),
+      );
+      expect(readPosMatcherSpy).toHaveBeenCalledTimes(1);
+      expect(freeSpy).toHaveBeenCalledTimes(1);
+
+      const morphemes = [
+        createMorpheme("東京", 0, 6, 1),
+        createMorpheme("都", 6, 9, 2),
+        createMorpheme("に", 9, 12, 3),
+      ];
+      expect(matcher.matches(1)).toBe(true);
+      expect(matcher.matches(2)).toBe(false);
+      expect(matcher.filter(morphemes)).toEqual([morphemes[0], morphemes[2]]);
+
+      const lookupEntries = [
+        createLookupEntry("東京", "(0, 5)", 0, false, 1),
+        createLookupEntry("都", "(0, 6)", 0, false, 2),
+        createLookupEntry("に", "(0, 1)", 0, false, 3),
+      ];
+      expect(matcher.matches(lookupEntries[0]!)).toBe(true);
+      expect(matcher.matches(lookupEntries[1]!)).toBe(false);
+      expect(matcher.filter(lookupEntries)).toEqual([lookupEntries[0], lookupEntries[2]]);
+    } finally {
+      freeSpy.mockRestore();
+      compileSpy.mockRestore();
+    }
+  });
+});
+
+test("createPosMatcher rejects patterns longer than six entries before calling native code", () => {
+  withTokenizer(({ library, tokenizer }) => {
+    const compileSpy = spyOn(library.symbols, "sudachi_compile_pos_matcher");
+
+    try {
+      expect(() => tokenizer.createPosMatcher([["a", "b", "c", "d", "e", "f", "g"]])).toThrow(
+        "POS matcher patterns must have at most 6 items.",
+      );
+      expect(compileSpy).not.toHaveBeenCalled();
+    } finally {
+      compileSpy.mockRestore();
     }
   });
 });

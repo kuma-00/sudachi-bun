@@ -10,7 +10,9 @@ import {
   type LookupResultLayout,
   type NativeLookupLibrary,
   type MorphemeResultLayout,
+  type PosMatcherResultLayout,
   type NativeSudachiLibrary,
+  readPosMatcherResultLayout,
 } from "../native.ts";
 import { SudachiError, type TokenizerOptions } from "../types.ts";
 
@@ -48,6 +50,7 @@ export class TokenizerSessionManager {
   #handle: Pointer | null;
   #lookupLibrary: NativeLookupLibrary | null;
   #lookupLayout: LookupResultLayout | null;
+  #posMatcherLayout: PosMatcherResultLayout | null;
   #loadOptions: TokenizerOptions;
 
   constructor(options: TokenizerOptions) {
@@ -58,6 +61,7 @@ export class TokenizerSessionManager {
     this.#handle = session.handle;
     this.#lookupLibrary = null;
     this.#lookupLayout = null;
+    this.#posMatcherLayout = null;
     this.#loadOptions = { ...options };
   }
 
@@ -100,6 +104,18 @@ export class TokenizerSessionManager {
     }
   }
 
+  getPosMatcherLayout(): PosMatcherResultLayout {
+    this.getOpenSession();
+
+    if (this.#posMatcherLayout !== null) {
+      return this.#posMatcherLayout;
+    }
+
+    const layout = readPosMatcherResultLayout(this.getOpenSession().library);
+    this.#posMatcherLayout = layout;
+    return layout;
+  }
+
   close(): void {
     if (this.#library === null) {
       return;
@@ -111,6 +127,7 @@ export class TokenizerSessionManager {
     }
 
     this.#lookupLayout = null;
+    this.#posMatcherLayout = null;
 
     if (this.#handle !== null) {
       this.#library.symbols.sudachi_free_tokenizer(this.#handle);

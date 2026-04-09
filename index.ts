@@ -1,4 +1,4 @@
-export { createTokenizer } from "./src/core.ts";
+export { PosMatcher, createTokenizer } from "./src/core.ts";
 export { createSentenceSplitter } from "./src/sentence-splitter.ts";
 import { main as runMain } from "./src/cli.ts";
 
@@ -10,6 +10,8 @@ export { formatSudachiError, SudachiError, TOKENIZE_MODES } from "./src/types.ts
 export type {
   LookupEntry,
   Morpheme,
+  PosMatcherPattern,
+  PosMatcherPatterns,
   NativeSudachiErrorCode,
   NativeLibraryLoadOptions,
   SentenceSpan,

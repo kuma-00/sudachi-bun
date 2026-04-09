@@ -1,7 +1,7 @@
-import { readLookupEntryArray, readMorphemeArray } from "../ffi.ts";
+import { readLookupEntryArray, readMorphemeArray, readPosMatcherIdArray } from "../ffi.ts";
 import { createNativeSudachiError, type MorphemeResultLayout } from "../native.ts";
 import { readOwnedNativeResult } from "../native-session.ts";
-import { SudachiError, type LookupEntry, type Morpheme, type TokenizeMode } from "../types.ts";
+import { SudachiError, type LookupEntry, type Morpheme, type PosMatcherPatterns, type TokenizeMode } from "../types.ts";
 import { type MorphemeStateTracker } from "./morpheme-state.ts";
 import { type NativeTokenizerSession, type TokenizerSessionManager } from "./session.ts";
 
@@ -15,6 +15,37 @@ interface TokenizerExecutionContext {
   owner: object;
   session: TokenizerSessionManager;
   state: MorphemeStateTracker;
+}
+
+function normalizePosPattern(pattern: readonly (string | null | undefined)[]): (string | null)[] {
+  if (pattern.length > 6) {
+    throw new SudachiError("POS matcher patterns must have at most 6 items.", {
+      code: "INVALID_ARGUMENT",
+    });
+  }
+
+  const normalized = new Array<string | null>(6).fill(null);
+  for (let index = 0; index < pattern.length; index += 1) {
+    const value = pattern[index];
+    if (value === undefined || value === null) {
+      continue;
+    }
+
+    if (typeof value !== "string") {
+      throw new SudachiError("POS matcher patterns must contain only strings or null.", {
+        code: "INVALID_ARGUMENT",
+      });
+    }
+
+    normalized[index] = value;
+  }
+
+  return normalized;
+}
+
+function normalizePosPatterns(patterns: PosMatcherPatterns): string {
+  const normalized = patterns.map((pattern) => normalizePosPattern(pattern));
+  return JSON.stringify(normalized);
 }
 
 function tokenizeFromSession(
@@ -116,6 +147,23 @@ export function lookupEntries(context: TokenizerExecutionContext, surface: strin
     "Lookup returned a null result pointer.",
     (resultPtr) => library.symbols.sudachi_free_lookup_result(resultPtr),
     (resultPtr) => readLookupEntryArray(resultPtr, layout),
+  );
+}
+
+export function compilePosMatcher(context: TokenizerExecutionContext, patterns: PosMatcherPatterns): number[] {
+  const { library, handle } = context.session.getOpenSession();
+  const layout = context.session.getPosMatcherLayout();
+  const resultOut = new BigUint64Array(1);
+  const status = library.symbols.sudachi_compile_pos_matcher(handle, normalizePosPatterns(patterns), resultOut);
+  if (status !== 0) {
+    throw createNativeSudachiError(library, status, "POS matcher compilation failed.");
+  }
+
+  return readOwnedNativeResult(
+    resultOut,
+    "POS matcher returned a null result pointer.",
+    (resultPtr) => library.symbols.sudachi_free_pos_matcher_result(resultPtr),
+    (resultPtr) => readPosMatcherIdArray(resultPtr, layout),
   );
 }
 

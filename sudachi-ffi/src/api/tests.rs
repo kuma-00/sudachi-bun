@@ -1,13 +1,17 @@
 use super::*;
 use crate::error::{ERR_INVALID_INDEX, ERR_NULL_POINTER, OK, status_code_name};
 use crate::result::{
-    LookupResultArray, LookupResultLayout, MorphemeResultArray, SentenceSpanLayout,
+    LookupResultArray, LookupResultLayout, MorphemeResultArray, PosMatcherResultArray,
+    SentenceSpanLayout,
 };
 use std::env;
 use std::ffi::{CStr, CString};
 use std::mem::MaybeUninit;
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::{fs, ptr};
+
+static TOKENIZER_TEST_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 fn find_sudachi_checkout_dir() -> PathBuf {
     let cargo_home = env::var_os("CARGO_HOME")
@@ -61,11 +65,12 @@ fn with_test_tokenizer<T>(f: impl FnOnce(*mut TokenizerHandle) -> T) -> T {
     let resource_root = checkout_dir.join("resources");
     let dict_path = test_resources.join("system.dic.test");
     let config_path = env::temp_dir().join(format!(
-        "sudachi-ffi-test-{}.json",
+        "sudachi-ffi-test-{}-{}.json",
         std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
-            .as_nanos()
+            .as_nanos(),
+        TOKENIZER_TEST_COUNTER.fetch_add(1, Ordering::Relaxed)
     ));
     let config_json = format!(
         concat!(
@@ -134,7 +139,9 @@ fn collect_surfaces_and_offsets(result: *mut MorphemeResultArray) -> Vec<(String
     }
 }
 
-fn collect_lookup_values(result: *mut LookupResultArray) -> Vec<(String, String, String, i32, u8)> {
+fn collect_lookup_values(
+    result: *mut LookupResultArray,
+) -> Vec<(String, String, String, i32, u8, u16)> {
     assert!(!result.is_null());
 
     unsafe {
@@ -149,9 +156,22 @@ fn collect_lookup_values(result: *mut LookupResultArray) -> Vec<(String, String,
                 let surface = CStr::from_ptr(item.surface).to_str().unwrap().to_owned();
                 let pos = CStr::from_ptr(item.pos).to_str().unwrap().to_owned();
                 let word_id = CStr::from_ptr(item.word_id).to_str().unwrap().to_owned();
-                (surface, pos, word_id, item.dictionary_id, item.is_oov)
+                (surface, pos, word_id, item.dictionary_id, item.is_oov, item.pos_id)
             })
             .collect()
+    }
+}
+
+fn collect_pos_matcher_ids(result: *mut PosMatcherResultArray) -> Vec<u16> {
+    assert!(!result.is_null());
+
+    unsafe {
+        let array = &*result;
+        if array.len == 0 {
+            return Vec::new();
+        }
+        let items = std::slice::from_raw_parts(array.items, array.len);
+        items.to_vec()
     }
 }
 
@@ -250,6 +270,7 @@ fn get_lookup_result_layout_returns_stable_offsets() {
         crate::result::LOOKUP_RESULT_LAYOUT_VERSION
     );
     assert!(layout.result_size > 0);
+    assert!(layout.pos_id_offset > 0);
 }
 
 #[test]
@@ -271,6 +292,7 @@ fn lookup_returns_complete_match_dictionary_entries() {
                 "(0, 6)".to_owned(),
                 0,
                 0,
+                3,
             )]
         );
     });
@@ -288,6 +310,93 @@ fn lookup_returns_empty_array_when_no_complete_match_exists() {
         sudachi_free_lookup_result(out_result);
 
         assert!(values.is_empty());
+    });
+}
+
+#[test]
+fn compile_pos_matcher_returns_exact_pos_ids() {
+    with_test_tokenizer(|handle| {
+        let mut lookup_result = ptr::null_mut();
+        let text = CString::new("東京都").unwrap();
+        let status = sudachi_lookup(handle, text.as_ptr(), &mut lookup_result);
+        assert_eq!(status, OK, "{}", last_error_message());
+        let lookup_values = collect_lookup_values(lookup_result);
+        sudachi_free_lookup_result(lookup_result);
+
+        let exact_pos = &lookup_values[0].1;
+        let exact_pattern = format!("[[{}]]", {
+            exact_pos
+                .split(',')
+                .map(|part| format!("{part:?}"))
+                .collect::<Vec<_>>()
+                .join(",")
+        });
+
+        let mut out_result = ptr::null_mut();
+        let pattern = CString::new(exact_pattern).unwrap();
+        let status = sudachi_compile_pos_matcher(handle, pattern.as_ptr(), &mut out_result);
+        assert_eq!(status, OK, "{}", last_error_message());
+
+        let ids = collect_pos_matcher_ids(out_result);
+        sudachi_free_pos_matcher_result(out_result);
+
+        assert!(ids.contains(&lookup_values[0].5));
+        assert_eq!(ids.len(), 1);
+    });
+}
+
+#[test]
+fn compile_pos_matcher_supports_wildcards() {
+    with_test_tokenizer(|handle| {
+        let text = CString::new("東京都").unwrap();
+        let mut lookup_result = ptr::null_mut();
+        let status = sudachi_lookup(handle, text.as_ptr(), &mut lookup_result);
+        assert_eq!(status, OK, "{}", last_error_message());
+        sudachi_free_lookup_result(lookup_result);
+
+        let pattern = CString::new(r#"[["名詞", null, null, null, null, null]]"#).unwrap();
+        let mut out_result = ptr::null_mut();
+        let status = sudachi_compile_pos_matcher(handle, pattern.as_ptr(), &mut out_result);
+        assert_eq!(status, OK, "{}", last_error_message());
+
+        let ids = collect_pos_matcher_ids(out_result);
+        sudachi_free_pos_matcher_result(out_result);
+
+        assert_eq!(ids, vec![3, 4, 7]);
+    });
+}
+
+#[test]
+fn compile_pos_matcher_rejects_invalid_pattern() {
+    with_test_tokenizer(|handle| {
+        let pattern = CString::new(r#"[["名詞", null, null, null, null, null, null]]"#).unwrap();
+        let mut out_result = ptr::null_mut();
+        let status = sudachi_compile_pos_matcher(handle, pattern.as_ptr(), &mut out_result);
+
+        assert_eq!(status, crate::error::ERR_INTERNAL);
+        assert_eq!(status_code_name(status), "INTERNAL");
+        assert!(out_result.is_null());
+        assert_eq!(
+            last_error_message(),
+            "invalid POS matcher pattern: patterns must not exceed 6 fields"
+        );
+    });
+}
+
+#[test]
+fn compile_pos_matcher_rejects_raw_control_char_in_json_string() {
+    with_test_tokenizer(|handle| {
+        let pattern = CString::new("[[\"名詞\n\", null, null, null, null, null]]").unwrap();
+        let mut out_result = ptr::null_mut();
+        let status = sudachi_compile_pos_matcher(handle, pattern.as_ptr(), &mut out_result);
+
+        assert_eq!(status, crate::error::ERR_INTERNAL);
+        assert_eq!(status_code_name(status), "INTERNAL");
+        assert!(out_result.is_null());
+        assert_eq!(
+            last_error_message(),
+            "invalid POS matcher pattern: unescaped control character in string"
+        );
     });
 }
 

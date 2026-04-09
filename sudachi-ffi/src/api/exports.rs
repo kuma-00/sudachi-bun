@@ -3,7 +3,7 @@ use std::os::raw::c_char;
 use super::ops;
 use crate::result::{
     LookupResultArray, LookupResultLayout, MorphemeResultArray, MorphemeResultLayout,
-    SentenceSpanArray, SentenceSpanLayout,
+    PosMatcherResultArray, PosMatcherResultLayout, SentenceSpanArray, SentenceSpanLayout,
 };
 
 #[unsafe(no_mangle)]
@@ -69,6 +69,15 @@ pub extern "C" fn sudachi_lookup(
 }
 
 #[unsafe(no_mangle)]
+pub extern "C" fn sudachi_compile_pos_matcher(
+    handle: *const ops::TokenizerHandle,
+    patterns_json: *const c_char,
+    out_result: *mut *mut PosMatcherResultArray,
+) -> i32 {
+    ops::compile_pos_matcher_impl(handle, patterns_json, out_result)
+}
+
+#[unsafe(no_mangle)]
 pub extern "C" fn sudachi_split_morpheme(
     handle: *mut ops::TokenizerHandle,
     input_utf8: *const c_char,
@@ -118,6 +127,11 @@ pub extern "C" fn sudachi_free_lookup_result(result: *mut LookupResultArray) {
 }
 
 #[unsafe(no_mangle)]
+pub extern "C" fn sudachi_free_pos_matcher_result(result: *mut PosMatcherResultArray) {
+    crate::result::free_pos_matcher_result_array(result);
+}
+
+#[unsafe(no_mangle)]
 pub extern "C" fn sudachi_free_sentence_spans(result: *mut SentenceSpanArray) {
     crate::result::free_sentence_span_array(result);
 }
@@ -130,6 +144,13 @@ pub extern "C" fn sudachi_get_morpheme_result_layout(out_layout: *mut MorphemeRe
 #[unsafe(no_mangle)]
 pub extern "C" fn sudachi_get_lookup_result_layout(out_layout: *mut LookupResultLayout) -> i32 {
     ops::get_lookup_result_layout_impl(out_layout)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn sudachi_get_pos_matcher_result_layout(
+    out_layout: *mut PosMatcherResultLayout,
+) -> i32 {
+    ops::get_pos_matcher_result_layout_impl(out_layout)
 }
 
 #[unsafe(no_mangle)]

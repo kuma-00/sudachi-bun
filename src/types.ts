@@ -40,9 +40,14 @@ export interface LookupEntry {
   surface: string;
   pos: string;
   wordId: string;
+  posId?: number;
   dictionaryId: number;
   isOov: boolean;
 }
+
+export type PosMatcherPatternItem = string | null | undefined;
+export type PosMatcherPattern = readonly PosMatcherPatternItem[];
+export type PosMatcherPatterns = readonly PosMatcherPattern[];
 
 export type NativeSudachiErrorCode =
   | "OK"

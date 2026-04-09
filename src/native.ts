@@ -7,11 +7,13 @@ import type { NativeLibraryLoadOptions, NativeSudachiErrorCode } from "./types.t
 import { SudachiError } from "./types.ts";
 
 const MORPHEME_RESULT_LAYOUT_FIELD_COUNT = 18;
-const LOOKUP_RESULT_LAYOUT_FIELD_COUNT = 10;
+const LOOKUP_RESULT_LAYOUT_FIELD_COUNT = 11;
+const POS_MATCHER_RESULT_LAYOUT_FIELD_COUNT = 5;
 const SENTENCE_SPAN_RESULT_LAYOUT_FIELD_COUNT = 7;
 
 export const MORPHEME_RESULT_LAYOUT_VERSION = 1;
-export const LOOKUP_RESULT_LAYOUT_VERSION = 1;
+export const LOOKUP_RESULT_LAYOUT_VERSION = 2;
+export const POS_MATCHER_RESULT_LAYOUT_VERSION = 1;
 export const SENTENCE_SPAN_RESULT_LAYOUT_VERSION = 1;
 
 export interface MorphemeResultLayout {
@@ -54,8 +56,17 @@ export interface LookupResultLayout {
   surfaceOffset: number;
   posOffset: number;
   wordIdOffset: number;
+  posIdOffset: number;
   dictionaryIdOffset: number;
   isOovOffset: number;
+}
+
+export interface PosMatcherResultLayout {
+  layoutVersion: number;
+  arrayLayoutKind: number;
+  arrayItemsOffset: number;
+  arrayLenOffset: number;
+  resultSize: number;
 }
 
 export interface NativeSudachiLibrary {
@@ -88,8 +99,15 @@ export interface NativeSudachiLibrary {
       splitMode: number,
       outResult: NodeJS.TypedArray | Pointer | null,
     ) => number;
+    sudachi_compile_pos_matcher: (
+      handle: Pointer | NodeJS.TypedArray | null,
+      patternsJson: string,
+      outResult: NodeJS.TypedArray | Pointer | null,
+    ) => number;
     sudachi_free_result: (result: Pointer | NodeJS.TypedArray | null) => void;
+    sudachi_free_pos_matcher_result: (result: Pointer | NodeJS.TypedArray | null) => void;
     sudachi_get_morpheme_result_layout: (outLayout: NodeJS.TypedArray | Pointer | null) => number;
+    sudachi_get_pos_matcher_result_layout: (outLayout: NodeJS.TypedArray | Pointer | null) => number;
     sudachi_get_last_error: () => CString;
     sudachi_status_code_name: (status: number) => CString;
   };
@@ -169,8 +187,15 @@ interface NativeSymbols extends CommonNativeSymbols {
     splitMode: number,
     outResult: NodeJS.TypedArray | Pointer | null,
   ) => number;
+  sudachi_compile_pos_matcher: (
+    handle: Pointer | NodeJS.TypedArray | null,
+    patternsJson: string,
+    outResult: NodeJS.TypedArray | Pointer | null,
+  ) => number;
   sudachi_free_result: (result: Pointer | NodeJS.TypedArray | null) => void;
+  sudachi_free_pos_matcher_result: (result: Pointer | NodeJS.TypedArray | null) => void;
   sudachi_get_morpheme_result_layout: (outLayout: NodeJS.TypedArray | Pointer | null) => number;
+  sudachi_get_pos_matcher_result_layout: (outLayout: NodeJS.TypedArray | Pointer | null) => number;
 }
 
 interface NativeSentenceSplitterSymbols extends CommonNativeSymbols {
@@ -296,6 +321,16 @@ function validateLookupResultLayout(layout: LookupResultLayout): void {
   );
 }
 
+function validatePosMatcherResultLayout(layout: PosMatcherResultLayout): void {
+  validateArrayLayout(
+    layout.layoutVersion,
+    POS_MATCHER_RESULT_LAYOUT_VERSION,
+    layout.resultSize,
+    layout.arrayLayoutKind,
+    "POS matcher result layout",
+  );
+}
+
 function readResultLayout<TLayout>(
   library: NativeErrorLibrary,
   fieldCount: number,
@@ -348,11 +383,23 @@ const TOKENIZER_NATIVE_SYMBOL_DEFS = {
     args: ["ptr", "cstring", "i32", "i32", "ptr"],
     returns: "i32",
   },
+  sudachi_compile_pos_matcher: {
+    args: ["ptr", "cstring", "ptr"],
+    returns: "i32",
+  },
   sudachi_free_result: {
     args: ["ptr"],
     returns: "void",
   },
+  sudachi_free_pos_matcher_result: {
+    args: ["ptr"],
+    returns: "void",
+  },
   sudachi_get_morpheme_result_layout: {
+    args: ["ptr"],
+    returns: "i32",
+  },
+  sudachi_get_pos_matcher_result_layout: {
     args: ["ptr"],
     returns: "i32",
   },
@@ -430,8 +477,11 @@ function createNativeSudachiLibrary(symbols: NativeSymbols, close: () => void): 
       sudachi_tokenize: symbols.sudachi_tokenize,
       sudachi_split_morpheme: symbols.sudachi_split_morpheme,
       sudachi_split_morphemes: symbols.sudachi_split_morphemes,
+      sudachi_compile_pos_matcher: symbols.sudachi_compile_pos_matcher,
       sudachi_free_result: symbols.sudachi_free_result,
+      sudachi_free_pos_matcher_result: symbols.sudachi_free_pos_matcher_result,
       sudachi_get_morpheme_result_layout: symbols.sudachi_get_morpheme_result_layout,
+      sudachi_get_pos_matcher_result_layout: symbols.sudachi_get_pos_matcher_result_layout,
       sudachi_get_last_error: symbols.sudachi_get_last_error,
       sudachi_status_code_name: symbols.sudachi_status_code_name,
     },
@@ -600,10 +650,29 @@ export function readLookupResultLayout(library: NativeLookupLibrary): LookupResu
         surfaceOffset: values[5] ?? 0,
         posOffset: values[6] ?? 0,
         wordIdOffset: values[7] ?? 0,
-        dictionaryIdOffset: values[8] ?? 0,
-        isOovOffset: values[9] ?? 0,
+        posIdOffset: values[8] ?? 0,
+        dictionaryIdOffset: values[9] ?? 0,
+        isOovOffset: values[10] ?? 0,
       }) satisfies LookupResultLayout,
     validateLookupResultLayout,
+  );
+}
+
+export function readPosMatcherResultLayout(library: NativeSudachiLibrary): PosMatcherResultLayout {
+  return readResultLayout(
+    library,
+    POS_MATCHER_RESULT_LAYOUT_FIELD_COUNT,
+    library.symbols.sudachi_get_pos_matcher_result_layout,
+    "Failed to read the POS matcher result layout.",
+    (values) =>
+      ({
+        layoutVersion: values[0] ?? 0,
+        arrayLayoutKind: values[1] ?? 0,
+        arrayItemsOffset: values[2] ?? 0,
+        arrayLenOffset: values[3] ?? 0,
+        resultSize: values[4] ?? 0,
+      }) satisfies PosMatcherResultLayout,
+    validatePosMatcherResultLayout,
   );
 }
 

@@ -10,7 +10,8 @@ use crate::error::{ERR_INTERNAL, ERR_NULL_POINTER, error};
 
 use super::{
     LookupResultItem, LookupResultLayout, MorphemeResult, MorphemeResultArray,
-    MorphemeResultLayout, SentenceSpanArray, SentenceSpanLayout,
+    MorphemeResultLayout, PosMatcherResultArray, PosMatcherResultLayout, SentenceSpanArray,
+    SentenceSpanLayout,
 };
 
 pub(crate) fn boxed_slice_into_raw_parts<T>(mut boxed: Box<[T]>) -> (*mut T, usize) {
@@ -95,6 +96,10 @@ fn free_result_items<T>(items: *mut T, len: usize, mut free_item: impl FnMut(&mu
 }
 
 pub(crate) fn free_u32_slice(ptr: *mut u32, len: usize) {
+    free_boxed_slice(ptr, len);
+}
+
+pub(crate) fn free_u16_slice(ptr: *mut u16, len: usize) {
     free_boxed_slice(ptr, len);
 }
 
@@ -195,6 +200,7 @@ pub(crate) fn lookup_morpheme_to_result(
     result.value.word_id = clone_string(&format!("{:?}", morpheme.word_id()))?;
     result.value.dictionary_id = morpheme.dictionary_id();
     result.value.is_oov = u8::from(morpheme.is_oov());
+    result.value.pos_id = morpheme.part_of_speech_id();
     Ok(result.into_inner())
 }
 
@@ -226,6 +232,21 @@ pub(crate) fn free_lookup_result_array(result: *mut super::LookupResultArray) {
 
 pub(crate) fn lookup_result_layout() -> LookupResultLayout {
     LookupResultLayout::new()
+}
+
+pub(crate) fn pos_matcher_result_layout() -> PosMatcherResultLayout {
+    PosMatcherResultLayout::new()
+}
+
+pub(crate) fn free_pos_matcher_result_array(result: *mut PosMatcherResultArray) {
+    if result.is_null() {
+        return;
+    }
+
+    unsafe {
+        let boxed = Box::from_raw(result);
+        free_u16_slice(boxed.items, boxed.len);
+    }
 }
 
 pub(crate) fn free_sentence_span_array(result: *mut SentenceSpanArray) {

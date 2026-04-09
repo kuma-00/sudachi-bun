@@ -73,6 +73,7 @@ pub struct LookupResultItem {
     pub surface: *mut c_char,
     pub pos: *mut c_char,
     pub word_id: *mut c_char,
+    pub pos_id: u16,
     pub dictionary_id: i32,
     pub is_oov: u8,
 }
@@ -83,6 +84,7 @@ impl LookupResultItem {
             surface: ptr::null_mut(),
             pos: ptr::null_mut(),
             word_id: ptr::null_mut(),
+            pos_id: 0,
             dictionary_id: 0,
             is_oov: 0,
         }
@@ -97,6 +99,21 @@ impl LookupResultItem {
         self.pos = ptr::null_mut();
         self.word_id = ptr::null_mut();
     }
+}
+
+#[repr(C)]
+pub struct PosMatcherResultArray {
+    pub items: *mut u16,
+    pub len: usize,
+}
+
+#[repr(C)]
+pub struct PosMatcherResultLayout {
+    pub layout_version: u64,
+    pub array_layout_kind: u64,
+    pub array_items_offset: u64,
+    pub array_len_offset: u64,
+    pub result_size: u64,
 }
 
 #[repr(C)]
@@ -149,6 +166,7 @@ pub struct LookupResultLayout {
     pub surface_offset: u64,
     pub pos_offset: u64,
     pub word_id_offset: u64,
+    pub pos_id_offset: u64,
     pub dictionary_id_offset: u64,
     pub is_oov_offset: u64,
 }
@@ -168,13 +186,16 @@ pub struct SentenceSpanLayout {
 pub use layout::{
     LOOKUP_RESULT_ARRAY_LAYOUT_CONTIGUOUS, LOOKUP_RESULT_LAYOUT_VERSION,
     MORPHEME_RESULT_ARRAY_LAYOUT_CONTIGUOUS, MORPHEME_RESULT_LAYOUT_VERSION,
+    POS_MATCHER_RESULT_ARRAY_LAYOUT_CONTIGUOUS, POS_MATCHER_RESULT_LAYOUT_VERSION,
     SENTENCE_SPAN_ARRAY_LAYOUT_CONTIGUOUS, SENTENCE_SPAN_LAYOUT_VERSION,
 };
 
 #[allow(unused_imports)]
 pub(crate) use marshal::{
     boxed_slice_into_raw_parts, free_c_string, free_lookup_result_array,
-    free_partial_lookup_results, free_partial_results, free_result_array, free_sentence_span_array,
-    free_u32_slice, lookup_morpheme_to_result, lookup_result_layout, morpheme_result_layout,
-    morpheme_to_result, require_non_null, sentence_span_layout, write_box_ptr, write_ptr,
+    free_partial_lookup_results, free_partial_results, free_pos_matcher_result_array,
+    free_result_array, free_sentence_span_array, free_u32_slice, lookup_morpheme_to_result,
+    lookup_result_layout, morpheme_result_layout, morpheme_to_result,
+    pos_matcher_result_layout, require_non_null, sentence_span_layout, write_box_ptr,
+    write_ptr,
 };
