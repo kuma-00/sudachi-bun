@@ -116,3 +116,24 @@ test("split rejects invalid UTF-8 byte boundaries from native", () => {
     loadSpy.mockRestore();
   }
 });
+
+test("SentenceSplitter.create closes the native library when initialization fails", () => {
+  const library = createMockLibrary();
+  const loadSpy = spyOn(native, "loadSentenceSplitterLibrary").mockReturnValue(library);
+  const layoutSpy = spyOn(native, "readSentenceSpanResultLayout").mockReturnValue(SENTENCE_SPAN_LAYOUT);
+  const createSpy = spyOn(library.symbols, "sudachi_create_sentence_splitter").mockReturnValue(7);
+  const closeSpy = spyOn(library, "close");
+
+  try {
+    expect(() => SentenceSplitter.create({ dictPath: "/tmp/dict" })).toThrow(
+      "native error",
+    );
+    expect(closeSpy).toHaveBeenCalledTimes(1);
+    expect(createSpy).toHaveBeenCalledTimes(1);
+  } finally {
+    closeSpy.mockRestore();
+    createSpy.mockRestore();
+    layoutSpy.mockRestore();
+    loadSpy.mockRestore();
+  }
+});

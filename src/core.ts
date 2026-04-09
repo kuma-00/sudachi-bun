@@ -1,6 +1,7 @@
 import { type Pointer } from "bun:ffi";
 
 import { readLookupEntryArray, readMorphemeArray } from "./ffi.ts";
+import { openNativeHandleSession, readOwnedNativeResult } from "./native-session.ts";
 import {
   createNativeSudachiError,
   loadLookupLibrary,
@@ -38,10 +39,6 @@ type MorphemeListStateKind = "owned" | "split";
 const MORPHEME_LIST_STATE = new WeakMap<readonly Morpheme[], MorphemeListState>();
 const MORPHEME_STATE = new WeakMap<Morpheme, MorphemeState>();
 
-function toPointer(value: number | bigint): Pointer {
-  return Number(value) as Pointer;
-}
-
 interface NativeTokenizerSession {
   handle: Pointer;
   layout: MorphemeResultLayout;
@@ -55,38 +52,19 @@ interface NativeLookupSession {
 
 function openNativeTokenizer(options: TokenizerLoadOptions): NativeTokenizerSession {
   const library = loadNativeLibrary(options);
-
-  try {
-    const layout = readMorphemeResultLayout(library);
-    const handleOut = new BigUint64Array(1);
-    const status = library.symbols.sudachi_create_tokenizer(
-      options.configPath ?? null,
-      options.resourceDir ?? null,
-      options.dictPath,
-      handleOut,
-    );
-
-    if (status !== 0) {
-      throw createNativeSudachiError(library, status, "Failed to create the tokenizer.");
-    }
-
-    const handleValue = handleOut[0] ?? 0n;
-    if (handleValue === 0n) {
-      throw new SudachiError("Tokenizer handle was null after initialization.", {
-        code: "INTERNAL",
-        nativeStatus: 255,
-      });
-    }
-
-    return {
-      handle: toPointer(handleValue),
-      layout,
-      library,
-    };
-  } catch (error) {
-    library.close();
-    throw error;
-  }
+  return openNativeHandleSession(
+    library,
+    readMorphemeResultLayout,
+    (loadedLibrary, handleOut) =>
+      loadedLibrary.symbols.sudachi_create_tokenizer(
+        options.configPath ?? null,
+        options.resourceDir ?? null,
+        options.dictPath,
+        handleOut,
+      ),
+    (loadedLibrary, status) => createNativeSudachiError(loadedLibrary, status, "Failed to create the tokenizer."),
+    "Tokenizer handle was null after initialization.",
+  );
 }
 
 export class Tokenizer {
@@ -119,7 +97,7 @@ export class Tokenizer {
   }
 
   tokenize(text: string, mode: TokenizeMode = "C"): Morpheme[] {
-    const { library, handle } = this.#getOpenSession();
+    const { library, handle, layout } = this.#getOpenSession();
 
     const resultOut = new BigUint64Array(1);
     const status = library.symbols.sudachi_tokenize(handle, text, MODE_TO_NATIVE[mode], resultOut);
@@ -127,7 +105,12 @@ export class Tokenizer {
       throw createNativeSudachiError(library, status, "Tokenization failed.");
     }
 
-    return this.#readAndAttachFromOut(resultOut, "Tokenizer returned a null result pointer.", text, mode, "owned");
+    return readOwnedNativeResult(
+      resultOut,
+      "Tokenizer returned a null result pointer.",
+      (resultPtr) => library.symbols.sudachi_free_result(resultPtr),
+      (resultPtr) => this.#attachMorphemeState(readMorphemeArray(resultPtr, layout), text, mode, "owned"),
+    );
   }
 
   lookup(surface: string): LookupEntry[] {
@@ -140,24 +123,16 @@ export class Tokenizer {
       throw createNativeSudachiError(library, status, "Lookup failed.");
     }
 
-    const resultValue = resultOut[0] ?? 0n;
-    if (resultValue === 0n) {
-      throw new SudachiError("Lookup returned a null result pointer.", {
-        code: "INTERNAL",
-        nativeStatus: 255,
-      });
-    }
-
-    const resultPtr = toPointer(resultValue);
-    try {
-      return readLookupEntryArray(resultPtr, layout);
-    } finally {
-      library.symbols.sudachi_free_lookup_result(resultPtr);
-    }
+    return readOwnedNativeResult(
+      resultOut,
+      "Lookup returned a null result pointer.",
+      (resultPtr) => library.symbols.sudachi_free_lookup_result(resultPtr),
+      (resultPtr) => readLookupEntryArray(resultPtr, layout),
+    );
   }
 
   split(morpheme: Morpheme, mode: TokenizeMode = "C"): Morpheme[] {
-    const { library, handle } = this.#getOpenSession();
+    const { library, handle, layout } = this.#getOpenSession();
     const state = this.#getMorphemeState(morpheme);
     const index = this.#resolveSourceIndex(state, morpheme);
 
@@ -175,12 +150,11 @@ export class Tokenizer {
       throw createNativeSudachiError(library, status, "Morpheme split failed.");
     }
 
-    return this.#readAndAttachFromOut(
+    return readOwnedNativeResult(
       resultOut,
       "Tokenizer returned a null morpheme split pointer.",
-      state.listState.text,
-      mode,
-      "split",
+      (resultPtr) => library.symbols.sudachi_free_result(resultPtr),
+      (resultPtr) => this.#attachMorphemeState(readMorphemeArray(resultPtr, layout), state.listState.text, mode, "split"),
     );
   }
 
@@ -189,7 +163,7 @@ export class Tokenizer {
       return [];
     }
 
-    const { library, handle } = this.#getOpenSession();
+    const { library, handle, layout } = this.#getOpenSession();
     const listState = MORPHEME_LIST_STATE.get(morphemes);
 
     if (listState !== undefined && this.#canUseWholeListSplit(morphemes, listState)) {
@@ -212,12 +186,11 @@ export class Tokenizer {
         throw createNativeSudachiError(library, status, "Morpheme list split failed.");
       }
 
-      return this.#readAndAttachFromOut(
+      return readOwnedNativeResult(
         resultOut,
         "Tokenizer returned a null morpheme list split pointer.",
-        listState.text,
-        mode,
-        "owned",
+        (resultPtr) => library.symbols.sudachi_free_result(resultPtr),
+        (resultPtr) => this.#attachMorphemeState(readMorphemeArray(resultPtr, layout), listState.text, mode, "owned"),
       );
     }
 
@@ -286,31 +259,6 @@ export class Tokenizer {
     } catch (error) {
       library.close();
       throw error;
-    }
-  }
-
-  #readAndAttachFromOut(
-    resultOut: BigUint64Array,
-    nullMessage: string,
-    text: string,
-    mode: TokenizeMode,
-    kind: MorphemeListStateKind,
-  ): Morpheme[] {
-    const { library } = this.#getOpenSession();
-    const resultValue = resultOut[0] ?? 0n;
-    if (resultValue === 0n) {
-      throw new SudachiError(nullMessage, {
-        code: "INTERNAL",
-        nativeStatus: 255,
-      });
-    }
-
-    const resultPtr = toPointer(resultValue);
-    try {
-      const morphemes = readMorphemeArray(resultPtr, this.#getOpenSession().layout);
-      return this.#attachMorphemeState(morphemes, text, mode, kind);
-    } finally {
-      library.symbols.sudachi_free_result(resultPtr);
     }
   }
 

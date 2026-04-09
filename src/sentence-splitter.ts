@@ -1,6 +1,7 @@
 import { type Pointer } from "bun:ffi";
 
 import { readSentenceSpanArray, type SentenceSpanOffsets } from "./ffi.ts";
+import { openNativeHandleSession, readOwnedNativeResult } from "./native-session.ts";
 import {
   createNativeSudachiError,
   loadSentenceSplitterLibrary,
@@ -9,10 +10,6 @@ import {
   type SentenceSpanResultLayout,
 } from "./native.ts";
 import { SudachiError, type SentenceSpan, type SentenceSplitterLoadOptions } from "./types.ts";
-
-function toPointer(value: number | bigint): Pointer {
-  return Number(value) as Pointer;
-}
 
 function invalidSentenceSpan(message: string): never {
   throw new SudachiError(message, {
@@ -103,38 +100,20 @@ interface NativeSentenceSplitterSession {
 
 function openNativeSentenceSplitter(options: SentenceSplitterLoadOptions): NativeSentenceSplitterSession {
   const library = loadSentenceSplitterLibrary(options);
-
-  try {
-    const layout = readSentenceSpanResultLayout(library);
-    const handleOut = new BigUint64Array(1);
-    const status = library.symbols.sudachi_create_sentence_splitter(
-      options.configPath ?? null,
-      options.resourceDir ?? null,
-      options.dictPath,
-      handleOut,
-    );
-
-    if (status !== 0) {
-      throw createNativeSudachiError(library, status, "Failed to create the sentence splitter.");
-    }
-
-    const handleValue = handleOut[0] ?? 0n;
-    if (handleValue === 0n) {
-      throw new SudachiError("Sentence splitter handle was null after initialization.", {
-        code: "INTERNAL",
-        nativeStatus: 255,
-      });
-    }
-
-    return {
-      handle: toPointer(handleValue),
-      layout,
-      library,
-    };
-  } catch (error) {
-    library.close();
-    throw error;
-  }
+  return openNativeHandleSession(
+    library,
+    readSentenceSpanResultLayout,
+    (loadedLibrary, handleOut) =>
+      loadedLibrary.symbols.sudachi_create_sentence_splitter(
+        options.configPath ?? null,
+        options.resourceDir ?? null,
+        options.dictPath,
+        handleOut,
+      ),
+    (loadedLibrary, status) =>
+      createNativeSudachiError(loadedLibrary, status, "Failed to create the sentence splitter."),
+    "Sentence splitter handle was null after initialization.",
+  );
 }
 
 export class SentenceSplitter {
@@ -176,20 +155,12 @@ export class SentenceSplitter {
       throw createNativeSudachiError(library, status, "Sentence splitting failed.");
     }
 
-    const resultPtr = resultOut[0] ?? 0n;
-    if (resultPtr === 0n) {
-      throw new SudachiError("Sentence splitter returned a null result pointer.", {
-        code: "INTERNAL",
-        nativeStatus: 255,
-      });
-    }
-
-    const nativeResultPtr = toPointer(resultPtr);
-    try {
-      return materializeSentenceSpans(text, readSentenceSpanArray(nativeResultPtr, layout));
-    } finally {
-      library.symbols.sudachi_free_sentence_spans(nativeResultPtr);
-    }
+    return readOwnedNativeResult(
+      resultOut,
+      "Sentence splitter returned a null result pointer.",
+      (resultPtr) => library.symbols.sudachi_free_sentence_spans(resultPtr),
+      (resultPtr) => materializeSentenceSpans(text, readSentenceSpanArray(resultPtr, layout)),
+    );
   }
 
   close(): void {

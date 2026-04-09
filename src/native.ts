@@ -296,6 +296,25 @@ function validateLookupResultLayout(layout: LookupResultLayout): void {
   );
 }
 
+function readResultLayout<TLayout>(
+  library: NativeErrorLibrary,
+  fieldCount: number,
+  readLayout: (outLayout: BigUint64Array) => number,
+  fallbackMessage: string,
+  buildLayout: (values: readonly number[]) => TLayout,
+  validateLayout: (layout: TLayout) => void,
+): TLayout {
+  const outLayout = new BigUint64Array(fieldCount);
+  const status = readLayout(outLayout);
+  if (status !== 0) {
+    throw createNativeSudachiError(library, status, fallbackMessage);
+  }
+
+  const layout = buildLayout(Array.from(outLayout, (value) => Number(value)));
+  validateLayout(layout);
+  return layout;
+}
+
 const COMMON_NATIVE_SYMBOL_DEFS = {
   sudachi_get_last_error: {
     args: [],
@@ -535,81 +554,75 @@ export function createNativeSudachiError(
 }
 
 export function readMorphemeResultLayout(library: NativeSudachiLibrary): MorphemeResultLayout {
-  const outLayout = new BigUint64Array(MORPHEME_RESULT_LAYOUT_FIELD_COUNT);
-  const status = library.symbols.sudachi_get_morpheme_result_layout(outLayout);
-  if (status !== 0) {
-    throw createNativeSudachiError(library, status, "Failed to read the morpheme result layout.");
-  }
-
-  const values = Array.from(outLayout, (value) => Number(value));
-  const layout = {
-    layoutVersion: values[0] ?? 0,
-    arrayLayoutKind: values[1] ?? 0,
-    arrayItemsOffset: values[2] ?? 0,
-    arrayLenOffset: values[3] ?? 0,
-    resultSize: values[4] ?? 0,
-    surfaceOffset: values[5] ?? 0,
-    normalizedOffset: values[6] ?? 0,
-    dictionaryFormOffset: values[7] ?? 0,
-    readingOffset: values[8] ?? 0,
-    posOffset: values[9] ?? 0,
-    beginOffset: values[10] ?? 0,
-    endOffset: values[11] ?? 0,
-    wordIdOffset: values[12] ?? 0,
-    posIdOffset: values[13] ?? 0,
-    dictionaryIdOffset: values[14] ?? 0,
-    isOovOffset: values[15] ?? 0,
-    synonymGroupIdsOffset: values[16] ?? 0,
-    synonymGroupIdsLenOffset: values[17] ?? 0,
-  } satisfies MorphemeResultLayout;
-
-  validateMorphemeResultLayout(layout);
-  return layout;
+  return readResultLayout(
+    library,
+    MORPHEME_RESULT_LAYOUT_FIELD_COUNT,
+    library.symbols.sudachi_get_morpheme_result_layout,
+    "Failed to read the morpheme result layout.",
+    (values) =>
+      ({
+        layoutVersion: values[0] ?? 0,
+        arrayLayoutKind: values[1] ?? 0,
+        arrayItemsOffset: values[2] ?? 0,
+        arrayLenOffset: values[3] ?? 0,
+        resultSize: values[4] ?? 0,
+        surfaceOffset: values[5] ?? 0,
+        normalizedOffset: values[6] ?? 0,
+        dictionaryFormOffset: values[7] ?? 0,
+        readingOffset: values[8] ?? 0,
+        posOffset: values[9] ?? 0,
+        beginOffset: values[10] ?? 0,
+        endOffset: values[11] ?? 0,
+        wordIdOffset: values[12] ?? 0,
+        posIdOffset: values[13] ?? 0,
+        dictionaryIdOffset: values[14] ?? 0,
+        isOovOffset: values[15] ?? 0,
+        synonymGroupIdsOffset: values[16] ?? 0,
+        synonymGroupIdsLenOffset: values[17] ?? 0,
+      }) satisfies MorphemeResultLayout,
+    validateMorphemeResultLayout,
+  );
 }
 
 export function readLookupResultLayout(library: NativeLookupLibrary): LookupResultLayout {
-  const outLayout = new BigUint64Array(LOOKUP_RESULT_LAYOUT_FIELD_COUNT);
-  const status = library.symbols.sudachi_get_lookup_result_layout(outLayout);
-  if (status !== 0) {
-    throw createNativeSudachiError(library, status, "Failed to read the lookup result layout.");
-  }
-
-  const values = Array.from(outLayout, (value) => Number(value));
-  const layout = {
-    layoutVersion: values[0] ?? 0,
-    arrayLayoutKind: values[1] ?? 0,
-    arrayItemsOffset: values[2] ?? 0,
-    arrayLenOffset: values[3] ?? 0,
-    resultSize: values[4] ?? 0,
-    surfaceOffset: values[5] ?? 0,
-    posOffset: values[6] ?? 0,
-    wordIdOffset: values[7] ?? 0,
-    dictionaryIdOffset: values[8] ?? 0,
-    isOovOffset: values[9] ?? 0,
-  } satisfies LookupResultLayout;
-
-  validateLookupResultLayout(layout);
-  return layout;
+  return readResultLayout(
+    library,
+    LOOKUP_RESULT_LAYOUT_FIELD_COUNT,
+    library.symbols.sudachi_get_lookup_result_layout,
+    "Failed to read the lookup result layout.",
+    (values) =>
+      ({
+        layoutVersion: values[0] ?? 0,
+        arrayLayoutKind: values[1] ?? 0,
+        arrayItemsOffset: values[2] ?? 0,
+        arrayLenOffset: values[3] ?? 0,
+        resultSize: values[4] ?? 0,
+        surfaceOffset: values[5] ?? 0,
+        posOffset: values[6] ?? 0,
+        wordIdOffset: values[7] ?? 0,
+        dictionaryIdOffset: values[8] ?? 0,
+        isOovOffset: values[9] ?? 0,
+      }) satisfies LookupResultLayout,
+    validateLookupResultLayout,
+  );
 }
 
 export function readSentenceSpanResultLayout(library: NativeSentenceSplitterLibrary): SentenceSpanResultLayout {
-  const outLayout = new BigUint64Array(SENTENCE_SPAN_RESULT_LAYOUT_FIELD_COUNT);
-  const status = library.symbols.sudachi_get_sentence_span_layout(outLayout);
-  if (status !== 0) {
-    throw createNativeSudachiError(library, status, "Failed to read the sentence span result layout.");
-  }
-
-  const values = Array.from(outLayout, (value) => Number(value));
-  const layout = {
-    layoutVersion: values[0] ?? 0,
-    arrayLayoutKind: values[1] ?? 0,
-    arrayItemsOffset: values[2] ?? 0,
-    arrayLenOffset: values[3] ?? 0,
-    resultSize: values[4] ?? 0,
-    startOffset: values[5] ?? 0,
-    endOffset: values[6] ?? 0,
-  } satisfies SentenceSpanResultLayout;
-
-  validateSentenceSpanResultLayout(layout);
-  return layout;
+  return readResultLayout(
+    library,
+    SENTENCE_SPAN_RESULT_LAYOUT_FIELD_COUNT,
+    library.symbols.sudachi_get_sentence_span_layout,
+    "Failed to read the sentence span result layout.",
+    (values) =>
+      ({
+        layoutVersion: values[0] ?? 0,
+        arrayLayoutKind: values[1] ?? 0,
+        arrayItemsOffset: values[2] ?? 0,
+        arrayLenOffset: values[3] ?? 0,
+        resultSize: values[4] ?? 0,
+        startOffset: values[5] ?? 0,
+        endOffset: values[6] ?? 0,
+      }) satisfies SentenceSpanResultLayout,
+    validateSentenceSpanResultLayout,
+  );
 }

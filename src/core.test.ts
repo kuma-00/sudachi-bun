@@ -362,3 +362,22 @@ test("split rejects morphemes that were not created by the tokenizer", () => {
     );
   });
 });
+
+test("Tokenizer.create closes the native library when initialization fails", () => {
+  const library = createMockLibrary();
+  const loadSpy = spyOn(native, "loadNativeLibrary").mockReturnValue(library);
+  const layoutSpy = spyOn(native, "readMorphemeResultLayout").mockReturnValue(MORPHEME_LAYOUT);
+  const createSpy = spyOn(library.symbols, "sudachi_create_tokenizer").mockReturnValue(7);
+  const closeSpy = spyOn(library, "close");
+
+  try {
+    expect(() => Tokenizer.create({ dictPath: "/tmp/dict" })).toThrow("native error");
+    expect(closeSpy).toHaveBeenCalledTimes(1);
+    expect(createSpy).toHaveBeenCalledTimes(1);
+  } finally {
+    closeSpy.mockRestore();
+    createSpy.mockRestore();
+    layoutSpy.mockRestore();
+    loadSpy.mockRestore();
+  }
+});
