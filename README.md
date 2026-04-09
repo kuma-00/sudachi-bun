@@ -1,14 +1,15 @@
 # sudachi-bun
 
 `sudachi-bun` は、[Bun](https://bun.sh) から [Sudachi](https://github.com/WorksApplications/sudachi.rs) を使うための実験的なトークナイザ実装です。  
-TypeScript から Rust FFI (`sudachi-ffi`) を呼び出して、日本語テキストの形態素解析を行います。
+TypeScript から Rust FFI (`sudachi-ffi`) を呼び出して、日本語テキストの形態素解析と文分割を行います。
 
 ## できること
 
 - Bun から Sudachi の形態素解析を実行
+- Rust 側の sentence splitter を通して `SentenceSpan[]` を取得し、UTF-8 バイトオフセットをそのまま扱う
 - CLI の `tokenize` サブコマンドで `--mode A|B|C` の分割モードや `--wakati` / `--all` / `--output <path>`、`--split-sentences` / `--debug` / `--resource-dir` を指定して出力
 - CLI で `--text`、stdin、位置引数のファイル入力に対応
-- TypeScript API (`Tokenizer`) から直接トークナイズ
+- TypeScript API (`Tokenizer`, `SentenceSplitter`) から直接トークナイズ/文分割
 - Sudachi 辞書のダウンロードと展開を補助するセットアップスクリプトを提供
 
 ## 前提条件
@@ -83,7 +84,7 @@ bun run index.ts dump --help
 - `--all`: すべてのトークン情報を出力
 - `--output <path>`: 出力先ファイルを指定。`-` を指定すると標準出力に出力
 - `--text "<text>"`: 解析対象テキスト（未指定時は位置引数ファイルまたは stdin から解決）
-- `--split-sentences`: 入力を文単位に分けて解析する
+- `--split-sentences`: 入力を文単位に分けて解析する。文境界の byte offset は Rust 側 sentence splitter の結果をそのまま使う
 - `--debug`: デバッグ情報を標準エラー出力に追加する。標準出力の解析結果はそのまま維持される
 - `--resource-dir <path>`: 辞書・設定の探索基準ディレクトリを指定する
 
@@ -139,8 +140,11 @@ bun run setup:dict -- --url https://example.com/sudachi-dictionary.zip --out ./d
 ## TypeScript API
 
 ```ts
-import { Tokenizer } from "sudachi-bun";
+import { SentenceSplitter, Tokenizer } from "sudachi-bun";
 
+const splitter = SentenceSplitter.create({
+  dictPath: "./dict/system_core.dic",
+});
 const tokenizer = Tokenizer.load({
   dictPath: "./dict/system_core.dic",
   // configPath: "./dict/sudachi.json",
@@ -148,12 +152,19 @@ const tokenizer = Tokenizer.load({
 });
 
 try {
-  const morphemes = tokenizer.tokenize("東京都に行った", "C");
-  console.log(morphemes);
+  const text = "今日は晴れです。明日も晴れです。";
+
+  for (const span of splitter.split(text)) {
+    const morphemes = tokenizer.tokenize(span.text, "C");
+    console.log(span.start, span.end, morphemes);
+  }
 } finally {
+  splitter.close();
   tokenizer.close();
 }
 ```
+
+`SentenceSplitter` は Rust FFI の sentence splitter ハンドルを保持し、`split(text)` で `SentenceSpan[]` を返します。各 span は文テキスト `text` と UTF-8 バイトオフセット `start` / `end` を持ちます。
 
 `Morpheme` は以下の情報を含みます。
 
@@ -172,8 +183,10 @@ try {
 ### テスト
 
 ```bash
-bun test
+bun test src/sentence-splitter.test.ts src/cli.test.ts
 ```
+
+sentence splitter のユニットテストはネイティブ動作をモックし、TypeScript 側では span 変換と CLI の offset 補正を検証します。
 
 ### エントリーポイント
 
@@ -181,12 +194,15 @@ bun test
 - [src/core.ts](/Users/kuma/Documents/code/sudachi-bun/src/core.ts): `Tokenizer` 本体
 - [src/cli.ts](/Users/kuma/Documents/code/sudachi-bun/src/cli.ts): CLI 引数処理と実行
 - [src/native.ts](/Users/kuma/Documents/code/sudachi-bun/src/native.ts): Bun FFI ロードとネイティブ連携
+- [src/sentence-splitter.ts](/Users/kuma/Documents/code/sudachi-bun/src/sentence-splitter.ts): Rust sentence splitter の TypeScript ラッパー
 - [scripts/setup-dict.ts](/Users/kuma/Documents/code/sudachi-bun/scripts/setup-dict.ts): 辞書セットアップ
 
 ## トラブルシュート
 
 - `Could not find the Sudachi native library.`:
   `cd sudachi-ffi && cargo build --release` を実行し、`--library-path` または `SUDACHI_FFI_PATH` を確認してください。
+- sentence splitter 関連のシンボル解決に失敗する:
+  Rust 側の sentence splitter FFI がまだ含まれていない可能性があります。最新の `sudachi-ffi` をビルドしてライブラリを更新してください。
 - 辞書ダウンロードに失敗する:
   ネットワーク接続、`--version` のタグ、または `--url` の配布元 URL を確認してください。
 - 辞書展開に失敗する:

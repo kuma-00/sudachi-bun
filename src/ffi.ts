@@ -2,7 +2,12 @@ import { CString, read, type Pointer } from "bun:ffi";
 
 import type { Morpheme, SudachiErrorCode } from "./types.ts";
 import { SudachiError } from "./types.ts";
-import type { MorphemeResultLayout } from "./native.ts";
+import type { MorphemeResultLayout, SentenceSpanResultLayout } from "./native.ts";
+
+export interface SentenceSpanOffsets {
+  start: number;
+  end: number;
+}
 
 function toPointer(value: number | bigint): Pointer {
   return Number(value) as Pointer;
@@ -53,10 +58,37 @@ function readBoolField(base: Pointer, offset: number): boolean {
   return read.u8(base, offset) !== 0;
 }
 
-function ensureLayoutInitialized(layout: MorphemeResultLayout): void {
-  if (layout.resultSize <= 0) {
-    fail("Morpheme result layout was not initialized.", "LAYOUT_MISMATCH");
+function ensureLayoutInitialized(resultSize: number, label: string): void {
+  if (resultSize <= 0) {
+    fail(`${label} was not initialized.`, "LAYOUT_MISMATCH");
   }
+}
+
+function readArrayEntries(
+  arrayPtr: Pointer,
+  arrayItemsOffset: number,
+  arrayLenOffset: number,
+  resultSize: number,
+  arrayLayoutKind: number,
+  label: string,
+): Array<{ entryBase: Pointer; index: number }> {
+  ensureLayoutInitialized(resultSize, label);
+
+  const itemsPtr = toPointer(read.ptr(arrayPtr, arrayItemsOffset));
+  const length = readUsizeField(arrayPtr, arrayLenOffset, `${label} length`);
+  const pointerSize = arrayLenOffset - arrayItemsOffset;
+  if (arrayLayoutKind === 1 && pointerSize === 0) {
+    fail(`Invalid ${label} pointer layout: pointer size was zero.`, "LAYOUT_MISMATCH");
+  }
+
+  const entries = new Array<{ entryBase: Pointer; index: number }>(length);
+  for (let index = 0; index < length; index += 1) {
+    const entryBase =
+      arrayLayoutKind === 1 ? toPointer(read.ptr(itemsPtr, index * pointerSize)) : addOffset(itemsPtr, index * resultSize);
+    entries[index] = { entryBase, index };
+  }
+
+  return entries;
 }
 
 function readSynonymGroupIds(base: Pointer, layout: MorphemeResultLayout): number[] {
@@ -91,22 +123,39 @@ function readMorpheme(itemPtr: Pointer, layout: MorphemeResultLayout): Morpheme 
 }
 
 export function readMorphemeArray(arrayPtr: Pointer, layout: MorphemeResultLayout): Morpheme[] {
-  ensureLayoutInitialized(layout);
+  const entries = readArrayEntries(
+    arrayPtr,
+    layout.arrayItemsOffset,
+    layout.arrayLenOffset,
+    layout.resultSize,
+    layout.arrayLayoutKind,
+    "Morpheme result layout",
+  );
 
-  const itemsPtr = toPointer(read.ptr(arrayPtr, layout.arrayItemsOffset));
-  const length = readUsizeField(arrayPtr, layout.arrayLenOffset, "result length");
-  const pointerSize = layout.arrayLenOffset - layout.arrayItemsOffset;
-  if (layout.arrayLayoutKind === 1 && pointerSize === 0) {
-    fail("Invalid morpheme result array layout: pointer size was zero.", "LAYOUT_MISMATCH");
+  const results = new Array<Morpheme>(entries.length);
+  for (const { entryBase, index } of entries) {
+    results[index] = readMorpheme(entryBase, layout);
   }
 
-  const results = new Array<Morpheme>(length);
-  for (let index = 0; index < length; index += 1) {
-    const entryBase =
-      layout.arrayLayoutKind === 1
-        ? toPointer(read.ptr(itemsPtr, index * pointerSize))
-        : addOffset(itemsPtr, index * layout.resultSize);
-    results[index] = readMorpheme(entryBase, layout);
+  return results;
+}
+
+export function readSentenceSpanArray(arrayPtr: Pointer, layout: SentenceSpanResultLayout): SentenceSpanOffsets[] {
+  const entries = readArrayEntries(
+    arrayPtr,
+    layout.arrayItemsOffset,
+    layout.arrayLenOffset,
+    layout.resultSize,
+    layout.arrayLayoutKind,
+    "Sentence span result layout",
+  );
+
+  const results = new Array<SentenceSpanOffsets>(entries.length);
+  for (const { entryBase, index } of entries) {
+    results[index] = {
+      start: readUsizeField(entryBase, layout.startOffset, "start"),
+      end: readUsizeField(entryBase, layout.endOffset, "end"),
+    };
   }
 
   return results;

@@ -10,6 +10,8 @@ use crate::error::{ERR_INTERNAL, error};
 
 pub const MORPHEME_RESULT_ARRAY_LAYOUT_CONTIGUOUS: u64 = 0;
 pub const MORPHEME_RESULT_LAYOUT_VERSION: u64 = 1;
+pub const SENTENCE_SPAN_ARRAY_LAYOUT_CONTIGUOUS: u64 = 0;
+pub const SENTENCE_SPAN_LAYOUT_VERSION: u64 = 1;
 
 #[repr(C)]
 pub struct MorphemeResult {
@@ -74,6 +76,18 @@ pub struct MorphemeResultArray {
 }
 
 #[repr(C)]
+pub struct SentenceSpan {
+    pub begin: usize,
+    pub end: usize,
+}
+
+#[repr(C)]
+pub struct SentenceSpanArray {
+    pub items: *mut SentenceSpan,
+    pub len: usize,
+}
+
+#[repr(C)]
 pub struct MorphemeResultLayout {
     pub layout_version: u64,
     pub array_layout_kind: u64,
@@ -93,6 +107,17 @@ pub struct MorphemeResultLayout {
     pub is_oov_offset: u64,
     pub synonym_group_ids_offset: u64,
     pub synonym_group_ids_len_offset: u64,
+}
+
+#[repr(C)]
+pub struct SentenceSpanLayout {
+    pub layout_version: u64,
+    pub array_layout_kind: u64,
+    pub array_items_offset: u64,
+    pub array_len_offset: u64,
+    pub span_size: u64,
+    pub begin_offset: u64,
+    pub end_offset: u64,
 }
 
 impl MorphemeResultLayout {
@@ -116,6 +141,20 @@ impl MorphemeResultLayout {
             is_oov_offset: offset_of!(MorphemeResult, is_oov) as u64,
             synonym_group_ids_offset: offset_of!(MorphemeResult, synonym_group_ids) as u64,
             synonym_group_ids_len_offset: offset_of!(MorphemeResult, synonym_group_ids_len) as u64,
+        }
+    }
+}
+
+impl SentenceSpanLayout {
+    pub const fn new() -> Self {
+        Self {
+            layout_version: SENTENCE_SPAN_LAYOUT_VERSION,
+            array_layout_kind: SENTENCE_SPAN_ARRAY_LAYOUT_CONTIGUOUS,
+            array_items_offset: offset_of!(SentenceSpanArray, items) as u64,
+            array_len_offset: offset_of!(SentenceSpanArray, len) as u64,
+            span_size: std::mem::size_of::<SentenceSpan>() as u64,
+            begin_offset: offset_of!(SentenceSpan, begin) as u64,
+            end_offset: offset_of!(SentenceSpan, end) as u64,
         }
     }
 }
@@ -194,7 +233,7 @@ pub(crate) fn free_c_string(ptr: *mut c_char) {
     }
 }
 
-pub(crate) fn free_u32_slice(ptr: *mut u32, len: usize) {
+fn free_boxed_slice<T>(ptr: *mut T, len: usize) {
     if ptr.is_null() || len == 0 {
         return;
     }
@@ -203,6 +242,10 @@ pub(crate) fn free_u32_slice(ptr: *mut u32, len: usize) {
         let slice = ptr::slice_from_raw_parts_mut(ptr, len);
         drop(Box::from_raw(slice));
     }
+}
+
+pub(crate) fn free_u32_slice(ptr: *mut u32, len: usize) {
+    free_boxed_slice(ptr, len);
 }
 
 pub(crate) fn free_result_array(result: *mut MorphemeResultArray) {
@@ -218,14 +261,28 @@ pub(crate) fn free_result_array(result: *mut MorphemeResultArray) {
                 item.free_owned_fields();
             }
 
-            let slice_ptr = ptr::slice_from_raw_parts_mut(boxed.items, boxed.len);
-            drop(Box::from_raw(slice_ptr));
+            free_boxed_slice(boxed.items, boxed.len);
         }
     }
 }
 
 pub(crate) fn morpheme_result_layout() -> MorphemeResultLayout {
     MorphemeResultLayout::new()
+}
+
+pub(crate) fn free_sentence_span_array(result: *mut SentenceSpanArray) {
+    if result.is_null() {
+        return;
+    }
+
+    unsafe {
+        let boxed = Box::from_raw(result);
+        free_boxed_slice(boxed.items, boxed.len);
+    }
+}
+
+pub(crate) fn sentence_span_layout() -> SentenceSpanLayout {
+    SentenceSpanLayout::new()
 }
 
 #[cfg(test)]
@@ -261,5 +318,17 @@ mod tests {
         let layout = morpheme_result_layout();
         assert_eq!(layout.layout_version, MORPHEME_RESULT_LAYOUT_VERSION);
         assert!(layout.result_size > 0);
+    }
+
+    #[test]
+    fn free_sentence_span_array_accepts_null() {
+        free_sentence_span_array(ptr::null_mut());
+    }
+
+    #[test]
+    fn sentence_span_layout_version_is_stable() {
+        let layout = sentence_span_layout();
+        assert_eq!(layout.layout_version, SENTENCE_SPAN_LAYOUT_VERSION);
+        assert!(layout.span_size > 0);
     }
 }

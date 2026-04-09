@@ -116,7 +116,7 @@ test("readMorphemeResultLayout rejects unsupported array layout kinds", () => {
         return 0;
       }),
     ),
-  ).toThrow("Unsupported morpheme result array layout kind");
+  ).toThrow("Unsupported morpheme result layout array layout kind");
 });
 
 test("readNativeStatusCodeName uses the Rust-provided code names", () => {

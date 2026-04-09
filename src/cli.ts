@@ -4,6 +4,7 @@ import { Tokenizer } from "./core.ts";
 import { renderCliHelp } from "./cli/help.ts";
 import { resolveInputText } from "./cli/input.ts";
 import { parseCliArgs } from "./cli/parser.ts";
+import { SentenceSplitter } from "./sentence-splitter.ts";
 import type { CliSubcommand, CliTokenizeCommand } from "./cli/types.ts";
 import {
   formatSudachiError,
@@ -57,33 +58,6 @@ function validateResourceDir(value: string | undefined): string | undefined {
   return value;
 }
 
-function isSentenceBoundaryChar(char: string): boolean {
-  return char === "。" || char === "！" || char === "？" || char === "!" || char === "?";
-}
-
-function splitTextIntoSentenceUnits(text: string): string[] {
-  const units: string[] = [];
-  let current = "";
-
-  for (const char of text) {
-    current += char;
-    if (isSentenceBoundaryChar(char)) {
-      units.push(current);
-      current = "";
-    }
-  }
-
-  if (current.length > 0) {
-    units.push(current);
-  }
-
-  return units.length > 0 ? units : [text];
-}
-
-function getSentenceUnitOffsetLength(unit: string): number {
-  return Buffer.byteLength(unit, "utf8");
-}
-
 function formatTokenizeOutput(morphemes: Morpheme[], format: TokenizeOutputFormat): string {
   switch (format) {
     case "wakati":
@@ -96,6 +70,7 @@ function formatTokenizeOutput(morphemes: Morpheme[], format: TokenizeOutputForma
 
 function tokenizeSentenceUnits(
   tokenizer: Tokenizer,
+  splitterOptions: TokenizerLoadOptions,
   text: string,
   mode: TokenizeMode,
   splitSentences: boolean,
@@ -104,28 +79,34 @@ function tokenizeSentenceUnits(
     return tokenizer.tokenize(text, mode);
   }
 
-  const units = splitTextIntoSentenceUnits(text);
-  const morphemes: Morpheme[] = [];
-  let offset = 0;
+  const splitter = SentenceSplitter.create(splitterOptions);
+  try {
+    const units = splitter.split(text);
+    if (units.length === 0) {
+      return tokenizer.tokenize(text, mode);
+    }
 
-  for (const unit of units) {
-    const unitMorphemes = tokenizer.tokenize(unit, mode);
-    if (offset === 0) {
-      morphemes.push(...unitMorphemes);
-    } else {
+    const morphemes: Morpheme[] = [];
+    for (const unit of units) {
+      const unitMorphemes = tokenizer.tokenize(unit.text, mode);
+      if (unit.start === 0) {
+        morphemes.push(...unitMorphemes);
+        continue;
+      }
+
       morphemes.push(
         ...unitMorphemes.map((morpheme) => ({
           ...morpheme,
-          begin: morpheme.begin + offset,
-          end: morpheme.end + offset,
+          begin: morpheme.begin + unit.start,
+          end: morpheme.end + unit.start,
         })),
       );
     }
 
-    offset += getSentenceUnitOffsetLength(unit);
+    return morphemes;
+  } finally {
+    splitter.close();
   }
-
-  return morphemes;
 }
 
 export function runTokenizeCommand(
@@ -147,7 +128,13 @@ export function runTokenizeCommand(
       );
     }
 
-    const morphemes = tokenizeSentenceUnits(tokenizer, command.text, command.mode, Boolean(command.splitSentences));
+    const morphemes = tokenizeSentenceUnits(
+      tokenizer,
+      command,
+      command.text,
+      command.mode,
+      Boolean(command.splitSentences),
+    );
 
     if (command.debug) {
       io?.error(`[debug] morphemes=${morphemes.length}`);

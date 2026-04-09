@@ -2,15 +2,25 @@ export const TOKENIZE_MODES = ["A", "B", "C"] as const;
 
 export type TokenizeMode = (typeof TOKENIZE_MODES)[number];
 
-export interface TokenizerLoadOptions {
-  dictPath: string;
-  configPath?: string;
-  resourceDir?: string;
+export interface NativeLibraryLoadOptions {
   libraryPath?: string;
   debug?: boolean;
 }
 
+export interface TokenizerLoadOptions extends NativeLibraryLoadOptions {
+  dictPath: string;
+  configPath?: string;
+  resourceDir?: string;
+}
+
 export type TokenizerOptions = TokenizerLoadOptions;
+export type SentenceSplitterLoadOptions = TokenizerLoadOptions;
+
+export interface SentenceSpan {
+  text: string;
+  start: number;
+  end: number;
+}
 
 export interface Morpheme {
   surface: string;
@@ -34,6 +44,8 @@ export type NativeSudachiErrorCode =
   | "INVALID_MODE"
   | "CONFIG"
   | "TOKENIZE"
+  | "SPLIT"
+  | "SENTENCE_SPLIT"
   | "INTERNAL"
   | "UNKNOWN";
 
@@ -42,7 +54,8 @@ export type SudachiErrorCode =
   | "INVALID_ARGUMENT"
   | "LAYOUT_MISMATCH"
   | "MISSING_ARGUMENT"
-  | "TOKENIZER_CLOSED";
+  | "TOKENIZER_CLOSED"
+  | "SENTENCE_SPLITTER_CLOSED";
 
 export interface SudachiErrorOptions {
   code: SudachiErrorCode;

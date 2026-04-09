@@ -3,11 +3,14 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { dlopen, suffix, type CString, type Pointer } from "bun:ffi";
 
-import type { NativeSudachiErrorCode, TokenizerLoadOptions } from "./types.ts";
+import type { NativeLibraryLoadOptions, NativeSudachiErrorCode } from "./types.ts";
 import { SudachiError } from "./types.ts";
 
 const MORPHEME_RESULT_LAYOUT_FIELD_COUNT = 18;
+const SENTENCE_SPAN_RESULT_LAYOUT_FIELD_COUNT = 7;
+
 export const MORPHEME_RESULT_LAYOUT_VERSION = 1;
+export const SENTENCE_SPAN_RESULT_LAYOUT_VERSION = 1;
 
 export interface MorphemeResultLayout {
   layoutVersion: number;
@@ -30,6 +33,16 @@ export interface MorphemeResultLayout {
   synonymGroupIdsLenOffset: number;
 }
 
+export interface SentenceSpanResultLayout {
+  layoutVersion: number;
+  arrayLayoutKind: number;
+  arrayItemsOffset: number;
+  arrayLenOffset: number;
+  resultSize: number;
+  startOffset: number;
+  endOffset: number;
+}
+
 export interface NativeSudachiLibrary {
   symbols: {
     sudachi_create_tokenizer: (
@@ -39,7 +52,12 @@ export interface NativeSudachiLibrary {
       outHandle: NodeJS.TypedArray | Pointer | null,
     ) => number;
     sudachi_free_tokenizer: (handle: Pointer | NodeJS.TypedArray | null) => void;
-    sudachi_tokenize: (handle: Pointer | NodeJS.TypedArray | null, inputUtf8: string, mode: number, outResult: NodeJS.TypedArray | Pointer | null) => number;
+    sudachi_tokenize: (
+      handle: Pointer | NodeJS.TypedArray | null,
+      inputUtf8: string,
+      mode: number,
+      outResult: NodeJS.TypedArray | Pointer | null,
+    ) => number;
     sudachi_free_result: (result: Pointer | NodeJS.TypedArray | null) => void;
     sudachi_get_morpheme_result_layout: (outLayout: NodeJS.TypedArray | Pointer | null) => number;
     sudachi_get_last_error: () => CString;
@@ -48,7 +66,36 @@ export interface NativeSudachiLibrary {
   close(): void;
 }
 
+export interface NativeSentenceSplitterLibrary {
+  symbols: {
+    sudachi_create_sentence_splitter: (
+      configPath: string | null,
+      resourceDir: string | null,
+      dictPath: string,
+      outHandle: NodeJS.TypedArray | Pointer | null,
+    ) => number;
+    sudachi_free_sentence_splitter: (handle: Pointer | NodeJS.TypedArray | null) => void;
+    sudachi_split_sentences: (
+      handle: Pointer | NodeJS.TypedArray | null,
+      inputUtf8: string,
+      outResult: NodeJS.TypedArray | Pointer | null,
+    ) => number;
+    sudachi_free_sentence_spans: (result: Pointer | NodeJS.TypedArray | null) => void;
+    sudachi_get_sentence_span_layout: (outLayout: NodeJS.TypedArray | Pointer | null) => number;
+    sudachi_get_last_error: () => CString;
+    sudachi_status_code_name: (status: number) => CString;
+  };
+  close(): void;
+}
+
 interface CommonNativeSymbols {
+  sudachi_get_last_error: () => CString;
+  sudachi_status_code_name: (status: number) => CString;
+}
+
+type NativeErrorLibrary = NativeSudachiLibrary | NativeSentenceSplitterLibrary;
+
+interface NativeSymbols extends CommonNativeSymbols {
   sudachi_create_tokenizer: (
     configPath: string | null,
     resourceDir: string | null,
@@ -64,11 +111,24 @@ interface CommonNativeSymbols {
   ) => number;
   sudachi_free_result: (result: Pointer | NodeJS.TypedArray | null) => void;
   sudachi_get_morpheme_result_layout: (outLayout: NodeJS.TypedArray | Pointer | null) => number;
-  sudachi_get_last_error: () => CString;
-  sudachi_status_code_name: (status: number) => CString;
 }
 
-interface NativeSymbols extends CommonNativeSymbols {}
+interface NativeSentenceSplitterSymbols extends CommonNativeSymbols {
+  sudachi_create_sentence_splitter: (
+    configPath: string | null,
+    resourceDir: string | null,
+    dictPath: string,
+    outHandle: NodeJS.TypedArray | Pointer | null,
+  ) => number;
+  sudachi_free_sentence_splitter: (handle: Pointer | NodeJS.TypedArray | null) => void;
+  sudachi_split_sentences: (
+    handle: Pointer | NodeJS.TypedArray | null,
+    inputUtf8: string,
+    outResult: NodeJS.TypedArray | Pointer | null,
+  ) => number;
+  sudachi_free_sentence_spans: (result: Pointer | NodeJS.TypedArray | null) => void;
+  sudachi_get_sentence_span_layout: (outLayout: NodeJS.TypedArray | Pointer | null) => number;
+}
 
 const MODULE_DIR = dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = resolve(MODULE_DIR, "../..");
@@ -109,29 +169,70 @@ function loadNativeLibraryPath(libraryPath?: string): string {
   );
 }
 
-function validateMorphemeResultLayout(layout: MorphemeResultLayout): void {
-  if (layout.layoutVersion !== MORPHEME_RESULT_LAYOUT_VERSION) {
+function validateArrayLayout(
+  layoutVersion: number,
+  expectedVersion: number,
+  resultSize: number,
+  arrayLayoutKind: number,
+  label: string,
+): void {
+  if (layoutVersion !== expectedVersion) {
     throw new SudachiError(
-      `Unsupported morpheme result layout version: expected ${MORPHEME_RESULT_LAYOUT_VERSION}, received ${layout.layoutVersion}.`,
+      `Unsupported ${label} version: expected ${expectedVersion}, received ${layoutVersion}.`,
       { code: "LAYOUT_MISMATCH" },
     );
   }
 
-  if (layout.resultSize <= 0) {
-    throw new SudachiError("Received an invalid morpheme result layout size.", {
+  if (resultSize <= 0) {
+    throw new SudachiError(`Received an invalid ${label} size.`, {
       code: "LAYOUT_MISMATCH",
     });
   }
 
-  if (layout.arrayLayoutKind !== 0 && layout.arrayLayoutKind !== 1) {
-    throw new SudachiError(
-      `Unsupported morpheme result array layout kind: ${layout.arrayLayoutKind}.`,
-      { code: "LAYOUT_MISMATCH" },
-    );
+  if (arrayLayoutKind !== 0 && arrayLayoutKind !== 1) {
+    throw new SudachiError(`Unsupported ${label} array layout kind: ${arrayLayoutKind}.`, {
+      code: "LAYOUT_MISMATCH",
+    });
   }
 }
 
+function validateMorphemeResultLayout(layout: MorphemeResultLayout): void {
+  validateArrayLayout(
+    layout.layoutVersion,
+    MORPHEME_RESULT_LAYOUT_VERSION,
+    layout.resultSize,
+    layout.arrayLayoutKind,
+    "morpheme result layout",
+  );
+}
+
+function validateSentenceSpanResultLayout(layout: SentenceSpanResultLayout): void {
+  validateArrayLayout(
+    layout.layoutVersion,
+    SENTENCE_SPAN_RESULT_LAYOUT_VERSION,
+    layout.resultSize,
+    layout.arrayLayoutKind,
+    "sentence span result layout",
+  );
+}
+
 const COMMON_NATIVE_SYMBOL_DEFS = {
+  sudachi_get_last_error: {
+    args: [],
+    returns: "cstring",
+  },
+  sudachi_status_code_name: {
+    args: ["i32"],
+    returns: "cstring",
+  },
+} as const;
+
+const TOKENIZER_NATIVE_SYMBOL_DEFS = {
+  ...COMMON_NATIVE_SYMBOL_DEFS,
+  sudachi_create_tokenizer: {
+    args: ["cstring", "cstring", "cstring", "ptr"],
+    returns: "i32",
+  },
   sudachi_free_tokenizer: {
     args: ["ptr"],
     returns: "void",
@@ -148,29 +249,45 @@ const COMMON_NATIVE_SYMBOL_DEFS = {
     args: ["ptr"],
     returns: "i32",
   },
-  sudachi_get_last_error: {
-    args: [],
-    returns: "cstring",
-  },
-  sudachi_status_code_name: {
-    args: ["i32"],
-    returns: "cstring",
-  },
 } as const;
 
-const NATIVE_SYMBOL_DEFS = {
+const SENTENCE_SPLITTER_NATIVE_SYMBOL_DEFS = {
   ...COMMON_NATIVE_SYMBOL_DEFS,
-  sudachi_create_tokenizer: {
+  sudachi_create_sentence_splitter: {
     args: ["cstring", "cstring", "cstring", "ptr"],
+    returns: "i32",
+  },
+  sudachi_free_sentence_splitter: {
+    args: ["ptr"],
+    returns: "void",
+  },
+  sudachi_split_sentences: {
+    args: ["ptr", "cstring", "ptr"],
+    returns: "i32",
+  },
+  sudachi_free_sentence_spans: {
+    args: ["ptr"],
+    returns: "void",
+  },
+  sudachi_get_sentence_span_layout: {
+    args: ["ptr"],
     returns: "i32",
   },
 } as const;
 
 type NativeLibraryLoader = (
   libraryPath: string,
-  symbolDefinitions: typeof NATIVE_SYMBOL_DEFS,
+  symbolDefinitions: typeof TOKENIZER_NATIVE_SYMBOL_DEFS,
 ) => {
   symbols: NativeSymbols;
+  close(): void;
+};
+
+type NativeSentenceSplitterLibraryLoader = (
+  libraryPath: string,
+  symbolDefinitions: typeof SENTENCE_SPLITTER_NATIVE_SYMBOL_DEFS,
+) => {
+  symbols: NativeSentenceSplitterSymbols;
   close(): void;
 };
 
@@ -189,17 +306,48 @@ function createNativeSudachiLibrary(symbols: NativeSymbols, close: () => void): 
   };
 }
 
+function createNativeSentenceSplitterLibrary(
+  symbols: NativeSentenceSplitterSymbols,
+  close: () => void,
+): NativeSentenceSplitterLibrary {
+  return {
+    symbols: {
+      sudachi_create_sentence_splitter: symbols.sudachi_create_sentence_splitter,
+      sudachi_free_sentence_splitter: symbols.sudachi_free_sentence_splitter,
+      sudachi_split_sentences: symbols.sudachi_split_sentences,
+      sudachi_free_sentence_spans: symbols.sudachi_free_sentence_spans,
+      sudachi_get_sentence_span_layout: symbols.sudachi_get_sentence_span_layout,
+      sudachi_get_last_error: symbols.sudachi_get_last_error,
+      sudachi_status_code_name: symbols.sudachi_status_code_name,
+    },
+    close,
+  };
+}
+
 export function loadNativeLibrary(
-  options: TokenizerLoadOptions,
+  options: NativeLibraryLoadOptions = {},
   openLibrary: NativeLibraryLoader = dlopen as unknown as NativeLibraryLoader,
 ): NativeSudachiLibrary {
   const libraryPath = loadNativeLibraryPath(options.libraryPath);
-  const loaded = openLibrary(libraryPath, NATIVE_SYMBOL_DEFS) as { symbols: NativeSymbols; close(): void };
+  const loaded = openLibrary(libraryPath, TOKENIZER_NATIVE_SYMBOL_DEFS) as { symbols: NativeSymbols; close(): void };
 
   return createNativeSudachiLibrary(loaded.symbols, () => loaded.close());
 }
 
-export function readNativeError(library: NativeSudachiLibrary): string {
+export function loadSentenceSplitterLibrary(
+  options: NativeLibraryLoadOptions = {},
+  openLibrary: NativeSentenceSplitterLibraryLoader = dlopen as unknown as NativeSentenceSplitterLibraryLoader,
+): NativeSentenceSplitterLibrary {
+  const libraryPath = loadNativeLibraryPath(options.libraryPath);
+  const loaded = openLibrary(libraryPath, SENTENCE_SPLITTER_NATIVE_SYMBOL_DEFS) as {
+    symbols: NativeSentenceSplitterSymbols;
+    close(): void;
+  };
+
+  return createNativeSentenceSplitterLibrary(loaded.symbols, () => loaded.close());
+}
+
+export function readNativeError(library: NativeErrorLibrary): string {
   try {
     return String(library.symbols.sudachi_get_last_error() ?? "");
   } catch {
@@ -208,7 +356,7 @@ export function readNativeError(library: NativeSudachiLibrary): string {
 }
 
 export function readNativeStatusCodeName(
-  library: NativeSudachiLibrary,
+  library: NativeErrorLibrary,
   status: number,
 ): NativeSudachiErrorCode {
   try {
@@ -220,6 +368,8 @@ export function readNativeStatusCodeName(
       case "INVALID_MODE":
       case "CONFIG":
       case "TOKENIZE":
+      case "SPLIT":
+      case "SENTENCE_SPLIT":
       case "INTERNAL":
         return code;
       default:
@@ -231,7 +381,7 @@ export function readNativeStatusCodeName(
 }
 
 export function createNativeSudachiError(
-  library: NativeSudachiLibrary,
+  library: NativeErrorLibrary,
   status: number,
   fallbackMessage: string,
 ): SudachiError {
@@ -271,5 +421,27 @@ export function readMorphemeResultLayout(library: NativeSudachiLibrary): Morphem
   } satisfies MorphemeResultLayout;
 
   validateMorphemeResultLayout(layout);
+  return layout;
+}
+
+export function readSentenceSpanResultLayout(library: NativeSentenceSplitterLibrary): SentenceSpanResultLayout {
+  const outLayout = new BigUint64Array(SENTENCE_SPAN_RESULT_LAYOUT_FIELD_COUNT);
+  const status = library.symbols.sudachi_get_sentence_span_layout(outLayout);
+  if (status !== 0) {
+    throw createNativeSudachiError(library, status, "Failed to read the sentence span result layout.");
+  }
+
+  const values = Array.from(outLayout, (value) => Number(value));
+  const layout = {
+    layoutVersion: values[0] ?? 0,
+    arrayLayoutKind: values[1] ?? 0,
+    arrayItemsOffset: values[2] ?? 0,
+    arrayLenOffset: values[3] ?? 0,
+    resultSize: values[4] ?? 0,
+    startOffset: values[5] ?? 0,
+    endOffset: values[6] ?? 0,
+  } satisfies SentenceSpanResultLayout;
+
+  validateSentenceSpanResultLayout(layout);
   return layout;
 }

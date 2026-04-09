@@ -4,8 +4,14 @@ mod error;
 mod result;
 
 pub use api::{
-    TokenizerHandle, sudachi_create_tokenizer, sudachi_free_result, sudachi_free_tokenizer,
+    SentenceSplitterHandle, TokenizerHandle, sudachi_create_sentence_splitter,
+    sudachi_create_sentence_splitter_from_tokenizer, sudachi_create_tokenizer, sudachi_free_result,
+    sudachi_free_sentence_spans, sudachi_free_sentence_splitter, sudachi_free_tokenizer,
     sudachi_get_abi_version, sudachi_get_last_error, sudachi_get_morpheme_result_layout,
-    sudachi_status_code_name, sudachi_tokenize,
+    sudachi_get_sentence_span_layout, sudachi_split_sentences, sudachi_status_code_name,
+    sudachi_tokenize,
 };
-pub use result::{MorphemeResult, MorphemeResultArray, MorphemeResultLayout};
+pub use result::{
+    MorphemeResult, MorphemeResultArray, MorphemeResultLayout, SentenceSpan, SentenceSpanArray,
+    SentenceSpanLayout,
+};

@@ -6,6 +6,7 @@ import { join } from "node:path";
 
 import { Tokenizer } from "./core.ts";
 import { runCli } from "./cli.ts";
+import { SentenceSplitter } from "./sentence-splitter.ts";
 
 function createCapturedIo() {
   const logs: string[] = [];
@@ -171,6 +172,18 @@ test("runCli rejects unknown subcommand typos", async () => {
 test("runCli handles sentence splitting and byte offsets", async () => {
   const { io, logs, errors } = createCapturedIo();
   const tokenizeCalls: Array<{ text: string; mode: string }> = [];
+  const fakeSplitter = {
+    split: spyOn({
+      split(_text: string) {
+        return [
+          { text: "😀。", start: 0, end: 7 },
+          { text: "B？", start: 7, end: 11 },
+        ];
+      },
+    }, "split"),
+    close() {},
+  };
+  const createSpy = spyOn(SentenceSplitter, "create").mockReturnValue(fakeSplitter as never);
   const loadSpy = spyOn(Tokenizer, "load").mockImplementation(
     () =>
       ({
@@ -198,6 +211,10 @@ test("runCli handles sentence splitting and byte offsets", async () => {
 
     expect(exitCode).toBe(0);
     expect(errors).toEqual([]);
+    expect(createSpy).toHaveBeenCalledTimes(1);
+    expect(createSpy).toHaveBeenCalledWith(expect.objectContaining({ dictPath: "/tmp/dict" }));
+    expect(fakeSplitter.split).toHaveBeenCalledTimes(1);
+    expect(fakeSplitter.split).toHaveBeenCalledWith("😀。B？");
     expect(tokenizeCalls).toEqual([
       { text: "😀。", mode: "C" },
       { text: "B？", mode: "C" },
@@ -209,6 +226,8 @@ test("runCli handles sentence splitting and byte offsets", async () => {
       { begin: 7, end: 11 },
     ]);
   } finally {
+    createSpy.mockRestore();
+    fakeSplitter.split.mockRestore();
     loadSpy.mockRestore();
   }
 });
