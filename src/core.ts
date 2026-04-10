@@ -3,6 +3,7 @@ import {
   type LookupEntry,
   type Morpheme,
   type PosMatcherPatterns,
+  type SurfaceProjection,
   type TokenizeMode,
   type TokenizerOptions,
 } from "./types.ts";
@@ -46,24 +47,24 @@ export class Tokenizer {
     return this.#session.closed;
   }
 
-  tokenize(text: string, mode: TokenizeMode = "C", options?: InfoSubset): Morpheme[] {
-    return tokenizeMorphemes(this.#context(), text, mode, options);
+  tokenize(text: string, projection: SurfaceProjection, mode: TokenizeMode = "C", options?: InfoSubset): Morpheme[] {
+    return tokenizeMorphemes(this.#context(), text, projection, mode, options);
   }
 
-  lookup(surface: string, options?: InfoSubset): LookupEntry[] {
-    return lookupEntries(this.#context(), surface, options);
+  lookup(surface: string, projection: SurfaceProjection, options?: InfoSubset): LookupEntry[] {
+    return lookupEntries(this.#context(), surface, projection, options);
   }
 
   createPosMatcher(patterns: PosMatcherPatterns): PosMatcher {
     return new PosMatcher(compilePosMatcher(this.#context(), patterns));
   }
 
-  split(morpheme: Morpheme, mode: TokenizeMode = "C"): Morpheme[] {
-    return splitMorpheme(this.#context(), morpheme, mode);
+  split(morpheme: Morpheme, projection: SurfaceProjection, mode: TokenizeMode = "C"): Morpheme[] {
+    return splitMorpheme(this.#context(), morpheme, projection, mode);
   }
 
-  splitInto(morphemes: readonly Morpheme[], mode: TokenizeMode = "C"): Morpheme[] {
-    return splitMorphemes(this.#context(), morphemes, mode);
+  splitInto(morphemes: readonly Morpheme[], projection: SurfaceProjection, mode: TokenizeMode = "C"): Morpheme[] {
+    return splitMorphemes(this.#context(), morphemes, projection, mode);
   }
 
   close(): void {

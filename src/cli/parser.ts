@@ -1,4 +1,4 @@
-import { SudachiError, parseTokenizeMode, type TokenizeMode } from "../types.ts";
+import { SudachiError, parseSurfaceProjection, parseTokenizeMode, type TokenizeMode } from "../types.ts";
 import {
   CLI_SUBCOMMANDS,
   type CliCommand,
@@ -14,6 +14,7 @@ const VALUE_FLAGS = new Set([
   "config-path",
   "library-path",
   "resource-dir",
+  "projection",
   "mode",
   "text",
   "output",
@@ -209,6 +210,21 @@ function tokenizeCommandFrom(argv: string[], env: NodeJS.ProcessEnv): CliTokeniz
     return errorResult(missingArgumentError("dict-path"), "tokenize");
   }
 
+  const projectionValue = parseArgValue(argv, "projection", KNOWN_FLAGS);
+  if (!projectionValue) {
+    return errorResult(missingArgumentError("projection"), "tokenize");
+  }
+
+  let projection: CliTokenizeCommand["projection"];
+  try {
+    projection = parseSurfaceProjection(projectionValue);
+  } catch (error) {
+    return errorResult(
+      error instanceof SudachiError ? error : new SudachiError(String(error), { code: "INVALID_ARGUMENT" }),
+      "tokenize",
+    );
+  }
+
   const mode = parseArgValue(argv, "mode", KNOWN_FLAGS);
   let parsedMode: TokenizeMode;
   try {
@@ -220,6 +236,7 @@ function tokenizeCommandFrom(argv: string[], env: NodeJS.ProcessEnv): CliTokeniz
   const command: CliTokenizeCommand = {
     kind: "tokenize",
     dictPath,
+    projection,
     configPath: parseArgValue(argv, "config-path", KNOWN_FLAGS) ?? env.SUDACHI_CONFIG_PATH,
     libraryPath: parseArgValue(argv, "library-path", KNOWN_FLAGS) ?? env.SUDACHI_FFI_PATH,
     resourceDir: parseArgValue(argv, "resource-dir", KNOWN_FLAGS),

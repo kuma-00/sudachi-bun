@@ -12,7 +12,7 @@ use sudachi::dic::subset::InfoSubset;
 use sudachi::pos::PosMatcher;
 use sudachi::sentence_splitter::{SentenceSplitter, SplitSentences};
 
-use crate::convert::{cstr_to_path, cstr_to_string, mode_from_raw};
+use crate::convert::{Projection, cstr_to_path, cstr_to_string, mode_from_raw, projection_from_raw};
 use crate::error::{
     ERR_CONFIG, ERR_INTERNAL, ERR_INVALID_INDEX, ERR_LOOKUP, ERR_MORPHEME_SPLIT,
     ERR_SENTENCE_SPLIT, ERR_TOKENIZE, OK, clear_last_error, error,
@@ -36,7 +36,7 @@ pub struct SentenceSplitterHandle {
     pub(crate) dictionary: Arc<JapaneseDictionary>,
 }
 
-const SUDACHI_FFI_ABI_VERSION: i32 = 5;
+const SUDACHI_FFI_ABI_VERSION: i32 = 1;
 const FFI_INFO_SUBSET_POS_TEXT_BIT: u32 = 1 << 30;
 
 #[derive(Clone, Copy)]
@@ -143,11 +143,12 @@ fn tokenize_text_with_subset(
 fn morpheme_list_to_array(
     morpheme_list: &MorphemeList<Arc<JapaneseDictionary>>,
     include_pos_text: bool,
+    projection: Projection,
 ) -> Result<Box<MorphemeResultArray>, i32> {
     let mut results = Vec::with_capacity(morpheme_list.len());
     let subset = morpheme_list.subset();
     for morpheme in morpheme_list.iter() {
-        match morpheme_to_result(&morpheme, subset, include_pos_text) {
+        match morpheme_to_result(&morpheme, subset, include_pos_text, projection) {
             Ok(result) => results.push(result),
             Err(code) => {
                 crate::result::free_partial_results(&mut results);
@@ -179,10 +180,11 @@ fn lookup_list_to_array(
     morpheme_list: &MorphemeList<Arc<JapaneseDictionary>>,
     subset: InfoSubset,
     include_pos_text: bool,
+    projection: Projection,
 ) -> Result<Box<LookupResultArray>, i32> {
     let mut results = Vec::with_capacity(morpheme_list.len());
     for morpheme in morpheme_list.iter() {
-        match lookup_morpheme_to_result(&morpheme, subset, include_pos_text) {
+        match lookup_morpheme_to_result(&morpheme, subset, include_pos_text, projection) {
             Ok(result) => results.push(result),
             Err(code) => {
                 crate::result::free_partial_lookup_results(&mut results);
@@ -593,6 +595,7 @@ pub(crate) fn tokenize_impl(
     handle: *mut TokenizerHandle,
     input_utf8: *const c_char,
     mode: i32,
+    projection: i32,
     out_result: *mut *mut MorphemeResultArray,
 ) -> i32 {
     run_ffi(|| {
@@ -600,8 +603,9 @@ pub(crate) fn tokenize_impl(
         let tokenizer = unsafe { tokenizer.as_ref() };
         let text = cstr_to_string(input_utf8)?;
         let mode = mode_from_raw(mode)?;
+        let projection = projection_from_raw(projection)?;
         let morpheme_list = tokenize_text_with_subset(tokenizer, &text, mode, InfoSubset::all())?;
-        let array = morpheme_list_to_array(&morpheme_list, true)?;
+        let array = morpheme_list_to_array(&morpheme_list, true, projection)?;
 
         write_box_ptr(out_result, array, "out_result pointer was null")
     })
@@ -611,6 +615,7 @@ pub(crate) fn tokenize_subset_impl(
     handle: *mut TokenizerHandle,
     input_utf8: *const c_char,
     mode: i32,
+    projection: i32,
     subset_bits: u32,
     out_result: *mut *mut MorphemeResultArray,
 ) -> i32 {
@@ -619,9 +624,11 @@ pub(crate) fn tokenize_subset_impl(
         let tokenizer = unsafe { tokenizer.as_ref() };
         let text = cstr_to_string(input_utf8)?;
         let mode = mode_from_raw(mode)?;
+        let projection = projection_from_raw(projection)?;
         let selection = parsed_info_subset_from_bits(subset_bits)?;
         let morpheme_list = tokenize_text_with_subset(tokenizer, &text, mode, selection.subset)?;
-        let array = morpheme_list_to_array(&morpheme_list, selection.include_pos_text)?;
+        let array =
+            morpheme_list_to_array(&morpheme_list, selection.include_pos_text, projection)?;
 
         write_box_ptr(out_result, array, "out_result pointer was null")
     })
@@ -630,15 +637,17 @@ pub(crate) fn tokenize_subset_impl(
 pub(crate) fn lookup_impl(
     handle: *mut TokenizerHandle,
     input_utf8: *const c_char,
+    projection: i32,
     out_result: *mut *mut LookupResultArray,
 ) -> i32 {
     run_ffi(|| {
         let tokenizer = require_non_null(handle, "tokenizer handle was null")?;
         let tokenizer = unsafe { tokenizer.as_ref() };
         let text = cstr_to_string(input_utf8)?;
+        let projection = projection_from_raw(projection)?;
         let subset = InfoSubset::all();
         let morpheme_list = lookup_text_with_subset(tokenizer, &text, subset)?;
-        let array = lookup_list_to_array(&morpheme_list, subset, true)?;
+        let array = lookup_list_to_array(&morpheme_list, subset, true, projection)?;
 
         write_box_ptr(out_result, array, "out_result pointer was null")
     })
@@ -647,6 +656,7 @@ pub(crate) fn lookup_impl(
 pub(crate) fn lookup_subset_impl(
     handle: *mut TokenizerHandle,
     input_utf8: *const c_char,
+    projection: i32,
     subset_bits: u32,
     out_result: *mut *mut LookupResultArray,
 ) -> i32 {
@@ -654,9 +664,15 @@ pub(crate) fn lookup_subset_impl(
         let tokenizer = require_non_null(handle, "tokenizer handle was null")?;
         let tokenizer = unsafe { tokenizer.as_ref() };
         let text = cstr_to_string(input_utf8)?;
+        let projection = projection_from_raw(projection)?;
         let selection = parsed_info_subset_from_bits(subset_bits)?;
         let morpheme_list = lookup_text_with_subset(tokenizer, &text, selection.subset)?;
-        let array = lookup_list_to_array(&morpheme_list, selection.subset, selection.include_pos_text)?;
+        let array = lookup_list_to_array(
+            &morpheme_list,
+            selection.subset,
+            selection.include_pos_text,
+            projection,
+        )?;
 
         write_box_ptr(out_result, array, "out_result pointer was null")
     })
@@ -681,6 +697,7 @@ pub(crate) fn split_morpheme_impl(
     handle: *mut TokenizerHandle,
     input_utf8: *const c_char,
     source_mode: i32,
+    projection: i32,
     index: usize,
     split_mode: i32,
     out_result: *mut *mut MorphemeResultArray,
@@ -690,10 +707,11 @@ pub(crate) fn split_morpheme_impl(
         let tokenizer = unsafe { tokenizer.as_ref() };
         let text = cstr_to_string(input_utf8)?;
         let source_mode = mode_from_raw(source_mode)?;
+        let projection = projection_from_raw(projection)?;
         let split_mode = mode_from_raw(split_mode)?;
         let source_list = tokenize_text(tokenizer, &text, source_mode)?;
         let split_list = split_single_morpheme(&source_list, split_mode, index)?;
-        let array = morpheme_list_to_array(&split_list, true)?;
+        let array = morpheme_list_to_array(&split_list, true, projection)?;
 
         write_box_ptr(out_result, array, "out_result pointer was null")
     })
@@ -703,6 +721,7 @@ pub(crate) fn split_morphemes_impl(
     handle: *mut TokenizerHandle,
     input_utf8: *const c_char,
     source_mode: i32,
+    projection: i32,
     split_mode: i32,
     out_result: *mut *mut MorphemeResultArray,
 ) -> i32 {
@@ -711,10 +730,11 @@ pub(crate) fn split_morphemes_impl(
         let tokenizer = unsafe { tokenizer.as_ref() };
         let text = cstr_to_string(input_utf8)?;
         let source_mode = mode_from_raw(source_mode)?;
+        let projection = projection_from_raw(projection)?;
         let split_mode = mode_from_raw(split_mode)?;
         let source_list = tokenize_text(tokenizer, &text, source_mode)?;
         let split_list = split_all_morphemes(&source_list, split_mode)?;
-        let array = morpheme_list_to_array(&split_list, true)?;
+        let array = morpheme_list_to_array(&split_list, true, projection)?;
 
         write_box_ptr(out_result, array, "out_result pointer was null")
     })

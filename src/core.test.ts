@@ -13,6 +13,8 @@ import type {
 } from "./native.ts";
 
 const INFO_SUBSET_FFI_POS_TEXT_BIT = 1 << 30;
+const DEFAULT_PROJECTION = "surface";
+const PROJECTION_VALUES = new Set(["surface", "normalized", "dictionary_form", "reading"]);
 
 const MORPHEME_LAYOUT: MorphemeResultLayout = {
   layoutVersion: 1,
@@ -120,6 +122,21 @@ function createSubsetLookupEntry(
   };
 }
 
+function projectionArg(args: readonly unknown[], index: number): string | undefined {
+  const value = args[index];
+  return typeof value === "string" && PROJECTION_VALUES.has(value) ? value : undefined;
+}
+
+function surfaceArg(args: readonly unknown[], index: number): string | undefined {
+  const value = args[index];
+  return typeof value === "string" && !PROJECTION_VALUES.has(value) ? value : undefined;
+}
+
+function resultBufferArg(args: readonly unknown[], index: number): BigUint64Array | undefined {
+  const value = args[index];
+  return value instanceof BigUint64Array ? value : undefined;
+}
+
 function createMockLibrary(): NativeSudachiLibrary {
   return {
     symbols: {
@@ -128,55 +145,85 @@ function createMockLibrary(): NativeSudachiLibrary {
         return 0;
       },
       sudachi_free_tokenizer: () => {},
-      sudachi_tokenize: (_handle, _input, mode, outResult) => {
-        (outResult as BigUint64Array)[0] = mode === 0 ? 40n : 2n;
+      sudachi_tokenize: (...args) => {
+        const projection = projectionArg(args, 3);
+        void projection;
+        const outResult = resultBufferArg(args, 4);
+        const mode = typeof args[2] === "number" ? args[2] : -1;
+        if (!outResult) {
+          throw new Error("tokenize result buffer missing");
+        }
+        outResult[0] = mode === 0 ? 40n : 2n;
         return 0;
       },
-      sudachi_tokenize_subset: (_handle, _input, mode, subsetBits, outResult) => {
+      sudachi_tokenize_subset: (...args) => {
+        const projection = projectionArg(args, 3);
+        void projection;
+        const outResult = resultBufferArg(args, 5);
+        const mode = typeof args[2] === "number" ? args[2] : -1;
+        const subsetBits = typeof args[4] === "number" ? args[4] : -1;
+        if (!outResult) {
+          throw new Error("tokenize subset result buffer missing");
+        }
         if (mode === 2 && subsetBits === ((1 << 0) | (1 << 2))) {
-          (outResult as BigUint64Array)[0] = 41n;
+          outResult[0] = 41n;
           return 0;
         }
 
         if (mode === 2 && subsetBits === ((1 << 2) | INFO_SUBSET_FFI_POS_TEXT_BIT)) {
-          (outResult as BigUint64Array)[0] = 43n;
+          outResult[0] = 43n;
           return 0;
         }
 
         if (mode === 2 && subsetBits === ((1 << 0) | (1 << 2) | INFO_SUBSET_FFI_POS_TEXT_BIT)) {
-          (outResult as BigUint64Array)[0] = 44n;
+          outResult[0] = 44n;
           return 0;
         }
 
-        (outResult as BigUint64Array)[0] = 42n;
+        outResult[0] = 42n;
         return 0;
       },
-      sudachi_split_morpheme: (_handle, _input, sourceMode, index, splitMode, outResult) => {
+      sudachi_split_morpheme: (...args) => {
+        const projection = projectionArg(args, 3);
+        void projection;
+        const outResult = resultBufferArg(args, 6);
+        const sourceMode = typeof args[2] === "number" ? args[2] : -1;
+        const index = typeof args[4] === "number" ? args[4] : -1;
+        const splitMode = typeof args[5] === "number" ? args[5] : -1;
+        if (!outResult) {
+          throw new Error("split morpheme result buffer missing");
+        }
         if (sourceMode === 2 && splitMode === 0 && index === 0) {
-          (outResult as BigUint64Array)[0] = 30n;
+          outResult[0] = 30n;
           return 0;
         }
 
         if (sourceMode === 2 && splitMode === 0 && index === 1) {
-          (outResult as BigUint64Array)[0] = 31n;
+          outResult[0] = 31n;
           return 0;
         }
 
         if (sourceMode === 0 && splitMode === 0 && index === 0) {
-          (outResult as BigUint64Array)[0] = 32n;
+          outResult[0] = 32n;
           return 0;
         }
 
         if (sourceMode === 0 && splitMode === 0 && index === 1) {
-          (outResult as BigUint64Array)[0] = 33n;
+          outResult[0] = 33n;
           return 0;
         }
 
-        (outResult as BigUint64Array)[0] = 30n;
+        outResult[0] = 30n;
         return 0;
       },
-      sudachi_split_morphemes: (_handle, _input, _sourceMode, _splitMode, outResult) => {
-        (outResult as BigUint64Array)[0] = 40n;
+      sudachi_split_morphemes: (...args) => {
+        const projection = projectionArg(args, 3);
+        void projection;
+        const outResult = resultBufferArg(args, 5);
+        if (!outResult) {
+          throw new Error("split morphemes result buffer missing");
+        }
+        outResult[0] = 40n;
         return 0;
       },
       sudachi_compile_pos_matcher: (_handle, _patternsJson, outResult) => {
@@ -197,22 +244,37 @@ function createMockLibrary(): NativeSudachiLibrary {
 function createMockLookupLibrary(): NativeLookupLibrary {
   return {
     symbols: {
-      sudachi_lookup: (_handle, surface, outResult) => {
-        (outResult as BigUint64Array)[0] = surface === "東京" ? 50n : 51n;
+      sudachi_lookup: (...args) => {
+        const projection = projectionArg(args, 2);
+        void projection;
+        const surface = surfaceArg(args, 1) ?? "";
+        const outResult = resultBufferArg(args, 3);
+        if (!outResult) {
+          throw new Error("lookup result buffer missing");
+        }
+        outResult[0] = surface === "東京" ? 50n : 51n;
         return 0;
       },
-      sudachi_lookup_subset: (_handle, surface, subsetBits, outResult) => {
+      sudachi_lookup_subset: (...args) => {
+        const projection = projectionArg(args, 2);
+        void projection;
+        const surface = surfaceArg(args, 1) ?? "";
+        const outResult = resultBufferArg(args, 4);
+        const subsetBits = typeof args[3] === "number" ? args[3] : -1;
+        if (!outResult) {
+          throw new Error("lookup subset result buffer missing");
+        }
         if (surface === "東京" && subsetBits === (1 << 0)) {
-          (outResult as BigUint64Array)[0] = 52n;
+          outResult[0] = 52n;
           return 0;
         }
 
         if (surface === "東京" && subsetBits === ((1 << 2) | INFO_SUBSET_FFI_POS_TEXT_BIT)) {
-          (outResult as BigUint64Array)[0] = 54n;
+          outResult[0] = 54n;
           return 0;
         }
 
-        (outResult as BigUint64Array)[0] = 53n;
+        outResult[0] = 53n;
         return 0;
       },
       sudachi_free_lookup_result: () => {},
@@ -340,12 +402,12 @@ test("lookup uses the dedicated native lookup symbol and decoder", () => {
     const freeSpy = spyOn(lookupLibrary.symbols, "sudachi_free_lookup_result");
 
     try {
-      expect(tokenizer.lookup("東京")).toEqual([
+      expect(tokenizer.lookup("東京", DEFAULT_PROJECTION)).toEqual([
         createLookupEntry("東京", "(0, 5)", 0, false),
         createLookupEntry("東京", "(0, 6)", 0, false),
       ]);
       expect(lookupSpy).toHaveBeenCalledTimes(1);
-      expect(lookupSpy).toHaveBeenCalledWith(1 as never, "東京", expect.any(BigUint64Array));
+      expect(lookupSpy).toHaveBeenCalledWith(1 as never, "東京", 0, expect.any(BigUint64Array));
       expect(subsetLookupSpy).not.toHaveBeenCalled();
       expect(readLookupSpy).toHaveBeenCalledTimes(1);
       expect(freeSpy).toHaveBeenCalledTimes(1);
@@ -358,19 +420,19 @@ test("lookup uses the dedicated native lookup symbol and decoder", () => {
   });
 });
 
-test("tokenize without options uses the legacy native symbol", () => {
+test("tokenize forwards the required projection to the native symbol", () => {
   withTokenizer(({ library, tokenizer, readSpy }) => {
     const tokenizeSpy = spyOn(library.symbols, "sudachi_tokenize");
     const subsetTokenizeSpy = spyOn(library.symbols, "sudachi_tokenize_subset");
     const freeSpy = spyOn(library.symbols, "sudachi_free_result");
 
     try {
-      expect(tokenizer.tokenize("東京都に")).toEqual([
+      expect(tokenizer.tokenize("東京都に", DEFAULT_PROJECTION, "C")).toEqual([
         createMorpheme("東京都", 0, 9),
         createMorpheme("に", 9, 12),
       ]);
       expect(tokenizeSpy).toHaveBeenCalledTimes(1);
-      expect(tokenizeSpy).toHaveBeenCalledWith(1 as never, "東京都に", 2, expect.any(BigUint64Array));
+      expect(tokenizeSpy).toHaveBeenCalledWith(1 as never, "東京都に", 2, 0, expect.any(BigUint64Array));
       expect(subsetTokenizeSpy).not.toHaveBeenCalled();
       expect(readSpy).toHaveBeenCalledTimes(1);
       expect(freeSpy).toHaveBeenCalledTimes(1);
@@ -390,7 +452,7 @@ test("tokenize with fields uses the subset native symbol and omits unrequested f
     const freeSpy = spyOn(library.symbols, "sudachi_free_result");
 
     try {
-      expect(tokenizer.tokenize("東京都に", "C", { fields: ["surface", "posId"] })).toEqual([
+      expect(tokenizer.tokenize("東京都に", DEFAULT_PROJECTION, "C", { fields: ["surface", "posId"] })).toEqual([
         createSubsetMorpheme("東京", 0, 6, 7),
         createSubsetMorpheme("都", 6, 9, 8),
         createSubsetMorpheme("に", 9, 12, 9),
@@ -401,6 +463,7 @@ test("tokenize with fields uses the subset native symbol and omits unrequested f
         1 as never,
         "東京都に",
         2,
+        0,
         (1 << 0) | (1 << 2),
         expect.any(BigUint64Array),
       );
@@ -422,7 +485,7 @@ test("tokenize with pos uses the subset native symbol and returns the POS string
     const freeSpy = spyOn(library.symbols, "sudachi_free_result");
 
     try {
-      const result = tokenizer.tokenize("東京都に", "C", { fields: ["pos"] });
+      const result = tokenizer.tokenize("東京都に", DEFAULT_PROJECTION, "C", { fields: ["pos"] });
       expect(result).toHaveLength(1);
       expect(result[0]?.pos).toBe("名詞,普通名詞,一般,*,*,*");
       expect(tokenizeSpy).not.toHaveBeenCalled();
@@ -431,6 +494,7 @@ test("tokenize with pos uses the subset native symbol and returns the POS string
         1 as never,
         "東京都に",
         2,
+        0,
         (1 << 2) | INFO_SUBSET_FFI_POS_TEXT_BIT,
         expect.any(BigUint64Array),
       );
@@ -452,12 +516,18 @@ test("lookup with fields uses the subset native symbol and returns defaulted omi
     const freeSpy = spyOn(lookupLibrary.symbols, "sudachi_free_lookup_result");
 
     try {
-      expect(tokenizer.lookup("東京", { fields: ["surface"] })).toEqual([
+      expect(tokenizer.lookup("東京", DEFAULT_PROJECTION, { fields: ["surface"] })).toEqual([
         createSubsetLookupEntry("東京", "(0, 5)", 0, false),
       ]);
       expect(lookupSpy).not.toHaveBeenCalled();
       expect(subsetLookupSpy).toHaveBeenCalledTimes(1);
-      expect(subsetLookupSpy).toHaveBeenCalledWith(1 as never, "東京", 1 << 0, expect.any(BigUint64Array));
+      expect(subsetLookupSpy).toHaveBeenCalledWith(
+        1 as never,
+        "東京",
+        0,
+        1 << 0,
+        expect.any(BigUint64Array),
+      );
       expect(readLookupSpy).toHaveBeenCalledTimes(1);
       expect(freeSpy).toHaveBeenCalledTimes(1);
       expect(freeSpy).toHaveBeenCalledWith(52 as never);
@@ -476,7 +546,7 @@ test("lookup with pos uses the subset native symbol and returns the POS string",
     const freeSpy = spyOn(lookupLibrary.symbols, "sudachi_free_lookup_result");
 
     try {
-      const result = tokenizer.lookup("東京", { fields: ["pos"] });
+      const result = tokenizer.lookup("東京", DEFAULT_PROJECTION, { fields: ["pos"] });
       expect(result).toHaveLength(1);
       expect(result[0]?.pos).toBe("名詞,普通名詞,一般,*,*,*");
       expect(lookupSpy).not.toHaveBeenCalled();
@@ -484,6 +554,7 @@ test("lookup with pos uses the subset native symbol and returns the POS string",
       expect(subsetLookupSpy).toHaveBeenCalledWith(
         1 as never,
         "東京",
+        0,
         (1 << 2) | INFO_SUBSET_FFI_POS_TEXT_BIT,
         expect.any(BigUint64Array),
       );
@@ -556,15 +627,15 @@ test("createPosMatcher rejects patterns longer than six entries before calling n
 
 test("lookup loads the lookup library lazily and reuses its layout", () => {
   withTokenizer(({ tokenizer, lookupLoadSpy, lookupLayoutSpy }) => {
-    tokenizer.tokenize("東京都に", "C");
+    tokenizer.tokenize("東京都に", DEFAULT_PROJECTION, "C");
     expect(lookupLoadSpy).not.toHaveBeenCalled();
     expect(lookupLayoutSpy).not.toHaveBeenCalled();
 
-    expect(tokenizer.lookup("東京")).toEqual([
+    expect(tokenizer.lookup("東京", DEFAULT_PROJECTION)).toEqual([
       createLookupEntry("東京", "(0, 5)", 0, false),
       createLookupEntry("東京", "(0, 6)", 0, false),
     ]);
-    expect(tokenizer.lookup("に")).toEqual([createLookupEntry("に", "(0, 1)", 0, false)]);
+    expect(tokenizer.lookup("に", DEFAULT_PROJECTION)).toEqual([createLookupEntry("に", "(0, 1)", 0, false)]);
     expect(lookupLoadSpy).toHaveBeenCalledTimes(1);
     expect(lookupLayoutSpy).toHaveBeenCalledTimes(1);
   });
@@ -574,15 +645,23 @@ test("split uses the native morpheme resplit symbol and reuses the decoder", () 
   withTokenizer(({ library, tokenizer, readSpy }) => {
     const splitSpy = spyOn(library.symbols, "sudachi_split_morpheme");
     const freeSpy = spyOn(library.symbols, "sudachi_free_result");
-    const morphemes = tokenizer.tokenize("東京都に", "C");
+    const morphemes = tokenizer.tokenize("東京都に", DEFAULT_PROJECTION, "C");
 
     try {
-      expect(tokenizer.split(morphemes[0]!, "A")).toEqual([
+      expect(tokenizer.split(morphemes[0]!, DEFAULT_PROJECTION, "A")).toEqual([
         createMorpheme("東京", 0, 6),
         createMorpheme("都", 6, 9),
       ]);
       expect(splitSpy).toHaveBeenCalledTimes(1);
-      expect(splitSpy).toHaveBeenCalledWith(1 as never, "東京都に", 2, 0, 0, expect.any(BigUint64Array));
+      expect(splitSpy).toHaveBeenCalledWith(
+        1 as never,
+        "東京都に",
+        2,
+        0,
+        0,
+        0,
+        expect.any(BigUint64Array),
+      );
       expect(readSpy).toHaveBeenCalledTimes(2);
     } finally {
       splitSpy.mockRestore();
@@ -595,16 +674,23 @@ test("splitInto uses the native whole-list split symbol for owned lists", () => 
   withTokenizer(({ library, tokenizer }) => {
     const listSplitSpy = spyOn(library.symbols, "sudachi_split_morphemes");
     const singleSplitSpy = spyOn(library.symbols, "sudachi_split_morpheme");
-    const morphemes = tokenizer.tokenize("東京都に", "C");
+    const morphemes = tokenizer.tokenize("東京都に", DEFAULT_PROJECTION, "C");
 
     try {
-      expect(tokenizer.splitInto(morphemes, "A")).toEqual([
+      expect(tokenizer.splitInto(morphemes, DEFAULT_PROJECTION, "A")).toEqual([
         createMorpheme("東京", 0, 6),
         createMorpheme("都", 6, 9),
         createMorpheme("に", 9, 12),
       ]);
       expect(listSplitSpy).toHaveBeenCalledTimes(1);
-      expect(listSplitSpy).toHaveBeenCalledWith(1 as never, "東京都に", 2, 0, expect.any(BigUint64Array));
+      expect(listSplitSpy).toHaveBeenCalledWith(
+        1 as never,
+        "東京都に",
+        2,
+        0,
+        0,
+        expect.any(BigUint64Array),
+      );
       expect(singleSplitSpy).not.toHaveBeenCalled();
     } finally {
       singleSplitSpy.mockRestore();
@@ -617,19 +703,46 @@ test("splitInto on a split result stays on the per-morpheme path", () => {
   withTokenizer(({ library, tokenizer }) => {
     const listSplitSpy = spyOn(library.symbols, "sudachi_split_morphemes");
     const singleSplitSpy = spyOn(library.symbols, "sudachi_split_morpheme");
-    const morphemes = tokenizer.tokenize("東京都に", "C");
-    const splitResult = tokenizer.split(morphemes[0]!, "A");
+    const morphemes = tokenizer.tokenize("東京都に", DEFAULT_PROJECTION, "C");
+    const splitResult = tokenizer.split(morphemes[0]!, DEFAULT_PROJECTION, "A");
 
     try {
-      expect(tokenizer.splitInto(splitResult, "A")).toEqual([
+      expect(tokenizer.splitInto(splitResult, DEFAULT_PROJECTION, "A")).toEqual([
         createMorpheme("東京", 0, 6),
         createMorpheme("都", 6, 9),
       ]);
       expect(listSplitSpy).not.toHaveBeenCalled();
       expect(singleSplitSpy).toHaveBeenCalledTimes(3);
-      expect(singleSplitSpy).toHaveBeenNthCalledWith(1, 1 as never, "東京都に", 2, 0, 0, expect.any(BigUint64Array));
-      expect(singleSplitSpy).toHaveBeenNthCalledWith(2, 1 as never, "東京都に", 0, 0, 0, expect.any(BigUint64Array));
-      expect(singleSplitSpy).toHaveBeenNthCalledWith(3, 1 as never, "東京都に", 0, 1, 0, expect.any(BigUint64Array));
+      expect(singleSplitSpy).toHaveBeenNthCalledWith(
+        1,
+        1 as never,
+        "東京都に",
+        2,
+        0,
+        0,
+        0,
+        expect.any(BigUint64Array),
+      );
+      expect(singleSplitSpy).toHaveBeenNthCalledWith(
+        2,
+        1 as never,
+        "東京都に",
+        0,
+        0,
+        0,
+        0,
+        expect.any(BigUint64Array),
+      );
+      expect(singleSplitSpy).toHaveBeenNthCalledWith(
+        3,
+        1 as never,
+        "東京都に",
+        0,
+        0,
+        1,
+        0,
+        expect.any(BigUint64Array),
+      );
     } finally {
       singleSplitSpy.mockRestore();
       listSplitSpy.mockRestore();
@@ -641,17 +754,25 @@ test("splitInto falls back when a tokenize result array was mutated", () => {
   withTokenizer(({ library, tokenizer }) => {
     const listSplitSpy = spyOn(library.symbols, "sudachi_split_morphemes");
     const singleSplitSpy = spyOn(library.symbols, "sudachi_split_morpheme");
-    const morphemes = tokenizer.tokenize("東京都に", "C");
+    const morphemes = tokenizer.tokenize("東京都に", DEFAULT_PROJECTION, "C");
     morphemes.pop();
 
     try {
-      expect(tokenizer.splitInto(morphemes, "A")).toEqual([
+      expect(tokenizer.splitInto(morphemes, DEFAULT_PROJECTION, "A")).toEqual([
         createMorpheme("東京", 0, 6),
         createMorpheme("都", 6, 9),
       ]);
       expect(listSplitSpy).not.toHaveBeenCalled();
       expect(singleSplitSpy).toHaveBeenCalledTimes(1);
-      expect(singleSplitSpy).toHaveBeenCalledWith(1 as never, "東京都に", 2, 0, 0, expect.any(BigUint64Array));
+      expect(singleSplitSpy).toHaveBeenCalledWith(
+        1 as never,
+        "東京都に",
+        2,
+        0,
+        0,
+        0,
+        expect.any(BigUint64Array),
+      );
     } finally {
       singleSplitSpy.mockRestore();
       listSplitSpy.mockRestore();
@@ -663,19 +784,79 @@ test("splitInto falls back to per-morpheme splits for copied lists", () => {
   withTokenizer(({ library, tokenizer }) => {
     const listSplitSpy = spyOn(library.symbols, "sudachi_split_morphemes");
     const singleSplitSpy = spyOn(library.symbols, "sudachi_split_morpheme");
-    const morphemes = tokenizer.tokenize("東京都に", "C");
+    const morphemes = tokenizer.tokenize("東京都に", DEFAULT_PROJECTION, "C");
     const copied = [...morphemes];
 
     try {
-      expect(tokenizer.splitInto(copied, "A")).toEqual([
+      expect(tokenizer.splitInto(copied, DEFAULT_PROJECTION, "A")).toEqual([
         createMorpheme("東京", 0, 6),
         createMorpheme("都", 6, 9),
         createMorpheme("に", 9, 12),
       ]);
       expect(listSplitSpy).not.toHaveBeenCalled();
       expect(singleSplitSpy).toHaveBeenCalledTimes(2);
-      expect(singleSplitSpy).toHaveBeenNthCalledWith(1, 1 as never, "東京都に", 2, 0, 0, expect.any(BigUint64Array));
-      expect(singleSplitSpy).toHaveBeenNthCalledWith(2, 1 as never, "東京都に", 2, 1, 0, expect.any(BigUint64Array));
+      expect(singleSplitSpy).toHaveBeenNthCalledWith(
+        1,
+        1 as never,
+        "東京都に",
+        2,
+        0,
+        0,
+        0,
+        expect.any(BigUint64Array),
+      );
+      expect(singleSplitSpy).toHaveBeenNthCalledWith(
+        2,
+        1 as never,
+        "東京都に",
+        2,
+        0,
+        1,
+        0,
+        expect.any(BigUint64Array),
+      );
+    } finally {
+      singleSplitSpy.mockRestore();
+      listSplitSpy.mockRestore();
+    }
+  });
+});
+
+test("splitInto fallback resolves copied morphemes even when projection changes", () => {
+  withTokenizer(({ library, tokenizer }) => {
+    const listSplitSpy = spyOn(library.symbols, "sudachi_split_morphemes");
+    const singleSplitSpy = spyOn(library.symbols, "sudachi_split_morpheme");
+    const morphemes = tokenizer.tokenize("東京都に", DEFAULT_PROJECTION, "C");
+    const copied = [...morphemes];
+
+    try {
+      expect(tokenizer.splitInto(copied, "reading", "A")).toEqual([
+        createMorpheme("東京", 0, 6),
+        createMorpheme("都", 6, 9),
+        createMorpheme("に", 9, 12),
+      ]);
+      expect(listSplitSpy).not.toHaveBeenCalled();
+      expect(singleSplitSpy).toHaveBeenCalledTimes(2);
+      expect(singleSplitSpy).toHaveBeenNthCalledWith(
+        1,
+        1 as never,
+        "東京都に",
+        2,
+        3,
+        0,
+        0,
+        expect.any(BigUint64Array),
+      );
+      expect(singleSplitSpy).toHaveBeenNthCalledWith(
+        2,
+        1 as never,
+        "東京都に",
+        2,
+        3,
+        1,
+        0,
+        expect.any(BigUint64Array),
+      );
     } finally {
       singleSplitSpy.mockRestore();
       listSplitSpy.mockRestore();
@@ -685,7 +866,7 @@ test("splitInto falls back to per-morpheme splits for copied lists", () => {
 
 test("split rejects morphemes that were not created by the tokenizer", () => {
   withTokenizer(({ tokenizer }) => {
-    expect(() => tokenizer.split(createMorpheme("東京都", 0, 9), "A")).toThrow(
+    expect(() => tokenizer.split(createMorpheme("東京都", 0, 9), DEFAULT_PROJECTION, "A")).toThrow(
       "Morpheme was not created by this tokenizer.",
     );
   });

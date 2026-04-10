@@ -2,6 +2,10 @@ export const TOKENIZE_MODES = ["A", "B", "C"] as const;
 
 export type TokenizeMode = (typeof TOKENIZE_MODES)[number];
 
+export const SURFACE_PROJECTIONS = ["surface", "normalized", "dictionary_form", "reading"] as const;
+
+export type SurfaceProjection = (typeof SURFACE_PROJECTIONS)[number];
+
 export interface NativeLibraryLoadOptions {
   libraryPath?: string;
   debug?: boolean;
@@ -116,6 +120,20 @@ export function parseTokenizeMode(value: string): TokenizeMode {
   throw new SudachiError(`Invalid mode: ${value}`, {
     code: "INVALID_MODE",
     nativeStatus: 3,
+  });
+}
+
+export function isSurfaceProjection(value: string): value is SurfaceProjection {
+  return SURFACE_PROJECTIONS.includes(value as SurfaceProjection);
+}
+
+export function parseSurfaceProjection(value: string): SurfaceProjection {
+  if (isSurfaceProjection(value)) {
+    return value;
+  }
+
+  throw new SudachiError(`Invalid projection: ${value}`, {
+    code: "INVALID_ARGUMENT",
   });
 }
 

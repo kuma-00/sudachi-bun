@@ -2,9 +2,16 @@ import { statSync } from "node:fs";
 
 import { resolveInputText } from "./input.ts";
 import type { CliTokenizeCommand } from "./types.ts";
-import { SudachiError, type TokenizeMode, type TokenizerOptions } from "../types.ts";
+import {
+  SudachiError,
+  parseSurfaceProjection,
+  type SurfaceProjection,
+  type TokenizeMode,
+  type TokenizerOptions,
+} from "../types.ts";
 
 export interface TokenizeCliCommand extends TokenizerOptions {
+  projection: SurfaceProjection;
   mode: TokenizeMode;
   text: string;
   splitSentences?: boolean;
@@ -52,6 +59,7 @@ export function normalizeTokenizeCommand(parsed: CliTokenizeCommand): TokenizeCl
     configPath: parsed.configPath,
     libraryPath: parsed.libraryPath,
     resourceDir: validateResourceDir(parsed.resourceDir),
+    projection: parseSurfaceProjection(parsed.projection),
     mode: parsed.mode,
     text,
     splitSentences: parsed.splitSentences,

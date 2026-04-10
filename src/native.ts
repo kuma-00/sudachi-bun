@@ -12,7 +12,7 @@ const POS_MATCHER_RESULT_LAYOUT_FIELD_COUNT = 5;
 const SENTENCE_SPAN_RESULT_LAYOUT_FIELD_COUNT = 7;
 
 export const MORPHEME_RESULT_LAYOUT_VERSION = 1;
-export const LOOKUP_RESULT_LAYOUT_VERSION = 2;
+export const LOOKUP_RESULT_LAYOUT_VERSION = 1;
 export const POS_MATCHER_RESULT_LAYOUT_VERSION = 1;
 export const SENTENCE_SPAN_RESULT_LAYOUT_VERSION = 1;
 
@@ -82,12 +82,14 @@ export interface NativeSudachiLibrary {
       handle: Pointer | NodeJS.TypedArray | null,
       inputUtf8: string,
       mode: number,
+      projection: number,
       outResult: NodeJS.TypedArray | Pointer | null,
     ) => number;
     sudachi_tokenize_subset: (
       handle: Pointer | NodeJS.TypedArray | null,
       inputUtf8: string,
       mode: number,
+      projection: number,
       subsetBits: number,
       outResult: NodeJS.TypedArray | Pointer | null,
     ) => number;
@@ -95,6 +97,7 @@ export interface NativeSudachiLibrary {
       handle: Pointer | NodeJS.TypedArray | null,
       inputUtf8: string,
       sourceMode: number,
+      projection: number,
       morphemeIndex: number,
       splitMode: number,
       outResult: NodeJS.TypedArray | Pointer | null,
@@ -103,6 +106,7 @@ export interface NativeSudachiLibrary {
       handle: Pointer | NodeJS.TypedArray | null,
       inputUtf8: string,
       sourceMode: number,
+      projection: number,
       splitMode: number,
       outResult: NodeJS.TypedArray | Pointer | null,
     ) => number;
@@ -126,6 +130,14 @@ export interface NativeLookupLibrary {
     sudachi_lookup: (
       handle: Pointer | NodeJS.TypedArray | null,
       surface: string,
+      projection: number,
+      outResult: NodeJS.TypedArray | Pointer | null,
+    ) => number;
+    sudachi_lookup_subset: (
+      handle: Pointer | NodeJS.TypedArray | null,
+      surface: string,
+      projection: number,
+      subsetBits: number,
       outResult: NodeJS.TypedArray | Pointer | null,
     ) => number;
     sudachi_free_lookup_result: (result: Pointer | NodeJS.TypedArray | null) => void;
@@ -177,12 +189,14 @@ interface NativeSymbols extends CommonNativeSymbols {
     handle: Pointer | NodeJS.TypedArray | null,
     inputUtf8: string,
     mode: number,
+    projection: number,
     outResult: NodeJS.TypedArray | Pointer | null,
   ) => number;
   sudachi_tokenize_subset: (
     handle: Pointer | NodeJS.TypedArray | null,
     inputUtf8: string,
     mode: number,
+    projection: number,
     subsetBits: number,
     outResult: NodeJS.TypedArray | Pointer | null,
   ) => number;
@@ -190,6 +204,7 @@ interface NativeSymbols extends CommonNativeSymbols {
     handle: Pointer | NodeJS.TypedArray | null,
     inputUtf8: string,
     sourceMode: number,
+    projection: number,
     morphemeIndex: number,
     splitMode: number,
     outResult: NodeJS.TypedArray | Pointer | null,
@@ -198,6 +213,7 @@ interface NativeSymbols extends CommonNativeSymbols {
     handle: Pointer | NodeJS.TypedArray | null,
     inputUtf8: string,
     sourceMode: number,
+    projection: number,
     splitMode: number,
     outResult: NodeJS.TypedArray | Pointer | null,
   ) => number;
@@ -233,11 +249,13 @@ interface NativeLookupSymbols extends CommonNativeSymbols {
   sudachi_lookup: (
     handle: Pointer | NodeJS.TypedArray | null,
     surface: string,
+    projection: number,
     outResult: NodeJS.TypedArray | Pointer | null,
   ) => number;
   sudachi_lookup_subset: (
     handle: Pointer | NodeJS.TypedArray | null,
     surface: string,
+    projection: number,
     subsetBits: number,
     outResult: NodeJS.TypedArray | Pointer | null,
   ) => number;
@@ -392,19 +410,19 @@ const TOKENIZER_NATIVE_SYMBOL_DEFS = {
     returns: "void",
   },
   sudachi_tokenize: {
-    args: ["ptr", "cstring", "i32", "ptr"],
+    args: ["ptr", "cstring", "i32", "i32", "ptr"],
     returns: "i32",
   },
   sudachi_tokenize_subset: {
-    args: ["ptr", "cstring", "i32", "u32", "ptr"],
+    args: ["ptr", "cstring", "i32", "i32", "u32", "ptr"],
     returns: "i32",
   },
   sudachi_split_morpheme: {
-    args: ["ptr", "cstring", "i32", "usize", "i32", "ptr"],
+    args: ["ptr", "cstring", "i32", "i32", "usize", "i32", "ptr"],
     returns: "i32",
   },
   sudachi_split_morphemes: {
-    args: ["ptr", "cstring", "i32", "i32", "ptr"],
+    args: ["ptr", "cstring", "i32", "i32", "i32", "ptr"],
     returns: "i32",
   },
   sudachi_compile_pos_matcher: {
@@ -456,11 +474,11 @@ const SENTENCE_SPLITTER_NATIVE_SYMBOL_DEFS = {
 const LOOKUP_NATIVE_SYMBOL_DEFS = {
   ...COMMON_NATIVE_SYMBOL_DEFS,
   sudachi_lookup: {
-    args: ["ptr", "cstring", "ptr"],
+    args: ["ptr", "cstring", "i32", "ptr"],
     returns: "i32",
   },
   sudachi_lookup_subset: {
-    args: ["ptr", "cstring", "u32", "ptr"],
+    args: ["ptr", "cstring", "i32", "u32", "ptr"],
     returns: "i32",
   },
   sudachi_free_lookup_result: {

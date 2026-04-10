@@ -141,6 +141,31 @@ fn collect_surfaces_and_offsets(result: *mut MorphemeResultArray) -> Vec<(String
     }
 }
 
+fn collect_morpheme_texts(
+    result: *mut MorphemeResultArray,
+) -> Vec<(String, String, String, String)> {
+    assert!(!result.is_null());
+
+    unsafe {
+        let array = &*result;
+        if array.len == 0 {
+            return Vec::new();
+        }
+        let items = std::slice::from_raw_parts(array.items, array.len);
+        items
+            .iter()
+            .map(|item| {
+                let surface = CStr::from_ptr(item.surface).to_str().unwrap().to_owned();
+                let normalized = CStr::from_ptr(item.normalized).to_str().unwrap().to_owned();
+                let dictionary_form =
+                    CStr::from_ptr(item.dictionary_form).to_str().unwrap().to_owned();
+                let reading = CStr::from_ptr(item.reading).to_str().unwrap().to_owned();
+                (surface, normalized, dictionary_form, reading)
+            })
+            .collect()
+    }
+}
+
 fn collect_morpheme_result(result: *mut MorphemeResultArray) -> Vec<MorphemeResult> {
     assert!(!result.is_null());
 
@@ -256,22 +281,42 @@ fn get_sentence_span_layout_returns_stable_offsets() {
 }
 
 #[test]
+fn get_abi_version_returns_expected_value() {
+    assert_eq!(sudachi_get_abi_version(), 1);
+}
+
+#[test]
 fn lookup_requires_non_null_pointers() {
     let text = CString::new("東京都").unwrap();
     let mut out_result = ptr::null_mut();
 
-    let status = sudachi_lookup(ptr::null_mut(), text.as_ptr(), &mut out_result);
+    let status = sudachi_lookup(
+        ptr::null_mut(),
+        text.as_ptr(),
+        Projection::Surface as i32,
+        &mut out_result,
+    );
     assert_eq!(status, ERR_NULL_POINTER);
     assert_eq!(status_code_name(status), "NULL_POINTER");
     assert!(out_result.is_null());
 
     with_test_tokenizer(|handle| {
-        let status = sudachi_lookup(handle, ptr::null(), &mut out_result);
+        let status = sudachi_lookup(
+            handle,
+            ptr::null(),
+            Projection::Surface as i32,
+            &mut out_result,
+        );
         assert_eq!(status, ERR_NULL_POINTER);
         assert_eq!(status_code_name(status), "NULL_POINTER");
         assert!(out_result.is_null());
 
-        let status = sudachi_lookup(handle, text.as_ptr(), ptr::null_mut());
+        let status = sudachi_lookup(
+            handle,
+            text.as_ptr(),
+            Projection::Surface as i32,
+            ptr::null_mut(),
+        );
         assert_eq!(status, ERR_NULL_POINTER);
         assert_eq!(status_code_name(status), "NULL_POINTER");
     });
@@ -281,7 +326,13 @@ fn lookup_requires_non_null_pointers() {
 fn tokenize_requires_output_pointer() {
     with_test_tokenizer(|handle| {
         let text = CString::new("東京都").unwrap();
-        let status = sudachi_tokenize(handle, text.as_ptr(), 0, ptr::null_mut());
+        let status = sudachi_tokenize(
+            handle,
+            text.as_ptr(),
+            0,
+            Projection::Surface as i32,
+            ptr::null_mut(),
+        );
 
         assert_eq!(status, ERR_NULL_POINTER);
         assert_eq!(status_code_name(status), "NULL_POINTER");
@@ -290,12 +341,18 @@ fn tokenize_requires_output_pointer() {
 }
 
 #[test]
-fn tokenize_subset_all_matches_compat_wrapper() {
+fn tokenize_subset_surface_projection_matches_surface_fields() {
     with_test_tokenizer(|handle| {
         let text = CString::new("東京都に").unwrap();
 
         let mut compat_result = ptr::null_mut();
-        let status = sudachi_tokenize(handle, text.as_ptr(), 2, &mut compat_result);
+        let status = sudachi_tokenize(
+            handle,
+            text.as_ptr(),
+            2,
+            Projection::Surface as i32,
+            &mut compat_result,
+        );
         assert_eq!(status, OK, "{}", last_error_message());
         let compat_values = collect_surfaces_and_offsets(compat_result);
         sudachi_free_result(compat_result);
@@ -305,6 +362,7 @@ fn tokenize_subset_all_matches_compat_wrapper() {
             handle,
             text.as_ptr(),
             2,
+            Projection::Surface as i32,
             InfoSubset::all().bits(),
             &mut subset_result,
         );
@@ -325,6 +383,7 @@ fn tokenize_subset_omits_unrequested_expensive_fields() {
             handle,
             text.as_ptr(),
             2,
+            Projection::Surface as i32,
             InfoSubset::POS_ID.bits(),
             &mut out_result,
         );
@@ -357,6 +416,7 @@ fn tokenize_subset_returns_pos_text_when_requested() {
             handle,
             text.as_ptr(),
             2,
+            Projection::Surface as i32,
             InfoSubset::POS_ID.bits() | FFI_INFO_SUBSET_POS_TEXT_BIT,
             &mut out_result,
         );
@@ -373,6 +433,65 @@ fn tokenize_subset_returns_pos_text_when_requested() {
         }
 
         sudachi_free_result(out_result);
+    });
+}
+
+#[test]
+fn tokenize_projection_changes_surface_field() {
+    with_test_tokenizer(|handle| {
+        let text = CString::new("食べた").unwrap();
+
+        let mut surface_result = ptr::null_mut();
+        let status = sudachi_tokenize(
+            handle,
+            text.as_ptr(),
+            2,
+            Projection::Surface as i32,
+            &mut surface_result,
+        );
+        assert_eq!(status, OK, "{}", last_error_message());
+        let surface_values = collect_morpheme_texts(surface_result);
+        sudachi_free_result(surface_result);
+
+        let mut dictionary_result = ptr::null_mut();
+        let status = sudachi_tokenize(
+            handle,
+            text.as_ptr(),
+            2,
+            Projection::DictionaryForm as i32,
+            &mut dictionary_result,
+        );
+        assert_eq!(status, OK, "{}", last_error_message());
+        let dictionary_values = collect_morpheme_texts(dictionary_result);
+        sudachi_free_result(dictionary_result);
+
+        let mut normalized_result = ptr::null_mut();
+        let status = sudachi_tokenize(
+            handle,
+            text.as_ptr(),
+            2,
+            Projection::Normalized as i32,
+            &mut normalized_result,
+        );
+        assert_eq!(status, OK, "{}", last_error_message());
+        let normalized_values = collect_morpheme_texts(normalized_result);
+        sudachi_free_result(normalized_result);
+
+        let mut reading_result = ptr::null_mut();
+        let status = sudachi_tokenize(
+            handle,
+            text.as_ptr(),
+            2,
+            Projection::Reading as i32,
+            &mut reading_result,
+        );
+        assert_eq!(status, OK, "{}", last_error_message());
+        let reading_values = collect_morpheme_texts(reading_result);
+        sudachi_free_result(reading_result);
+
+        assert_eq!(dictionary_values[0].0, surface_values[0].2);
+        assert_eq!(normalized_values[0].0, surface_values[0].1);
+        assert_eq!(reading_values[0].0, surface_values[0].3);
     });
 }
 
@@ -404,7 +523,12 @@ fn lookup_returns_complete_match_dictionary_entries() {
     with_test_tokenizer(|handle| {
         let text = CString::new("東京都").unwrap();
         let mut out_result = ptr::null_mut();
-        let status = sudachi_lookup(handle, text.as_ptr(), &mut out_result);
+        let status = sudachi_lookup(
+            handle,
+            text.as_ptr(),
+            Projection::Surface as i32,
+            &mut out_result,
+        );
 
         assert_eq!(status, OK, "{}", last_error_message());
         let values = collect_lookup_values(out_result);
@@ -425,12 +549,17 @@ fn lookup_returns_complete_match_dictionary_entries() {
 }
 
 #[test]
-fn lookup_subset_all_matches_compat_wrapper() {
+fn lookup_subset_surface_projection_matches_surface_fields() {
     with_test_tokenizer(|handle| {
         let text = CString::new("東京都").unwrap();
 
         let mut compat_result = ptr::null_mut();
-        let status = sudachi_lookup(handle, text.as_ptr(), &mut compat_result);
+        let status = sudachi_lookup(
+            handle,
+            text.as_ptr(),
+            Projection::Surface as i32,
+            &mut compat_result,
+        );
         assert_eq!(status, OK, "{}", last_error_message());
         let compat_values = collect_lookup_values(compat_result);
         sudachi_free_lookup_result(compat_result);
@@ -439,6 +568,7 @@ fn lookup_subset_all_matches_compat_wrapper() {
         let status = sudachi_lookup_subset(
             handle,
             text.as_ptr(),
+            Projection::Surface as i32,
             InfoSubset::all().bits(),
             &mut subset_result,
         );
@@ -458,6 +588,7 @@ fn lookup_subset_omits_unrequested_fields() {
         let status = sudachi_lookup_subset(
             handle,
             text.as_ptr(),
+            Projection::Surface as i32,
             InfoSubset::POS_ID.bits(),
             &mut out_result,
         );
@@ -489,6 +620,7 @@ fn lookup_subset_returns_pos_text_when_requested() {
         let status = sudachi_lookup_subset(
             handle,
             text.as_ptr(),
+            Projection::Surface as i32,
             InfoSubset::POS_ID.bits() | FFI_INFO_SUBSET_POS_TEXT_BIT,
             &mut out_result,
         );
@@ -514,11 +646,35 @@ fn lookup_subset_returns_pos_text_when_requested() {
 }
 
 #[test]
+fn lookup_projection_changes_surface_field() {
+    with_test_tokenizer(|handle| {
+        let mut out_result = ptr::null_mut();
+        let text = CString::new("東京").unwrap();
+        let status = sudachi_lookup(
+            handle,
+            text.as_ptr(),
+            Projection::Reading as i32,
+            &mut out_result,
+        );
+        assert_eq!(status, OK, "{}", last_error_message());
+        let values = collect_lookup_values(out_result);
+        sudachi_free_lookup_result(out_result);
+        assert_eq!(values[0].0, "トウキョウ");
+    });
+}
+
+#[test]
 fn lookup_subset_rejects_invalid_bits() {
     with_test_tokenizer(|handle| {
         let text = CString::new("東京都").unwrap();
         let mut out_result = ptr::null_mut();
-        let status = sudachi_lookup_subset(handle, text.as_ptr(), 1u32 << 31, &mut out_result);
+        let status = sudachi_lookup_subset(
+            handle,
+            text.as_ptr(),
+            Projection::Surface as i32,
+            1u32 << 31,
+            &mut out_result,
+        );
 
         assert_eq!(status, crate::error::ERR_INTERNAL);
         assert_eq!(status_code_name(status), "INTERNAL");
@@ -532,7 +688,12 @@ fn lookup_returns_empty_array_when_no_complete_match_exists() {
     with_test_tokenizer(|handle| {
         let text = CString::new("東京都に").unwrap();
         let mut out_result = ptr::null_mut();
-        let status = sudachi_lookup(handle, text.as_ptr(), &mut out_result);
+        let status = sudachi_lookup(
+            handle,
+            text.as_ptr(),
+            Projection::Surface as i32,
+            &mut out_result,
+        );
 
         assert_eq!(status, OK, "{}", last_error_message());
         let values = collect_lookup_values(out_result);
@@ -547,7 +708,12 @@ fn compile_pos_matcher_returns_exact_pos_ids() {
     with_test_tokenizer(|handle| {
         let mut lookup_result = ptr::null_mut();
         let text = CString::new("東京都").unwrap();
-        let status = sudachi_lookup(handle, text.as_ptr(), &mut lookup_result);
+        let status = sudachi_lookup(
+            handle,
+            text.as_ptr(),
+            Projection::Surface as i32,
+            &mut lookup_result,
+        );
         assert_eq!(status, OK, "{}", last_error_message());
         let lookup_values = collect_lookup_values(lookup_result);
         sudachi_free_lookup_result(lookup_result);
@@ -579,7 +745,12 @@ fn compile_pos_matcher_supports_wildcards() {
     with_test_tokenizer(|handle| {
         let text = CString::new("東京都").unwrap();
         let mut lookup_result = ptr::null_mut();
-        let status = sudachi_lookup(handle, text.as_ptr(), &mut lookup_result);
+        let status = sudachi_lookup(
+            handle,
+            text.as_ptr(),
+            Projection::Surface as i32,
+            &mut lookup_result,
+        );
         assert_eq!(status, OK, "{}", last_error_message());
         sudachi_free_lookup_result(lookup_result);
 
@@ -634,7 +805,15 @@ fn split_morpheme_requires_valid_index() {
     with_test_tokenizer(|handle| {
         let text = CString::new("京都東京都").unwrap();
         let mut out_result = ptr::null_mut();
-        let status = sudachi_split_morpheme(handle, text.as_ptr(), 2, 99, 0, &mut out_result);
+        let status = sudachi_split_morpheme(
+            handle,
+            text.as_ptr(),
+            2,
+            Projection::Surface as i32,
+            99,
+            0,
+            &mut out_result,
+        );
 
         assert_eq!(status, ERR_INVALID_INDEX);
         assert_eq!(status_code_name(status), "INVALID_INDEX");
@@ -651,7 +830,15 @@ fn split_morpheme_resplits_one_morpheme_with_original_offsets() {
     with_test_tokenizer(|handle| {
         let text = CString::new("京都東京都").unwrap();
         let mut out_result = ptr::null_mut();
-        let status = sudachi_split_morpheme(handle, text.as_ptr(), 2, 1, 0, &mut out_result);
+        let status = sudachi_split_morpheme(
+            handle,
+            text.as_ptr(),
+            2,
+            Projection::Reading as i32,
+            1,
+            0,
+            &mut out_result,
+        );
 
         assert_eq!(status, OK, "{}", last_error_message());
         let values = collect_surfaces_and_offsets(out_result);
@@ -659,7 +846,7 @@ fn split_morpheme_resplits_one_morpheme_with_original_offsets() {
 
         assert_eq!(
             values,
-            vec![("東京".to_owned(), 6, 12), ("都".to_owned(), 12, 15)]
+            vec![("トウキョウ".to_owned(), 6, 12), ("ト".to_owned(), 12, 15)]
         );
     });
 }
@@ -669,7 +856,14 @@ fn split_morphemes_resplits_entire_list() {
     with_test_tokenizer(|handle| {
         let text = CString::new("京都東京都").unwrap();
         let mut out_result = ptr::null_mut();
-        let status = sudachi_split_morphemes(handle, text.as_ptr(), 2, 0, &mut out_result);
+        let status = sudachi_split_morphemes(
+            handle,
+            text.as_ptr(),
+            2,
+            Projection::Reading as i32,
+            0,
+            &mut out_result,
+        );
 
         assert_eq!(status, OK, "{}", last_error_message());
         let values = collect_surfaces_and_offsets(out_result);
@@ -678,9 +872,9 @@ fn split_morphemes_resplits_entire_list() {
         assert_eq!(
             values,
             vec![
-                ("京都".to_owned(), 0, 6),
-                ("東京".to_owned(), 6, 12),
-                ("都".to_owned(), 12, 15),
+                ("キョウト".to_owned(), 0, 6),
+                ("トウキョウ".to_owned(), 6, 12),
+                ("ト".to_owned(), 12, 15),
             ]
         );
     });
@@ -691,7 +885,14 @@ fn split_morphemes_requires_valid_mode() {
     with_test_tokenizer(|handle| {
         let text = CString::new("京都").unwrap();
         let mut out_result = ptr::null_mut();
-        let status = sudachi_split_morphemes(handle, text.as_ptr(), 2, 9, &mut out_result);
+        let status = sudachi_split_morphemes(
+            handle,
+            text.as_ptr(),
+            2,
+            Projection::Surface as i32,
+            9,
+            &mut out_result,
+        );
 
         assert_eq!(status, crate::error::ERR_INVALID_MODE);
         assert_eq!(status_code_name(status), "INVALID_MODE");

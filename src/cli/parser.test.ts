@@ -103,6 +103,8 @@ test("parseCliArgs resolves tokenize commands into a discriminated union", () =>
     "tokenize",
     "--dict-path",
     "/tmp/dict",
+    "--projection",
+    "surface",
     "--config-path",
     "/tmp/config",
     "--library-path",
@@ -126,6 +128,7 @@ test("parseCliArgs resolves tokenize commands into a discriminated union", () =>
   expect(command).toMatchObject({
     kind: "tokenize",
     dictPath: "/tmp/dict",
+    projection: "surface",
     configPath: "/tmp/config",
     libraryPath: "/tmp/lib.dylib",
     resourceDir: "/tmp/resources",
@@ -166,8 +169,9 @@ test("renderCliHelp returns distinct help text for top-level and subcommands", (
   const dump = renderCliHelp("dump");
 
   expect(topLevel).toContain("Commands:");
-  expect(topLevel).toContain("tokenize  Tokenize text.");
+  expect(topLevel).toContain("tokenize  Tokenize text with a required projection.");
   expect(tokenize).toContain("Usage:");
+  expect(tokenize).toContain("--projection <mode>");
   expect(tokenize).toContain("--resource-dir <path>");
   expect(tokenize).not.toContain("--resource_dir");
   expect(build).toContain("bun run index.ts build [--help]");

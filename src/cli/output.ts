@@ -1,8 +1,12 @@
-import type { Morpheme } from "../types.ts";
+import type { Morpheme, SurfaceProjection } from "../types.ts";
 
 export type TokenizeOutputFormat = "normal" | "wakati" | "all";
 
-export function formatTokenizeOutput(morphemes: Morpheme[], format: TokenizeOutputFormat): string {
+export function formatTokenizeOutput(
+  morphemes: Morpheme[],
+  format: TokenizeOutputFormat,
+  projection: SurfaceProjection,
+): string {
   switch (format) {
     case "wakati":
       return morphemes.map((morpheme) => morpheme.surface).join(" ");

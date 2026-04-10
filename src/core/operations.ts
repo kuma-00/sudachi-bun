@@ -8,6 +8,7 @@ import {
   type LookupEntry,
   type Morpheme,
   type PosMatcherPatterns,
+  type SurfaceProjection,
   type TokenizeMode,
 } from "../types.ts";
 import { type MorphemeStateTracker } from "./morpheme-state.ts";
@@ -17,6 +18,13 @@ const MODE_TO_NATIVE: Record<TokenizeMode, number> = {
   A: 0,
   B: 1,
   C: 2,
+};
+
+const PROJECTION_TO_NATIVE: Record<SurfaceProjection, number> = {
+  surface: 0,
+  normalized: 1,
+  dictionary_form: 2,
+  reading: 3,
 };
 
 const INFO_SUBSET_FFI_POS_TEXT_BIT = 1 << 30;
@@ -40,10 +48,22 @@ const ALL_INFO_SUBSET_BITS =
   INFO_SUBSET_FIELD_BITS.reading |
   INFO_SUBSET_FIELD_BITS.synonymGroupIds;
 
+const MORPHEME_PROJECTIONS = new WeakMap<Morpheme, SurfaceProjection>();
+
 interface TokenizerExecutionContext {
   owner: object;
   session: TokenizerSessionManager;
   state: MorphemeStateTracker;
+}
+
+function rememberMorphemeProjection(morphemes: readonly Morpheme[], projection: SurfaceProjection): void {
+  for (const morpheme of morphemes) {
+    MORPHEME_PROJECTIONS.set(morpheme, projection);
+  }
+}
+
+function morphemeProjection(morpheme: Morpheme, fallback: SurfaceProjection): SurfaceProjection {
+  return MORPHEME_PROJECTIONS.get(morpheme) ?? fallback;
 }
 
 function normalizePosPattern(pattern: readonly (string | null | undefined)[]): (string | null)[] {
@@ -108,6 +128,7 @@ function tokenizeFromSession(
   state: MorphemeStateTracker,
   owner: object,
   text: string,
+  projection: SurfaceProjection,
   mode: TokenizeMode,
   options: InfoSubset | undefined,
 ): Morpheme[] {
@@ -115,11 +136,18 @@ function tokenizeFromSession(
   const subsetBits = infoSubsetBits(options);
   const status =
     subsetBits === null
-      ? session.library.symbols.sudachi_tokenize(session.handle, text, MODE_TO_NATIVE[mode], resultOut)
+      ? session.library.symbols.sudachi_tokenize(
+          session.handle,
+          text,
+          MODE_TO_NATIVE[mode],
+          PROJECTION_TO_NATIVE[projection],
+          resultOut,
+        )
       : session.library.symbols.sudachi_tokenize_subset(
           session.handle,
           text,
           MODE_TO_NATIVE[mode],
+          PROJECTION_TO_NATIVE[projection],
           subsetBits,
           resultOut,
         );
@@ -127,16 +155,19 @@ function tokenizeFromSession(
     throw createNativeSudachiError(session.library, status, "Tokenization failed.");
   }
 
-  return readOwnedNativeResult(
+  const morphemes = readOwnedNativeResult(
     resultOut,
     "Tokenizer returned a null result pointer.",
     (resultPtr) => session.library.symbols.sudachi_free_result(resultPtr),
     (resultPtr) => state.attach(owner, readMorphemeArray(resultPtr, layout), text, mode, "owned"),
   );
+  rememberMorphemeProjection(morphemes, projection);
+  return morphemes;
 }
 
 function splitSourceIndex(
   context: TokenizerExecutionContext,
+  projection: SurfaceProjection,
   morpheme: Morpheme,
   morphemeState: ReturnType<MorphemeStateTracker["getMorphemeState"]>,
 ): number {
@@ -144,7 +175,8 @@ function splitSourceIndex(
     return morphemeState.index;
   }
 
-  const list = tokenize(context, morphemeState.listState.text, morphemeState.listState.mode);
+  const sourceProjection = morphemeProjection(morpheme, projection);
+  const list = tokenize(context, morphemeState.listState.text, sourceProjection, morphemeState.listState.mode);
   for (const [index, candidate] of list.entries()) {
     if (morphemeMatches(candidate, morpheme)) {
       return index;
@@ -161,7 +193,6 @@ function morphemeMatches(left: Morpheme, right: Morpheme): boolean {
   return (
     left.begin === right.begin &&
     left.end === right.end &&
-    left.surface === right.surface &&
     left.normalized === right.normalized &&
     left.dictionaryForm === right.dictionaryForm &&
     left.reading === right.reading &&
@@ -191,25 +222,37 @@ function sameSynonymGroupIds(left: readonly number[], right: readonly number[]):
 function tokenize(
   context: TokenizerExecutionContext,
   text: string,
+  projection: SurfaceProjection,
   mode: TokenizeMode,
-  options: InfoSubset | undefined,
+  options: InfoSubset | undefined = undefined,
 ): Morpheme[] {
   const { library, handle, layout } = context.session.getOpenSession();
-  return tokenizeFromSession({ library, handle, layout }, layout, context.state, context.owner, text, mode, options);
+  return tokenizeFromSession(
+    { library, handle, layout },
+    layout,
+    context.state,
+    context.owner,
+    text,
+    projection,
+    mode,
+    options,
+  );
 }
 
 export function tokenizeMorphemes(
   context: TokenizerExecutionContext,
   text: string,
+  projection: SurfaceProjection,
   mode: TokenizeMode = "C",
   options: InfoSubset | undefined = undefined,
 ): Morpheme[] {
-  return tokenize(context, text, mode, options);
+  return tokenize(context, text, projection, mode, options);
 }
 
 export function lookupEntries(
   context: TokenizerExecutionContext,
   surface: string,
+  projection: SurfaceProjection,
   options: InfoSubset | undefined = undefined,
 ): LookupEntry[] {
   const { handle } = context.session.getOpenSession();
@@ -219,8 +262,14 @@ export function lookupEntries(
   const subsetBits = infoSubsetBits(options);
   const status =
     subsetBits === null
-      ? library.symbols.sudachi_lookup(handle, surface, resultOut)
-      : library.symbols.sudachi_lookup_subset(handle, surface, subsetBits, resultOut);
+      ? library.symbols.sudachi_lookup(handle, surface, PROJECTION_TO_NATIVE[projection], resultOut)
+      : library.symbols.sudachi_lookup_subset(
+          handle,
+          surface,
+          PROJECTION_TO_NATIVE[projection],
+          subsetBits,
+          resultOut,
+        );
   if (status !== 0) {
     throw createNativeSudachiError(library, status, "Lookup failed.");
   }
@@ -253,17 +302,19 @@ export function compilePosMatcher(context: TokenizerExecutionContext, patterns: 
 export function splitMorpheme(
   context: TokenizerExecutionContext,
   morpheme: Morpheme,
+  projection: SurfaceProjection,
   mode: TokenizeMode = "C",
 ): Morpheme[] {
   const { library, handle, layout } = context.session.getOpenSession();
   const morphemeState = context.state.getMorphemeState(context.owner, morpheme);
-  const index = splitSourceIndex(context, morpheme, morphemeState);
+  const index = splitSourceIndex(context, projection, morpheme, morphemeState);
 
   const resultOut = new BigUint64Array(1);
   const status = library.symbols.sudachi_split_morpheme(
     handle,
     morphemeState.listState.text,
     MODE_TO_NATIVE[morphemeState.listState.mode],
+    PROJECTION_TO_NATIVE[projection],
     index,
     MODE_TO_NATIVE[mode],
     resultOut,
@@ -273,17 +324,20 @@ export function splitMorpheme(
     throw createNativeSudachiError(library, status, "Morpheme split failed.");
   }
 
-  return readOwnedNativeResult(
+  const morphemes = readOwnedNativeResult(
     resultOut,
     "Tokenizer returned a null morpheme split pointer.",
     (resultPtr) => library.symbols.sudachi_free_result(resultPtr),
     (resultPtr) => context.state.attach(context.owner, readMorphemeArray(resultPtr, layout), morphemeState.listState.text, mode, "split"),
   );
+  rememberMorphemeProjection(morphemes, projection);
+  return morphemes;
 }
 
 export function splitMorphemes(
   context: TokenizerExecutionContext,
   morphemes: readonly Morpheme[],
+  projection: SurfaceProjection,
   mode: TokenizeMode = "C",
 ): Morpheme[] {
   if (morphemes.length === 0) {
@@ -305,6 +359,7 @@ export function splitMorphemes(
       handle,
       listState.text,
       MODE_TO_NATIVE[listState.mode],
+      PROJECTION_TO_NATIVE[projection],
       MODE_TO_NATIVE[mode],
       resultOut,
     );
@@ -313,17 +368,19 @@ export function splitMorphemes(
       throw createNativeSudachiError(library, status, "Morpheme list split failed.");
     }
 
-    return readOwnedNativeResult(
+    const splitResult = readOwnedNativeResult(
       resultOut,
       "Tokenizer returned a null morpheme list split pointer.",
       (resultPtr) => library.symbols.sudachi_free_result(resultPtr),
       (resultPtr) => context.state.attach(context.owner, readMorphemeArray(resultPtr, layout), listState.text, mode, "owned"),
     );
+    rememberMorphemeProjection(splitResult, projection);
+    return splitResult;
   }
 
   const results: Morpheme[] = [];
   for (const morpheme of morphemes) {
-    results.push(...splitMorpheme(context, morpheme, mode));
+    results.push(...splitMorpheme(context, morpheme, projection, mode));
   }
 
   return results;

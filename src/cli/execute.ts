@@ -13,23 +13,24 @@ function tokenizeSentenceUnits(
   tokenizer: Tokenizer,
   splitterOptions: TokenizerOptions,
   text: string,
+  projection: TokenizeCliCommand["projection"],
   mode: TokenizeMode,
   splitSentences: boolean,
 ): Morpheme[] {
   if (!splitSentences) {
-    return tokenizer.tokenize(text, mode);
+    return tokenizer.tokenize(text, projection, mode);
   }
 
   const splitter = createSentenceSplitter(splitterOptions);
   try {
     const units = splitter.split(text);
     if (units.length === 0) {
-      return tokenizer.tokenize(text, mode);
+      return tokenizer.tokenize(text, projection, mode);
     }
 
     const morphemes: Morpheme[] = [];
     for (const unit of units) {
-      const unitMorphemes = tokenizer.tokenize(unit.text, mode);
+      const unitMorphemes = tokenizer.tokenize(unit.text, projection, mode);
       if (unit.start === 0) {
         morphemes.push(...unitMorphemes);
         continue;
@@ -63,13 +64,14 @@ export function runTokenizeCommand(
         [
           `[debug] tokenize`,
           `format=${format}`,
+          `projection=${command.projection}`,
           `splitSentences=${command.splitSentences ? "true" : "false"}`,
           `resourceDir=${command.resourceDir ?? "(default)"}`,
         ].join(" "),
       );
 
       try {
-        io?.error(`[debug] lookup=${JSON.stringify(tokenizer.lookup(command.text))}`);
+        io?.error(`[debug] lookup=${JSON.stringify(tokenizer.lookup(command.text, command.projection))}`);
       } catch (error) {
         io?.error(`[debug] lookup-unavailable=${formatSudachiError(error)}`);
       }
@@ -79,6 +81,7 @@ export function runTokenizeCommand(
       tokenizer,
       command,
       command.text,
+      command.projection,
       command.mode,
       Boolean(command.splitSentences),
     );
@@ -87,7 +90,7 @@ export function runTokenizeCommand(
       io?.error(`[debug] morphemes=${morphemes.length}`);
     }
 
-    return formatTokenizeOutput(morphemes, format);
+    return formatTokenizeOutput(morphemes, format, command.projection);
   } finally {
     tokenizer.close();
   }

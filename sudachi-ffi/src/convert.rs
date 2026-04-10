@@ -6,6 +6,15 @@ use sudachi::analysis::Mode;
 
 use crate::error::{ERR_INVALID_MODE, ERR_INVALID_UTF8, ERR_NULL_POINTER, error};
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(i32)]
+pub(crate) enum Projection {
+    Surface = 0,
+    Normalized = 1,
+    DictionaryForm = 2,
+    Reading = 3,
+}
+
 pub(crate) fn cstr_to_path(ptr: *const c_char) -> Result<PathBuf, i32> {
     if ptr.is_null() {
         return Err(error(ERR_NULL_POINTER, "path pointer was null"));
@@ -41,6 +50,19 @@ pub(crate) fn mode_from_raw(mode: i32) -> Result<Mode, i32> {
     }
 }
 
+pub(crate) fn projection_from_raw(projection: i32) -> Result<Projection, i32> {
+    match projection {
+        0 => Ok(Projection::Surface),
+        1 => Ok(Projection::Normalized),
+        2 => Ok(Projection::DictionaryForm),
+        3 => Ok(Projection::Reading),
+        _ => Err(error(
+            ERR_INVALID_MODE,
+            "projection must be 0 (surface), 1 (normalized), 2 (dictionary_form), or 3 (reading)",
+        )),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -51,5 +73,17 @@ mod tests {
         assert!(matches!(mode_from_raw(1), Ok(Mode::B)));
         assert!(matches!(mode_from_raw(2), Ok(Mode::C)));
         assert!(mode_from_raw(3).is_err());
+    }
+
+    #[test]
+    fn projection_mapping_is_stable() {
+        assert!(matches!(projection_from_raw(0), Ok(Projection::Surface)));
+        assert!(matches!(projection_from_raw(1), Ok(Projection::Normalized)));
+        assert!(matches!(
+            projection_from_raw(2),
+            Ok(Projection::DictionaryForm)
+        ));
+        assert!(matches!(projection_from_raw(3), Ok(Projection::Reading)));
+        assert!(projection_from_raw(4).is_err());
     }
 }

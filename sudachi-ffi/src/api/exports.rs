@@ -54,9 +54,10 @@ pub extern "C" fn sudachi_tokenize(
     handle: *mut ops::TokenizerHandle,
     input_utf8: *const c_char,
     mode: i32,
+    projection: i32,
     out_result: *mut *mut MorphemeResultArray,
 ) -> i32 {
-    ops::tokenize_impl(handle, input_utf8, mode, out_result)
+    ops::tokenize_impl(handle, input_utf8, mode, projection, out_result)
 }
 
 #[unsafe(no_mangle)]
@@ -64,29 +65,32 @@ pub extern "C" fn sudachi_tokenize_subset(
     handle: *mut ops::TokenizerHandle,
     input_utf8: *const c_char,
     mode: i32,
+    projection: i32,
     subset_bits: u32,
     out_result: *mut *mut MorphemeResultArray,
 ) -> i32 {
-    ops::tokenize_subset_impl(handle, input_utf8, mode, subset_bits, out_result)
+    ops::tokenize_subset_impl(handle, input_utf8, mode, projection, subset_bits, out_result)
 }
 
 #[unsafe(no_mangle)]
 pub extern "C" fn sudachi_lookup(
     handle: *mut ops::TokenizerHandle,
     input_utf8: *const c_char,
+    projection: i32,
     out_result: *mut *mut LookupResultArray,
 ) -> i32 {
-    ops::lookup_impl(handle, input_utf8, out_result)
+    ops::lookup_impl(handle, input_utf8, projection, out_result)
 }
 
 #[unsafe(no_mangle)]
 pub extern "C" fn sudachi_lookup_subset(
     handle: *mut ops::TokenizerHandle,
     input_utf8: *const c_char,
+    projection: i32,
     subset_bits: u32,
     out_result: *mut *mut LookupResultArray,
 ) -> i32 {
-    ops::lookup_subset_impl(handle, input_utf8, subset_bits, out_result)
+    ops::lookup_subset_impl(handle, input_utf8, projection, subset_bits, out_result)
 }
 
 #[unsafe(no_mangle)]
@@ -103,6 +107,7 @@ pub extern "C" fn sudachi_split_morpheme(
     handle: *mut ops::TokenizerHandle,
     input_utf8: *const c_char,
     source_mode: i32,
+    projection: i32,
     index: usize,
     split_mode: i32,
     out_result: *mut *mut MorphemeResultArray,
@@ -111,6 +116,7 @@ pub extern "C" fn sudachi_split_morpheme(
         handle,
         input_utf8,
         source_mode,
+        projection,
         index,
         split_mode,
         out_result,
@@ -122,10 +128,11 @@ pub extern "C" fn sudachi_split_morphemes(
     handle: *mut ops::TokenizerHandle,
     input_utf8: *const c_char,
     source_mode: i32,
+    projection: i32,
     split_mode: i32,
     out_result: *mut *mut MorphemeResultArray,
 ) -> i32 {
-    ops::split_morphemes_impl(handle, input_utf8, source_mode, split_mode, out_result)
+    ops::split_morphemes_impl(handle, input_utf8, source_mode, projection, split_mode, out_result)
 }
 
 #[unsafe(no_mangle)]

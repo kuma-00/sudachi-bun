@@ -3,6 +3,9 @@ mod ops;
 #[cfg(test)]
 mod tests;
 
+#[cfg(test)]
+pub(crate) use crate::convert::Projection;
+
 pub use exports::{
     sudachi_compile_pos_matcher, sudachi_create_sentence_splitter,
     sudachi_create_sentence_splitter_from_tokenizer, sudachi_create_tokenizer,

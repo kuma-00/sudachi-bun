@@ -7,6 +7,7 @@ use std::sync::Arc;
 use sudachi::dic::dictionary::JapaneseDictionary;
 use sudachi::dic::subset::InfoSubset;
 
+use crate::convert::Projection;
 use crate::error::{ERR_INTERNAL, ERR_NULL_POINTER, error};
 
 use super::{
@@ -58,6 +59,18 @@ fn string_to_c(ptr: String) -> Result<*mut c_char, i32> {
 
 fn clone_string(value: &str) -> Result<*mut c_char, i32> {
     string_to_c(value.to_owned())
+}
+
+fn projected_surface_text(
+    morpheme: &sudachi::analysis::morpheme::Morpheme<'_, Arc<JapaneseDictionary>>,
+    projection: Projection,
+) -> String {
+    match projection {
+        Projection::Surface => morpheme.surface().to_string(),
+        Projection::Normalized => morpheme.normalized_form().to_string(),
+        Projection::DictionaryForm => morpheme.dictionary_form().to_string(),
+        Projection::Reading => morpheme.reading_form().to_string(),
+    }
 }
 
 pub(crate) fn free_c_string(ptr: *mut c_char) {
@@ -120,6 +133,7 @@ pub(crate) fn morpheme_to_result(
     morpheme: &sudachi::analysis::morpheme::Morpheme<'_, Arc<JapaneseDictionary>>,
     subset: InfoSubset,
     include_pos_text: bool,
+    projection: Projection,
 ) -> Result<MorphemeResult, i32> {
     struct ResultGuard {
         value: MorphemeResult,
@@ -145,7 +159,7 @@ pub(crate) fn morpheme_to_result(
 
     let mut result = ResultGuard::new();
     if subset.contains(InfoSubset::SURFACE) {
-        result.value.surface = clone_string(&morpheme.surface().to_string())?;
+        result.value.surface = clone_string(&projected_surface_text(morpheme, projection))?;
     }
     if subset.contains(InfoSubset::NORMALIZED_FORM) {
         result.value.normalized = clone_string(&morpheme.normalized_form().to_string())?;
@@ -190,6 +204,7 @@ pub(crate) fn lookup_morpheme_to_result(
     morpheme: &sudachi::analysis::morpheme::Morpheme<'_, Arc<JapaneseDictionary>>,
     subset: InfoSubset,
     include_pos_text: bool,
+    projection: Projection,
 ) -> Result<LookupResultItem, i32> {
     struct ResultGuard {
         value: LookupResultItem,
@@ -215,7 +230,7 @@ pub(crate) fn lookup_morpheme_to_result(
 
     let mut result = ResultGuard::new();
     if subset.contains(InfoSubset::SURFACE) {
-        result.value.surface = clone_string(&morpheme.surface().to_string())?;
+        result.value.surface = clone_string(&projected_surface_text(morpheme, projection))?;
     }
     if include_pos_text {
         result.value.pos = clone_string(&morpheme.part_of_speech().join(","))?;
