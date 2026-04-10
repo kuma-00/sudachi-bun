@@ -84,6 +84,13 @@ export interface NativeSudachiLibrary {
       mode: number,
       outResult: NodeJS.TypedArray | Pointer | null,
     ) => number;
+    sudachi_tokenize_subset: (
+      handle: Pointer | NodeJS.TypedArray | null,
+      inputUtf8: string,
+      mode: number,
+      subsetBits: number,
+      outResult: NodeJS.TypedArray | Pointer | null,
+    ) => number;
     sudachi_split_morpheme: (
       handle: Pointer | NodeJS.TypedArray | null,
       inputUtf8: string,
@@ -172,6 +179,13 @@ interface NativeSymbols extends CommonNativeSymbols {
     mode: number,
     outResult: NodeJS.TypedArray | Pointer | null,
   ) => number;
+  sudachi_tokenize_subset: (
+    handle: Pointer | NodeJS.TypedArray | null,
+    inputUtf8: string,
+    mode: number,
+    subsetBits: number,
+    outResult: NodeJS.TypedArray | Pointer | null,
+  ) => number;
   sudachi_split_morpheme: (
     handle: Pointer | NodeJS.TypedArray | null,
     inputUtf8: string,
@@ -219,6 +233,12 @@ interface NativeLookupSymbols extends CommonNativeSymbols {
   sudachi_lookup: (
     handle: Pointer | NodeJS.TypedArray | null,
     surface: string,
+    outResult: NodeJS.TypedArray | Pointer | null,
+  ) => number;
+  sudachi_lookup_subset: (
+    handle: Pointer | NodeJS.TypedArray | null,
+    surface: string,
+    subsetBits: number,
     outResult: NodeJS.TypedArray | Pointer | null,
   ) => number;
   sudachi_free_lookup_result: (result: Pointer | NodeJS.TypedArray | null) => void;
@@ -375,6 +395,10 @@ const TOKENIZER_NATIVE_SYMBOL_DEFS = {
     args: ["ptr", "cstring", "i32", "ptr"],
     returns: "i32",
   },
+  sudachi_tokenize_subset: {
+    args: ["ptr", "cstring", "i32", "u32", "ptr"],
+    returns: "i32",
+  },
   sudachi_split_morpheme: {
     args: ["ptr", "cstring", "i32", "usize", "i32", "ptr"],
     returns: "i32",
@@ -435,6 +459,10 @@ const LOOKUP_NATIVE_SYMBOL_DEFS = {
     args: ["ptr", "cstring", "ptr"],
     returns: "i32",
   },
+  sudachi_lookup_subset: {
+    args: ["ptr", "cstring", "u32", "ptr"],
+    returns: "i32",
+  },
   sudachi_free_lookup_result: {
     args: ["ptr"],
     returns: "void",
@@ -475,6 +503,7 @@ function createNativeSudachiLibrary(symbols: NativeSymbols, close: () => void): 
       sudachi_create_tokenizer: symbols.sudachi_create_tokenizer,
       sudachi_free_tokenizer: symbols.sudachi_free_tokenizer,
       sudachi_tokenize: symbols.sudachi_tokenize,
+      sudachi_tokenize_subset: symbols.sudachi_tokenize_subset,
       sudachi_split_morpheme: symbols.sudachi_split_morpheme,
       sudachi_split_morphemes: symbols.sudachi_split_morphemes,
       sudachi_compile_pos_matcher: symbols.sudachi_compile_pos_matcher,
@@ -493,6 +522,7 @@ function createNativeLookupLibrary(symbols: NativeLookupSymbols, close: () => vo
   return {
     symbols: {
       sudachi_lookup: symbols.sudachi_lookup,
+      sudachi_lookup_subset: symbols.sudachi_lookup_subset,
       sudachi_free_lookup_result: symbols.sudachi_free_lookup_result,
       sudachi_get_lookup_result_layout: symbols.sudachi_get_lookup_result_layout,
       sudachi_get_last_error: symbols.sudachi_get_last_error,

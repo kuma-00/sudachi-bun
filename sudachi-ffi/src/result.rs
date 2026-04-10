@@ -195,7 +195,6 @@ pub(crate) use marshal::{
     boxed_slice_into_raw_parts, free_c_string, free_lookup_result_array,
     free_partial_lookup_results, free_partial_results, free_pos_matcher_result_array,
     free_result_array, free_sentence_span_array, free_u32_slice, lookup_morpheme_to_result,
-    lookup_result_layout, morpheme_result_layout, morpheme_to_result,
-    pos_matcher_result_layout, require_non_null, sentence_span_layout, write_box_ptr,
-    write_ptr,
+    lookup_result_layout, morpheme_result_layout, morpheme_to_result, pos_matcher_result_layout,
+    require_non_null, sentence_span_layout, write_box_ptr, write_ptr,
 };

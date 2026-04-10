@@ -8,6 +8,9 @@ export { runTokenizeCommand } from "./src/cli/execute.ts";
 export { parseCliArgs } from "./src/cli/parser.ts";
 export { formatSudachiError, SudachiError, TOKENIZE_MODES } from "./src/types.ts";
 export type {
+  InfoSubset,
+  InfoSubsetField,
+  InfoSubsetFields,
   LookupEntry,
   Morpheme,
   PosMatcherPattern,

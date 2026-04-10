@@ -1,8 +1,8 @@
 use super::*;
 use crate::error::{ERR_INVALID_INDEX, ERR_NULL_POINTER, OK, status_code_name};
 use crate::result::{
-    LookupResultArray, LookupResultLayout, MorphemeResultArray, PosMatcherResultArray,
-    SentenceSpanLayout,
+    LookupResultArray, LookupResultLayout, MorphemeResult, MorphemeResultArray,
+    PosMatcherResultArray, SentenceSpanLayout,
 };
 use std::env;
 use std::ffi::{CStr, CString};
@@ -10,8 +10,10 @@ use std::mem::MaybeUninit;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::{fs, ptr};
+use sudachi::dic::subset::InfoSubset;
 
 static TOKENIZER_TEST_COUNTER: AtomicU64 = AtomicU64::new(0);
+const FFI_INFO_SUBSET_POS_TEXT_BIT: u32 = 1 << 30;
 
 fn find_sudachi_checkout_dir() -> PathBuf {
     let cargo_home = env::var_os("CARGO_HOME")
@@ -139,6 +141,36 @@ fn collect_surfaces_and_offsets(result: *mut MorphemeResultArray) -> Vec<(String
     }
 }
 
+fn collect_morpheme_result(result: *mut MorphemeResultArray) -> Vec<MorphemeResult> {
+    assert!(!result.is_null());
+
+    unsafe {
+        let array = &*result;
+        if array.len == 0 {
+            return Vec::new();
+        }
+        let items = std::slice::from_raw_parts(array.items, array.len);
+        items
+            .iter()
+            .map(|item| MorphemeResult {
+                surface: item.surface,
+                normalized: item.normalized,
+                dictionary_form: item.dictionary_form,
+                reading: item.reading,
+                pos: item.pos,
+                begin: item.begin,
+                end: item.end,
+                word_id: item.word_id,
+                pos_id: item.pos_id,
+                dictionary_id: item.dictionary_id,
+                is_oov: item.is_oov,
+                synonym_group_ids: item.synonym_group_ids,
+                synonym_group_ids_len: item.synonym_group_ids_len,
+            })
+            .collect()
+    }
+}
+
 fn collect_lookup_values(
     result: *mut LookupResultArray,
 ) -> Vec<(String, String, String, i32, u8, u16)> {
@@ -156,7 +188,14 @@ fn collect_lookup_values(
                 let surface = CStr::from_ptr(item.surface).to_str().unwrap().to_owned();
                 let pos = CStr::from_ptr(item.pos).to_str().unwrap().to_owned();
                 let word_id = CStr::from_ptr(item.word_id).to_str().unwrap().to_owned();
-                (surface, pos, word_id, item.dictionary_id, item.is_oov, item.pos_id)
+                (
+                    surface,
+                    pos,
+                    word_id,
+                    item.dictionary_id,
+                    item.is_oov,
+                    item.pos_id,
+                )
             })
             .collect()
     }
@@ -251,6 +290,93 @@ fn tokenize_requires_output_pointer() {
 }
 
 #[test]
+fn tokenize_subset_all_matches_compat_wrapper() {
+    with_test_tokenizer(|handle| {
+        let text = CString::new("東京都に").unwrap();
+
+        let mut compat_result = ptr::null_mut();
+        let status = sudachi_tokenize(handle, text.as_ptr(), 2, &mut compat_result);
+        assert_eq!(status, OK, "{}", last_error_message());
+        let compat_values = collect_surfaces_and_offsets(compat_result);
+        sudachi_free_result(compat_result);
+
+        let mut subset_result = ptr::null_mut();
+        let status = sudachi_tokenize_subset(
+            handle,
+            text.as_ptr(),
+            2,
+            InfoSubset::all().bits(),
+            &mut subset_result,
+        );
+        assert_eq!(status, OK, "{}", last_error_message());
+        let subset_values = collect_surfaces_and_offsets(subset_result);
+        sudachi_free_result(subset_result);
+
+        assert_eq!(subset_values, compat_values);
+    });
+}
+
+#[test]
+fn tokenize_subset_omits_unrequested_expensive_fields() {
+    with_test_tokenizer(|handle| {
+        let text = CString::new("東京都").unwrap();
+        let mut out_result = ptr::null_mut();
+        let status = sudachi_tokenize_subset(
+            handle,
+            text.as_ptr(),
+            2,
+            InfoSubset::POS_ID.bits(),
+            &mut out_result,
+        );
+
+        assert_eq!(status, OK, "{}", last_error_message());
+        let values = collect_morpheme_result(out_result);
+        sudachi_free_result(out_result);
+
+        assert_eq!(values.len(), 1);
+        let item = &values[0];
+        assert!(item.surface.is_null());
+        assert!(item.normalized.is_null());
+        assert!(item.dictionary_form.is_null());
+        assert!(item.reading.is_null());
+        assert!(item.pos.is_null());
+        assert_eq!(item.pos_id, 3);
+        assert!(item.synonym_group_ids.is_null());
+        assert_eq!(item.synonym_group_ids_len, 0);
+        assert_eq!(item.begin, 0);
+        assert_eq!(item.end, 9);
+    });
+}
+
+#[test]
+fn tokenize_subset_returns_pos_text_when_requested() {
+    with_test_tokenizer(|handle| {
+        let text = CString::new("東京都").unwrap();
+        let mut out_result = ptr::null_mut();
+        let status = sudachi_tokenize_subset(
+            handle,
+            text.as_ptr(),
+            2,
+            InfoSubset::POS_ID.bits() | FFI_INFO_SUBSET_POS_TEXT_BIT,
+            &mut out_result,
+        );
+
+        assert_eq!(status, OK, "{}", last_error_message());
+        unsafe {
+            let array = &*out_result;
+            assert_eq!(array.len, 1);
+            let item = &*array.items;
+            assert!(!item.pos.is_null());
+            let pos = CStr::from_ptr(item.pos).to_str().unwrap();
+            assert_eq!(pos, "名詞,固有名詞,地名,一般,*,*");
+            assert_eq!(item.pos_id, 3);
+        }
+
+        sudachi_free_result(out_result);
+    });
+}
+
+#[test]
 fn get_lookup_result_layout_requires_output_pointer() {
     let status = sudachi_get_lookup_result_layout(ptr::null_mut());
 
@@ -295,6 +421,109 @@ fn lookup_returns_complete_match_dictionary_entries() {
                 3,
             )]
         );
+    });
+}
+
+#[test]
+fn lookup_subset_all_matches_compat_wrapper() {
+    with_test_tokenizer(|handle| {
+        let text = CString::new("東京都").unwrap();
+
+        let mut compat_result = ptr::null_mut();
+        let status = sudachi_lookup(handle, text.as_ptr(), &mut compat_result);
+        assert_eq!(status, OK, "{}", last_error_message());
+        let compat_values = collect_lookup_values(compat_result);
+        sudachi_free_lookup_result(compat_result);
+
+        let mut subset_result = ptr::null_mut();
+        let status = sudachi_lookup_subset(
+            handle,
+            text.as_ptr(),
+            InfoSubset::all().bits(),
+            &mut subset_result,
+        );
+        assert_eq!(status, OK, "{}", last_error_message());
+        let subset_values = collect_lookup_values(subset_result);
+        sudachi_free_lookup_result(subset_result);
+
+        assert_eq!(subset_values, compat_values);
+    });
+}
+
+#[test]
+fn lookup_subset_omits_unrequested_fields() {
+    with_test_tokenizer(|handle| {
+        let text = CString::new("東京都").unwrap();
+        let mut out_result = ptr::null_mut();
+        let status = sudachi_lookup_subset(
+            handle,
+            text.as_ptr(),
+            InfoSubset::POS_ID.bits(),
+            &mut out_result,
+        );
+
+        assert_eq!(status, OK, "{}", last_error_message());
+        assert!(!out_result.is_null());
+
+        unsafe {
+            let array = &*out_result;
+            assert_eq!(array.len, 1);
+            let item = &*array.items;
+            assert!(item.surface.is_null());
+            assert!(item.pos.is_null());
+            assert_eq!(item.pos_id, 3);
+            assert!(!item.word_id.is_null());
+            assert_eq!(item.dictionary_id, 0);
+            assert_eq!(item.is_oov, 0);
+        }
+
+        sudachi_free_lookup_result(out_result);
+    });
+}
+
+#[test]
+fn lookup_subset_returns_pos_text_when_requested() {
+    with_test_tokenizer(|handle| {
+        let text = CString::new("東京都").unwrap();
+        let mut out_result = ptr::null_mut();
+        let status = sudachi_lookup_subset(
+            handle,
+            text.as_ptr(),
+            InfoSubset::POS_ID.bits() | FFI_INFO_SUBSET_POS_TEXT_BIT,
+            &mut out_result,
+        );
+
+        assert_eq!(status, OK, "{}", last_error_message());
+        unsafe {
+            let array = &*out_result;
+            assert_eq!(array.len, 1);
+            let item = &*array.items;
+            assert!(item.surface.is_null());
+            assert!(!item.pos.is_null());
+            let pos = CStr::from_ptr(item.pos).to_str().unwrap();
+            let word_id = CStr::from_ptr(item.word_id).to_str().unwrap();
+            assert_eq!(pos, "名詞,固有名詞,地名,一般,*,*");
+            assert_eq!(word_id, "(0, 6)");
+            assert_eq!(item.dictionary_id, 0);
+            assert_eq!(item.is_oov, 0);
+            assert_eq!(item.pos_id, 3);
+        }
+
+        sudachi_free_lookup_result(out_result);
+    });
+}
+
+#[test]
+fn lookup_subset_rejects_invalid_bits() {
+    with_test_tokenizer(|handle| {
+        let text = CString::new("東京都").unwrap();
+        let mut out_result = ptr::null_mut();
+        let status = sudachi_lookup_subset(handle, text.as_ptr(), 1u32 << 31, &mut out_result);
+
+        assert_eq!(status, crate::error::ERR_INTERNAL);
+        assert_eq!(status_code_name(status), "INTERNAL");
+        assert!(out_result.is_null());
+        assert_eq!(last_error_message(), "invalid info subset bits: 0x80000000");
     });
 }
 

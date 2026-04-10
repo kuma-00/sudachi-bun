@@ -5,6 +5,7 @@ use std::ptr::{self, NonNull};
 use std::sync::Arc;
 
 use sudachi::dic::dictionary::JapaneseDictionary;
+use sudachi::dic::subset::InfoSubset;
 
 use crate::error::{ERR_INTERNAL, ERR_NULL_POINTER, error};
 
@@ -117,6 +118,8 @@ pub(crate) fn free_partial_lookup_results(results: &mut [LookupResultItem]) {
 
 pub(crate) fn morpheme_to_result(
     morpheme: &sudachi::analysis::morpheme::Morpheme<'_, Arc<JapaneseDictionary>>,
+    subset: InfoSubset,
+    include_pos_text: bool,
 ) -> Result<MorphemeResult, i32> {
     struct ResultGuard {
         value: MorphemeResult,
@@ -141,36 +144,52 @@ pub(crate) fn morpheme_to_result(
     }
 
     let mut result = ResultGuard::new();
-    result.value.surface = clone_string(&morpheme.surface().to_string())?;
-    result.value.normalized = clone_string(&morpheme.normalized_form().to_string())?;
-    result.value.dictionary_form = clone_string(&morpheme.dictionary_form().to_string())?;
-    result.value.reading = clone_string(&morpheme.reading_form().to_string())?;
-    result.value.pos = clone_string(&morpheme.part_of_speech().join(","))?;
+    if subset.contains(InfoSubset::SURFACE) {
+        result.value.surface = clone_string(&morpheme.surface().to_string())?;
+    }
+    if subset.contains(InfoSubset::NORMALIZED_FORM) {
+        result.value.normalized = clone_string(&morpheme.normalized_form().to_string())?;
+    }
+    if subset.contains(InfoSubset::DIC_FORM_WORD_ID) {
+        result.value.dictionary_form = clone_string(&morpheme.dictionary_form().to_string())?;
+    }
+    if subset.contains(InfoSubset::READING_FORM) {
+        result.value.reading = clone_string(&morpheme.reading_form().to_string())?;
+    }
+    if include_pos_text {
+        result.value.pos = clone_string(&morpheme.part_of_speech().join(","))?;
+    }
     result.value.begin = morpheme.begin();
     result.value.end = morpheme.end();
     result.value.word_id = clone_string(&format!("{:?}", morpheme.word_id()))?;
-    result.value.pos_id = morpheme.part_of_speech_id();
+    if subset.contains(InfoSubset::POS_ID) {
+        result.value.pos_id = morpheme.part_of_speech_id();
+    }
     result.value.dictionary_id = morpheme.dictionary_id();
     result.value.is_oov = u8::from(morpheme.is_oov());
 
-    let mut synonym_group_ids = morpheme.synonym_group_ids().to_vec().into_boxed_slice();
-    let synonym_group_ids_len = synonym_group_ids.len();
-    let synonym_group_ids_ptr = if synonym_group_ids_len == 0 {
-        ptr::null_mut()
-    } else {
-        let ptr = synonym_group_ids.as_mut_ptr();
-        std::mem::forget(synonym_group_ids);
-        ptr
-    };
+    if subset.contains(InfoSubset::SYNONYM_GROUP_ID) {
+        let mut synonym_group_ids = morpheme.synonym_group_ids().to_vec().into_boxed_slice();
+        let synonym_group_ids_len = synonym_group_ids.len();
+        let synonym_group_ids_ptr = if synonym_group_ids_len == 0 {
+            ptr::null_mut()
+        } else {
+            let ptr = synonym_group_ids.as_mut_ptr();
+            std::mem::forget(synonym_group_ids);
+            ptr
+        };
 
-    result.value.synonym_group_ids = synonym_group_ids_ptr;
-    result.value.synonym_group_ids_len = synonym_group_ids_len;
+        result.value.synonym_group_ids = synonym_group_ids_ptr;
+        result.value.synonym_group_ids_len = synonym_group_ids_len;
+    }
 
     Ok(result.into_inner())
 }
 
 pub(crate) fn lookup_morpheme_to_result(
     morpheme: &sudachi::analysis::morpheme::Morpheme<'_, Arc<JapaneseDictionary>>,
+    subset: InfoSubset,
+    include_pos_text: bool,
 ) -> Result<LookupResultItem, i32> {
     struct ResultGuard {
         value: LookupResultItem,
@@ -195,12 +214,18 @@ pub(crate) fn lookup_morpheme_to_result(
     }
 
     let mut result = ResultGuard::new();
-    result.value.surface = clone_string(&morpheme.surface().to_string())?;
-    result.value.pos = clone_string(&morpheme.part_of_speech().join(","))?;
+    if subset.contains(InfoSubset::SURFACE) {
+        result.value.surface = clone_string(&morpheme.surface().to_string())?;
+    }
+    if include_pos_text {
+        result.value.pos = clone_string(&morpheme.part_of_speech().join(","))?;
+    }
+    if subset.contains(InfoSubset::POS_ID) {
+        result.value.pos_id = morpheme.part_of_speech_id();
+    }
     result.value.word_id = clone_string(&format!("{:?}", morpheme.word_id()))?;
     result.value.dictionary_id = morpheme.dictionary_id();
     result.value.is_oov = u8::from(morpheme.is_oov());
-    result.value.pos_id = morpheme.part_of_speech_id();
     Ok(result.into_inner())
 }
 

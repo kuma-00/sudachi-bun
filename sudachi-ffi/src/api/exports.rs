@@ -60,12 +60,33 @@ pub extern "C" fn sudachi_tokenize(
 }
 
 #[unsafe(no_mangle)]
+pub extern "C" fn sudachi_tokenize_subset(
+    handle: *mut ops::TokenizerHandle,
+    input_utf8: *const c_char,
+    mode: i32,
+    subset_bits: u32,
+    out_result: *mut *mut MorphemeResultArray,
+) -> i32 {
+    ops::tokenize_subset_impl(handle, input_utf8, mode, subset_bits, out_result)
+}
+
+#[unsafe(no_mangle)]
 pub extern "C" fn sudachi_lookup(
     handle: *mut ops::TokenizerHandle,
     input_utf8: *const c_char,
     out_result: *mut *mut LookupResultArray,
 ) -> i32 {
     ops::lookup_impl(handle, input_utf8, out_result)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn sudachi_lookup_subset(
+    handle: *mut ops::TokenizerHandle,
+    input_utf8: *const c_char,
+    subset_bits: u32,
+    out_result: *mut *mut LookupResultArray,
+) -> i32 {
+    ops::lookup_subset_impl(handle, input_utf8, subset_bits, out_result)
 }
 
 #[unsafe(no_mangle)]

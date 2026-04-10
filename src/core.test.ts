@@ -12,6 +12,8 @@ import type {
   PosMatcherResultLayout,
 } from "./native.ts";
 
+const INFO_SUBSET_FFI_POS_TEXT_BIT = 1 << 30;
+
 const MORPHEME_LAYOUT: MorphemeResultLayout = {
   layoutVersion: 1,
   arrayLayoutKind: 0,
@@ -72,10 +74,45 @@ function createMorpheme(surface: string, begin: number, end: number, posId = 0):
   };
 }
 
+function createSubsetMorpheme(surface: string, begin: number, end: number, posId = 0, pos = ""): Morpheme {
+  return {
+    surface,
+    normalized: "",
+    dictionaryForm: "",
+    reading: "",
+    pos,
+    begin,
+    end,
+    wordId: `${surface}-${begin}`,
+    posId,
+    dictionaryId: 0,
+    isOov: false,
+    synonymGroupIds: [],
+  };
+}
+
 function createLookupEntry(surface: string, wordId: string, dictionaryId: number, isOov: boolean, posId = 0): LookupEntry {
   return {
     surface,
     pos: "名詞,普通名詞,一般,*,*,*",
+    wordId,
+    posId,
+    dictionaryId,
+    isOov,
+  };
+}
+
+function createSubsetLookupEntry(
+  surface: string,
+  wordId: string,
+  dictionaryId: number,
+  isOov: boolean,
+  posId = 0,
+  pos = "",
+): LookupEntry {
+  return {
+    surface,
+    pos,
     wordId,
     posId,
     dictionaryId,
@@ -93,6 +130,25 @@ function createMockLibrary(): NativeSudachiLibrary {
       sudachi_free_tokenizer: () => {},
       sudachi_tokenize: (_handle, _input, mode, outResult) => {
         (outResult as BigUint64Array)[0] = mode === 0 ? 40n : 2n;
+        return 0;
+      },
+      sudachi_tokenize_subset: (_handle, _input, mode, subsetBits, outResult) => {
+        if (mode === 2 && subsetBits === ((1 << 0) | (1 << 2))) {
+          (outResult as BigUint64Array)[0] = 41n;
+          return 0;
+        }
+
+        if (mode === 2 && subsetBits === ((1 << 2) | INFO_SUBSET_FFI_POS_TEXT_BIT)) {
+          (outResult as BigUint64Array)[0] = 43n;
+          return 0;
+        }
+
+        if (mode === 2 && subsetBits === ((1 << 0) | (1 << 2) | INFO_SUBSET_FFI_POS_TEXT_BIT)) {
+          (outResult as BigUint64Array)[0] = 44n;
+          return 0;
+        }
+
+        (outResult as BigUint64Array)[0] = 42n;
         return 0;
       },
       sudachi_split_morpheme: (_handle, _input, sourceMode, index, splitMode, outResult) => {
@@ -145,6 +201,20 @@ function createMockLookupLibrary(): NativeLookupLibrary {
         (outResult as BigUint64Array)[0] = surface === "東京" ? 50n : 51n;
         return 0;
       },
+      sudachi_lookup_subset: (_handle, surface, subsetBits, outResult) => {
+        if (surface === "東京" && subsetBits === (1 << 0)) {
+          (outResult as BigUint64Array)[0] = 52n;
+          return 0;
+        }
+
+        if (surface === "東京" && subsetBits === ((1 << 2) | INFO_SUBSET_FFI_POS_TEXT_BIT)) {
+          (outResult as BigUint64Array)[0] = 54n;
+          return 0;
+        }
+
+        (outResult as BigUint64Array)[0] = 53n;
+        return 0;
+      },
       sudachi_free_lookup_result: () => {},
       sudachi_get_lookup_result_layout: () => 0,
       sudachi_get_last_error: () => "native error" as never,
@@ -190,6 +260,22 @@ function withTokenizer(
         return [createMorpheme("都", 6, 9)];
       case 40:
         return [createMorpheme("東京", 0, 6), createMorpheme("都", 6, 9), createMorpheme("に", 9, 12)];
+      case 41:
+        return [
+          createSubsetMorpheme("東京", 0, 6, 7),
+          createSubsetMorpheme("都", 6, 9, 8),
+          createSubsetMorpheme("に", 9, 12, 9),
+        ];
+      case 42:
+        return [createSubsetMorpheme("東京", 0, 6, 11)];
+      case 43:
+        return [createSubsetMorpheme("東京", 0, 6, 12, "名詞,普通名詞,一般,*,*,*")];
+      case 44:
+        return [
+          createSubsetMorpheme("東京", 0, 6, 13, "名詞,普通名詞,一般,*,*,*"),
+          createSubsetMorpheme("都", 6, 9, 14, "名詞,普通名詞,一般,*,*,*"),
+          createSubsetMorpheme("に", 9, 12, 15, "助詞,格助詞,*,*,*,*"),
+        ];
       default:
         return [];
     }
@@ -200,6 +286,12 @@ function withTokenizer(
         return [createLookupEntry("東京", "(0, 5)", 0, false), createLookupEntry("東京", "(0, 6)", 0, false)];
       case 51:
         return [createLookupEntry("に", "(0, 1)", 0, false)];
+      case 52:
+        return [createSubsetLookupEntry("東京", "(0, 5)", 0, false)];
+      case 54:
+        return [createSubsetLookupEntry("東京", "(0, 5)", 0, false, 4, "名詞,普通名詞,一般,*,*,*")];
+      case 53:
+        return [createSubsetLookupEntry("に", "(0, 1)", 0, false, 4)];
       default:
         return [];
     }
@@ -244,6 +336,7 @@ function withTokenizer(
 test("lookup uses the dedicated native lookup symbol and decoder", () => {
   withTokenizer(({ lookupLibrary, tokenizer, readLookupSpy }) => {
     const lookupSpy = spyOn(lookupLibrary.symbols, "sudachi_lookup");
+    const subsetLookupSpy = spyOn(lookupLibrary.symbols, "sudachi_lookup_subset");
     const freeSpy = spyOn(lookupLibrary.symbols, "sudachi_free_lookup_result");
 
     try {
@@ -253,11 +346,153 @@ test("lookup uses the dedicated native lookup symbol and decoder", () => {
       ]);
       expect(lookupSpy).toHaveBeenCalledTimes(1);
       expect(lookupSpy).toHaveBeenCalledWith(1 as never, "東京", expect.any(BigUint64Array));
+      expect(subsetLookupSpy).not.toHaveBeenCalled();
       expect(readLookupSpy).toHaveBeenCalledTimes(1);
       expect(freeSpy).toHaveBeenCalledTimes(1);
       expect(freeSpy).toHaveBeenCalledWith(50 as never);
     } finally {
       freeSpy.mockRestore();
+      subsetLookupSpy.mockRestore();
+      lookupSpy.mockRestore();
+    }
+  });
+});
+
+test("tokenize without options uses the legacy native symbol", () => {
+  withTokenizer(({ library, tokenizer, readSpy }) => {
+    const tokenizeSpy = spyOn(library.symbols, "sudachi_tokenize");
+    const subsetTokenizeSpy = spyOn(library.symbols, "sudachi_tokenize_subset");
+    const freeSpy = spyOn(library.symbols, "sudachi_free_result");
+
+    try {
+      expect(tokenizer.tokenize("東京都に")).toEqual([
+        createMorpheme("東京都", 0, 9),
+        createMorpheme("に", 9, 12),
+      ]);
+      expect(tokenizeSpy).toHaveBeenCalledTimes(1);
+      expect(tokenizeSpy).toHaveBeenCalledWith(1 as never, "東京都に", 2, expect.any(BigUint64Array));
+      expect(subsetTokenizeSpy).not.toHaveBeenCalled();
+      expect(readSpy).toHaveBeenCalledTimes(1);
+      expect(freeSpy).toHaveBeenCalledTimes(1);
+      expect(freeSpy).toHaveBeenCalledWith(2 as never);
+    } finally {
+      freeSpy.mockRestore();
+      subsetTokenizeSpy.mockRestore();
+      tokenizeSpy.mockRestore();
+    }
+  });
+});
+
+test("tokenize with fields uses the subset native symbol and omits unrequested fields", () => {
+  withTokenizer(({ library, tokenizer, readSpy }) => {
+    const tokenizeSpy = spyOn(library.symbols, "sudachi_tokenize");
+    const subsetTokenizeSpy = spyOn(library.symbols, "sudachi_tokenize_subset");
+    const freeSpy = spyOn(library.symbols, "sudachi_free_result");
+
+    try {
+      expect(tokenizer.tokenize("東京都に", "C", { fields: ["surface", "posId"] })).toEqual([
+        createSubsetMorpheme("東京", 0, 6, 7),
+        createSubsetMorpheme("都", 6, 9, 8),
+        createSubsetMorpheme("に", 9, 12, 9),
+      ]);
+      expect(tokenizeSpy).not.toHaveBeenCalled();
+      expect(subsetTokenizeSpy).toHaveBeenCalledTimes(1);
+      expect(subsetTokenizeSpy).toHaveBeenCalledWith(
+        1 as never,
+        "東京都に",
+        2,
+        (1 << 0) | (1 << 2),
+        expect.any(BigUint64Array),
+      );
+      expect(readSpy).toHaveBeenCalledTimes(1);
+      expect(freeSpy).toHaveBeenCalledTimes(1);
+      expect(freeSpy).toHaveBeenCalledWith(41 as never);
+    } finally {
+      freeSpy.mockRestore();
+      subsetTokenizeSpy.mockRestore();
+      tokenizeSpy.mockRestore();
+    }
+  });
+});
+
+test("tokenize with pos uses the subset native symbol and returns the POS string", () => {
+  withTokenizer(({ library, tokenizer, readSpy }) => {
+    const tokenizeSpy = spyOn(library.symbols, "sudachi_tokenize");
+    const subsetTokenizeSpy = spyOn(library.symbols, "sudachi_tokenize_subset");
+    const freeSpy = spyOn(library.symbols, "sudachi_free_result");
+
+    try {
+      const result = tokenizer.tokenize("東京都に", "C", { fields: ["pos"] });
+      expect(result).toHaveLength(1);
+      expect(result[0]?.pos).toBe("名詞,普通名詞,一般,*,*,*");
+      expect(tokenizeSpy).not.toHaveBeenCalled();
+      expect(subsetTokenizeSpy).toHaveBeenCalledTimes(1);
+      expect(subsetTokenizeSpy).toHaveBeenCalledWith(
+        1 as never,
+        "東京都に",
+        2,
+        (1 << 2) | INFO_SUBSET_FFI_POS_TEXT_BIT,
+        expect.any(BigUint64Array),
+      );
+      expect(readSpy).toHaveBeenCalledTimes(1);
+      expect(freeSpy).toHaveBeenCalledTimes(1);
+      expect(freeSpy).toHaveBeenCalledWith(43 as never);
+    } finally {
+      freeSpy.mockRestore();
+      subsetTokenizeSpy.mockRestore();
+      tokenizeSpy.mockRestore();
+    }
+  });
+});
+
+test("lookup with fields uses the subset native symbol and returns defaulted omitted fields", () => {
+  withTokenizer(({ lookupLibrary, tokenizer, readLookupSpy }) => {
+    const lookupSpy = spyOn(lookupLibrary.symbols, "sudachi_lookup");
+    const subsetLookupSpy = spyOn(lookupLibrary.symbols, "sudachi_lookup_subset");
+    const freeSpy = spyOn(lookupLibrary.symbols, "sudachi_free_lookup_result");
+
+    try {
+      expect(tokenizer.lookup("東京", { fields: ["surface"] })).toEqual([
+        createSubsetLookupEntry("東京", "(0, 5)", 0, false),
+      ]);
+      expect(lookupSpy).not.toHaveBeenCalled();
+      expect(subsetLookupSpy).toHaveBeenCalledTimes(1);
+      expect(subsetLookupSpy).toHaveBeenCalledWith(1 as never, "東京", 1 << 0, expect.any(BigUint64Array));
+      expect(readLookupSpy).toHaveBeenCalledTimes(1);
+      expect(freeSpy).toHaveBeenCalledTimes(1);
+      expect(freeSpy).toHaveBeenCalledWith(52 as never);
+    } finally {
+      freeSpy.mockRestore();
+      subsetLookupSpy.mockRestore();
+      lookupSpy.mockRestore();
+    }
+  });
+});
+
+test("lookup with pos uses the subset native symbol and returns the POS string", () => {
+  withTokenizer(({ lookupLibrary, tokenizer, readLookupSpy }) => {
+    const lookupSpy = spyOn(lookupLibrary.symbols, "sudachi_lookup");
+    const subsetLookupSpy = spyOn(lookupLibrary.symbols, "sudachi_lookup_subset");
+    const freeSpy = spyOn(lookupLibrary.symbols, "sudachi_free_lookup_result");
+
+    try {
+      const result = tokenizer.lookup("東京", { fields: ["pos"] });
+      expect(result).toHaveLength(1);
+      expect(result[0]?.pos).toBe("名詞,普通名詞,一般,*,*,*");
+      expect(lookupSpy).not.toHaveBeenCalled();
+      expect(subsetLookupSpy).toHaveBeenCalledTimes(1);
+      expect(subsetLookupSpy).toHaveBeenCalledWith(
+        1 as never,
+        "東京",
+        (1 << 2) | INFO_SUBSET_FFI_POS_TEXT_BIT,
+        expect.any(BigUint64Array),
+      );
+      expect(readLookupSpy).toHaveBeenCalledTimes(1);
+      expect(freeSpy).toHaveBeenCalledTimes(1);
+      expect(freeSpy).toHaveBeenCalledWith(54 as never);
+    } finally {
+      freeSpy.mockRestore();
+      subsetLookupSpy.mockRestore();
       lookupSpy.mockRestore();
     }
   });

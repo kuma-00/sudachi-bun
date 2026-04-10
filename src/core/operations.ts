@@ -1,7 +1,15 @@
 import { readLookupEntryArray, readMorphemeArray, readPosMatcherIdArray } from "../ffi.ts";
 import { createNativeSudachiError, type MorphemeResultLayout } from "../native.ts";
 import { readOwnedNativeResult } from "../native-session.ts";
-import { SudachiError, type LookupEntry, type Morpheme, type PosMatcherPatterns, type TokenizeMode } from "../types.ts";
+import {
+  SudachiError,
+  type InfoSubset,
+  type InfoSubsetField,
+  type LookupEntry,
+  type Morpheme,
+  type PosMatcherPatterns,
+  type TokenizeMode,
+} from "../types.ts";
 import { type MorphemeStateTracker } from "./morpheme-state.ts";
 import { type NativeTokenizerSession, type TokenizerSessionManager } from "./session.ts";
 
@@ -10,6 +18,27 @@ const MODE_TO_NATIVE: Record<TokenizeMode, number> = {
   B: 1,
   C: 2,
 };
+
+const INFO_SUBSET_FFI_POS_TEXT_BIT = 1 << 30;
+
+const INFO_SUBSET_FIELD_BITS: Record<InfoSubsetField, number> = {
+  surface: 1 << 0,
+  pos: (1 << 2) | INFO_SUBSET_FFI_POS_TEXT_BIT,
+  posId: 1 << 2,
+  normalized: 1 << 3,
+  dictionaryForm: 1 << 4,
+  reading: 1 << 5,
+  synonymGroupIds: 1 << 9,
+};
+
+const ALL_INFO_SUBSET_BITS =
+  INFO_SUBSET_FIELD_BITS.surface |
+  INFO_SUBSET_FIELD_BITS.pos |
+  INFO_SUBSET_FIELD_BITS.posId |
+  INFO_SUBSET_FIELD_BITS.normalized |
+  INFO_SUBSET_FIELD_BITS.dictionaryForm |
+  INFO_SUBSET_FIELD_BITS.reading |
+  INFO_SUBSET_FIELD_BITS.synonymGroupIds;
 
 interface TokenizerExecutionContext {
   owner: object;
@@ -48,6 +77,31 @@ function normalizePosPatterns(patterns: PosMatcherPatterns): string {
   return JSON.stringify(normalized);
 }
 
+function infoSubsetBits(options: InfoSubset | undefined): number | null {
+  if (options === undefined) {
+    return null;
+  }
+
+  const fields = options.fields;
+  if (fields === undefined) {
+    return ALL_INFO_SUBSET_BITS;
+  }
+
+  let bits = 0;
+  for (const field of fields) {
+    const bit = INFO_SUBSET_FIELD_BITS[field];
+    if (bit === undefined) {
+      throw new SudachiError(`Unsupported info subset field: ${field}.`, {
+        code: "INVALID_ARGUMENT",
+      });
+    }
+
+    bits |= bit;
+  }
+
+  return bits;
+}
+
 function tokenizeFromSession(
   session: NativeTokenizerSession,
   layout: MorphemeResultLayout,
@@ -55,9 +109,20 @@ function tokenizeFromSession(
   owner: object,
   text: string,
   mode: TokenizeMode,
+  options: InfoSubset | undefined,
 ): Morpheme[] {
   const resultOut = new BigUint64Array(1);
-  const status = session.library.symbols.sudachi_tokenize(session.handle, text, MODE_TO_NATIVE[mode], resultOut);
+  const subsetBits = infoSubsetBits(options);
+  const status =
+    subsetBits === null
+      ? session.library.symbols.sudachi_tokenize(session.handle, text, MODE_TO_NATIVE[mode], resultOut)
+      : session.library.symbols.sudachi_tokenize_subset(
+          session.handle,
+          text,
+          MODE_TO_NATIVE[mode],
+          subsetBits,
+          resultOut,
+        );
   if (status !== 0) {
     throw createNativeSudachiError(session.library, status, "Tokenization failed.");
   }
@@ -123,21 +188,39 @@ function sameSynonymGroupIds(left: readonly number[], right: readonly number[]):
   return true;
 }
 
-function tokenize(context: TokenizerExecutionContext, text: string, mode: TokenizeMode): Morpheme[] {
+function tokenize(
+  context: TokenizerExecutionContext,
+  text: string,
+  mode: TokenizeMode,
+  options: InfoSubset | undefined,
+): Morpheme[] {
   const { library, handle, layout } = context.session.getOpenSession();
-  return tokenizeFromSession({ library, handle, layout }, layout, context.state, context.owner, text, mode);
+  return tokenizeFromSession({ library, handle, layout }, layout, context.state, context.owner, text, mode, options);
 }
 
-export function tokenizeMorphemes(context: TokenizerExecutionContext, text: string, mode: TokenizeMode = "C"): Morpheme[] {
-  return tokenize(context, text, mode);
+export function tokenizeMorphemes(
+  context: TokenizerExecutionContext,
+  text: string,
+  mode: TokenizeMode = "C",
+  options: InfoSubset | undefined = undefined,
+): Morpheme[] {
+  return tokenize(context, text, mode, options);
 }
 
-export function lookupEntries(context: TokenizerExecutionContext, surface: string): LookupEntry[] {
+export function lookupEntries(
+  context: TokenizerExecutionContext,
+  surface: string,
+  options: InfoSubset | undefined = undefined,
+): LookupEntry[] {
   const { handle } = context.session.getOpenSession();
   const { library, layout } = context.session.getLookupSession();
 
   const resultOut = new BigUint64Array(1);
-  const status = library.symbols.sudachi_lookup(handle, surface, resultOut);
+  const subsetBits = infoSubsetBits(options);
+  const status =
+    subsetBits === null
+      ? library.symbols.sudachi_lookup(handle, surface, resultOut)
+      : library.symbols.sudachi_lookup_subset(handle, surface, subsetBits, resultOut);
   if (status !== 0) {
     throw createNativeSudachiError(library, status, "Lookup failed.");
   }

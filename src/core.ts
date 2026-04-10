@@ -1,4 +1,5 @@
 import {
+  type InfoSubset,
   type LookupEntry,
   type Morpheme,
   type PosMatcherPatterns,
@@ -45,12 +46,12 @@ export class Tokenizer {
     return this.#session.closed;
   }
 
-  tokenize(text: string, mode: TokenizeMode = "C"): Morpheme[] {
-    return tokenizeMorphemes(this.#context(), text, mode);
+  tokenize(text: string, mode: TokenizeMode = "C", options?: InfoSubset): Morpheme[] {
+    return tokenizeMorphemes(this.#context(), text, mode, options);
   }
 
-  lookup(surface: string): LookupEntry[] {
-    return lookupEntries(this.#context(), surface);
+  lookup(surface: string, options?: InfoSubset): LookupEntry[] {
+    return lookupEntries(this.#context(), surface, options);
   }
 
   createPosMatcher(patterns: PosMatcherPatterns): PosMatcher {

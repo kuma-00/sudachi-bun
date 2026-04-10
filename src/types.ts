@@ -15,6 +15,21 @@ export interface TokenizerOptions extends NativeLibraryLoadOptions {
 
 export type SentenceSplitterOptions = TokenizerOptions;
 
+export type InfoSubsetField =
+  | "surface"
+  | "pos"
+  | "posId"
+  | "normalized"
+  | "dictionaryForm"
+  | "reading"
+  | "synonymGroupIds";
+
+export type InfoSubsetFields = readonly InfoSubsetField[];
+
+export interface InfoSubset {
+  fields?: InfoSubsetFields;
+}
+
 export interface SentenceSpan {
   text: string;
   start: number;

@@ -48,6 +48,7 @@ function createLibrary(
       sudachi_create_tokenizer: () => 0,
       sudachi_free_tokenizer: () => {},
       sudachi_tokenize: () => 0,
+      sudachi_tokenize_subset: () => 0,
       sudachi_split_morpheme: () => 0,
       sudachi_split_morphemes: () => 0,
       sudachi_compile_pos_matcher: () => 0,
@@ -89,6 +90,7 @@ function createLookupLibrary(
   return {
     symbols: {
       sudachi_lookup: () => 0,
+      sudachi_lookup_subset: () => 0,
       sudachi_free_lookup_result: () => {},
       sudachi_get_lookup_result_layout: (outLayout) => layoutWriter(outLayout as BigUint64Array),
       sudachi_get_last_error: () => "native error" as unknown as import("bun:ffi").CString,
