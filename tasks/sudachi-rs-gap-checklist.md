@@ -10,5 +10,5 @@
 - [x] API: POS matcher 相当の導入
 - [x] API: フィールドサブセット指定（`InfoSubset` 相当）対応
 - [x] API: Surface projection 対応
-- [ ] API: Pretokenizer（HuggingFace tokenizers 連携）対応
+- [x] API: Pretokenizer（HuggingFace tokenizers 連携）対応
 - [ ] API/FFI: Tokenizer のデバッグ切替対応
