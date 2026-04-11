@@ -1,10 +1,11 @@
 import { CString, read, type Pointer } from "bun:ffi";
 
-import type { LookupEntry, Morpheme, SudachiErrorCode } from "./types.ts";
+import type { LookupEntry, Morpheme, PretokenizedToken, SudachiErrorCode } from "./types.ts";
 import { SudachiError } from "./types.ts";
 import type {
   LookupResultLayout,
   MorphemeResultLayout,
+  PretokenizedResultLayout,
   PosMatcherResultLayout,
   SentenceSpanResultLayout,
 } from "./native.ts";
@@ -96,7 +97,12 @@ function readArrayEntries(
   return entries;
 }
 
-function readSynonymGroupIds(base: Pointer, layout: MorphemeResultLayout): number[] {
+interface SynonymGroupIdLayout {
+  synonymGroupIdsOffset: number;
+  synonymGroupIdsLenOffset: number;
+}
+
+function readSynonymGroupIds(base: Pointer, layout: SynonymGroupIdLayout): number[] {
   const rawPtr = toPointer(read.ptr(base, layout.synonymGroupIdsOffset));
   const length = readUsizeField(base, layout.synonymGroupIdsLenOffset, "synonymGroupIdsLen");
   if ((rawPtr as number) === 0 || length === 0) {
@@ -169,6 +175,43 @@ export function readLookupEntryArray(arrayPtr: Pointer, layout: LookupResultLayo
   const results = new Array<LookupEntry>(entries.length);
   for (const { entryBase, index } of entries) {
     results[index] = readLookupEntry(entryBase, layout);
+  }
+
+  return results;
+}
+
+function readPretokenizedToken(itemPtr: Pointer, layout: PretokenizedResultLayout): PretokenizedToken {
+  return {
+    surface: readCStringField(itemPtr, layout.surfaceOffset),
+    normalized: readCStringField(itemPtr, layout.normalizedOffset),
+    dictionaryForm: readCStringField(itemPtr, layout.dictionaryFormOffset),
+    reading: readCStringField(itemPtr, layout.readingOffset),
+    pos: readCStringField(itemPtr, layout.posOffset),
+    beginByte: readUsizeField(itemPtr, layout.beginByteOffset, "beginByte"),
+    endByte: readUsizeField(itemPtr, layout.endByteOffset, "endByte"),
+    beginChar: readUsizeField(itemPtr, layout.beginCharOffset, "beginChar"),
+    endChar: readUsizeField(itemPtr, layout.endCharOffset, "endChar"),
+    wordId: readCStringField(itemPtr, layout.wordIdOffset),
+    posId: readUnsigned16Field(itemPtr, layout.posIdOffset),
+    dictionaryId: readNumberField(itemPtr, layout.dictionaryIdOffset),
+    isOov: readBoolField(itemPtr, layout.isOovOffset),
+    synonymGroupIds: readSynonymGroupIds(itemPtr, layout),
+  };
+}
+
+export function readPretokenizedArray(arrayPtr: Pointer, layout: PretokenizedResultLayout): PretokenizedToken[] {
+  const entries = readArrayEntries(
+    arrayPtr,
+    layout.arrayItemsOffset,
+    layout.arrayLenOffset,
+    layout.resultSize,
+    layout.arrayLayoutKind,
+    "Pretokenized result layout",
+  );
+
+  const results = new Array<PretokenizedToken>(entries.length);
+  for (const { entryBase, index } of entries) {
+    results[index] = readPretokenizedToken(entryBase, layout);
   }
 
   return results;

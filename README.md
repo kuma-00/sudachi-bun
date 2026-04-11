@@ -10,6 +10,7 @@ TypeScript から Rust FFI (`sudachi-ffi`) を呼び出して、日本語テキ�
 - CLI の `tokenize` サブコマンドで `--mode A|B|C` の分割モードと必須の `--projection surface|normalized|dictionary_form|reading`、`--wakati` / `--all` / `--output <path>`、`--split-sentences` / `--debug` / `--resource-dir` を指定して出力
 - CLI で `--text`、stdin、位置引数のファイル入力に対応
 - TypeScript API として package root の `createTokenizer` / `createSentenceSplitter` から直接トークナイズ/文分割
+- TypeScript API として package root の `createPretokenizer` から pretokenized 形式を生成
 - TypeScript API から既存 morpheme の再分割（単一 morpheme / morpheme list）
 - TypeScript API から辞書 lookup 候補を `LookupEntry[]` として取得
 - Sudachi 辞書のダウンロードと展開を補助するセットアップスクリプトを提供
@@ -194,6 +195,28 @@ Task-07 相当の lookup API も利用できます。
 - `tokenizer.lookup(surface, projection)`: 入力 surface に一致する辞書候補を `LookupEntry[]` として返す
 
 `LookupEntry` は `surface`, `pos`, `wordId`, `dictionaryId`, `isOov` を持ちます。lookup 用の Rust FFI シンボルが未実装または古いライブラリでは `lookup()` が失敗するため、その場合は最新の `sudachi-ffi` をビルドしてください。
+
+`createPretokenizer()` は辞書設定から pretokenized 形式を生成する API です。
+
+```ts
+import { createPretokenizer } from "sudachi-bun";
+
+const pretokenizer = createPretokenizer({
+  dictPath: "./dict/system_core.dic",
+  mode: "C",
+  projection: "surface",
+  subset: { fields: ["surface", "pos"] },
+});
+
+const tokens = pretokenizer.pretokenize("東京タワー");
+```
+
+Pretokenizer の各トークンは、UTF-8 byte offset と character index の両方を保持します。
+
+- `beginByte` / `endByte`: 元テキストに対する UTF-8 byte offset
+- `beginChar` / `endChar`: 元テキストに対する JavaScript string index
+
+byte は Rust 側の生の UTF-8 オフセット、char は JavaScript string index として扱う文字位置です。`Morpheme` と pretokenized 出力の両方でこの境界を共有します。
 
 `Morpheme` は以下の情報を含みます。
 

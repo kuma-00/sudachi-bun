@@ -11,6 +11,8 @@ import { MorphemeStateTracker } from "./core/morpheme-state.ts";
 import { compilePosMatcher, lookupEntries, splitMorpheme, splitMorphemes, tokenizeMorphemes } from "./core/operations.ts";
 import { TokenizerSessionManager } from "./core/session.ts";
 
+export { Pretokenizer, createPretokenizer } from "./pretokenizer.ts";
+
 export class PosMatcher {
   #posIds: Set<number>;
 

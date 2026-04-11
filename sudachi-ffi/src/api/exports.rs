@@ -3,8 +3,10 @@ use std::os::raw::c_char;
 use super::ops;
 use crate::result::{
     LookupResultArray, LookupResultLayout, MorphemeResultArray, MorphemeResultLayout,
-    PosMatcherResultArray, PosMatcherResultLayout, SentenceSpanArray, SentenceSpanLayout,
+    PosMatcherResultArray, PosMatcherResultLayout, PretokenizedResultArray,
+    PretokenizedResultLayout, SentenceSpanArray, SentenceSpanLayout,
 };
+use sudachi::dic::subset::InfoSubset;
 
 #[unsafe(no_mangle)]
 pub extern "C" fn sudachi_create_tokenizer(
@@ -40,6 +42,16 @@ pub extern "C" fn sudachi_get_abi_version() -> i32 {
 }
 
 #[unsafe(no_mangle)]
+pub extern "C" fn sudachi_create_pretokenizer(
+    config_path: *const c_char,
+    resource_dir: *const c_char,
+    dict_path: *const c_char,
+    out_handle: *mut *mut ops::PretokenizerHandle,
+) -> i32 {
+    ops::create_pretokenizer_impl(config_path, resource_dir, dict_path, out_handle)
+}
+
+#[unsafe(no_mangle)]
 pub extern "C" fn sudachi_free_tokenizer(handle: *mut ops::TokenizerHandle) {
     ops::free_tokenizer_impl(handle);
 }
@@ -47,6 +59,19 @@ pub extern "C" fn sudachi_free_tokenizer(handle: *mut ops::TokenizerHandle) {
 #[unsafe(no_mangle)]
 pub extern "C" fn sudachi_free_sentence_splitter(handle: *mut ops::SentenceSplitterHandle) {
     ops::free_sentence_splitter_impl(handle);
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn sudachi_create_pretokenizer_from_tokenizer(
+    tokenizer_handle: *const ops::TokenizerHandle,
+    out_handle: *mut *mut ops::PretokenizerHandle,
+) -> i32 {
+    ops::create_pretokenizer_from_tokenizer_impl(tokenizer_handle, out_handle)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn sudachi_free_pretokenizer(handle: *mut ops::PretokenizerHandle) {
+    ops::free_pretokenizer_impl(handle);
 }
 
 #[unsafe(no_mangle)]
@@ -145,8 +170,44 @@ pub extern "C" fn sudachi_split_sentences(
 }
 
 #[unsafe(no_mangle)]
+pub extern "C" fn sudachi_pretokenize(
+    handle: *const ops::PretokenizerHandle,
+    input_utf8: *const c_char,
+    mode: i32,
+    projection: i32,
+    out_result: *mut *mut PretokenizedResultArray,
+) -> i32 {
+    ops::pretokenize_impl(
+        handle,
+        input_utf8,
+        mode,
+        mode,
+        projection,
+        InfoSubset::all().bits(),
+        out_result,
+    )
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn sudachi_pretokenize_subset(
+    handle: *const ops::PretokenizerHandle,
+    input_utf8: *const c_char,
+    mode: i32,
+    projection: i32,
+    subset_bits: u32,
+    out_result: *mut *mut PretokenizedResultArray,
+) -> i32 {
+    ops::pretokenize_subset_impl(handle, input_utf8, mode, projection, subset_bits, out_result)
+}
+
+#[unsafe(no_mangle)]
 pub extern "C" fn sudachi_free_result(result: *mut MorphemeResultArray) {
     crate::result::free_result_array(result);
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn sudachi_free_pretokenized_result(result: *mut PretokenizedResultArray) {
+    crate::result::free_pretokenized_result_array(result);
 }
 
 #[unsafe(no_mangle)]
@@ -167,6 +228,13 @@ pub extern "C" fn sudachi_free_sentence_spans(result: *mut SentenceSpanArray) {
 #[unsafe(no_mangle)]
 pub extern "C" fn sudachi_get_morpheme_result_layout(out_layout: *mut MorphemeResultLayout) -> i32 {
     ops::get_morpheme_result_layout_impl(out_layout)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn sudachi_get_pretokenized_result_layout(
+    out_layout: *mut PretokenizedResultLayout,
+) -> i32 {
+    ops::get_pretokenized_result_layout_impl(out_layout)
 }
 
 #[unsafe(no_mangle)]

@@ -1,5 +1,6 @@
 export { PosMatcher, createTokenizer } from "./src/core.ts";
 export { createSentenceSplitter } from "./src/sentence-splitter.ts";
+export * from "./src/pretokenizer.ts";
 import { main as runMain } from "./src/cli.ts";
 
 export { runCli } from "./src/cli.ts";

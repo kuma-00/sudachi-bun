@@ -13,6 +13,7 @@ pub const ERR_SENTENCE_SPLIT: i32 = 6;
 pub const ERR_INVALID_INDEX: i32 = 7;
 pub const ERR_MORPHEME_SPLIT: i32 = 8;
 pub const ERR_LOOKUP: i32 = 9;
+pub const ERR_PRETOKENIZE: i32 = 10;
 pub const ERR_INTERNAL: i32 = 255;
 
 const OK_NAME: &[u8] = b"OK\0";
@@ -21,6 +22,7 @@ const INVALID_UTF8_NAME: &[u8] = b"INVALID_UTF8\0";
 const INVALID_MODE_NAME: &[u8] = b"INVALID_MODE\0";
 const CONFIG_NAME: &[u8] = b"CONFIG\0";
 const TOKENIZE_NAME: &[u8] = b"TOKENIZE\0";
+const PRETOKENIZE_NAME: &[u8] = b"PRETOKENIZE\0";
 const SENTENCE_SPLIT_NAME: &[u8] = b"SENTENCE_SPLIT\0";
 const INVALID_INDEX_NAME: &[u8] = b"INVALID_INDEX\0";
 const MORPHEME_SPLIT_NAME: &[u8] = b"MORPHEME_SPLIT\0";
@@ -67,6 +69,7 @@ pub(crate) fn status_code_name(code: i32) -> &'static str {
         ERR_INVALID_MODE => "INVALID_MODE",
         ERR_CONFIG => "CONFIG",
         ERR_TOKENIZE => "TOKENIZE",
+        ERR_PRETOKENIZE => "PRETOKENIZE",
         ERR_SENTENCE_SPLIT => "SENTENCE_SPLIT",
         ERR_INVALID_INDEX => "INVALID_INDEX",
         ERR_MORPHEME_SPLIT => "MORPHEME_SPLIT",
@@ -84,6 +87,7 @@ pub(crate) fn status_code_name_ptr(code: i32) -> *const c_char {
         ERR_INVALID_MODE => INVALID_MODE_NAME.as_ptr().cast(),
         ERR_CONFIG => CONFIG_NAME.as_ptr().cast(),
         ERR_TOKENIZE => TOKENIZE_NAME.as_ptr().cast(),
+        ERR_PRETOKENIZE => PRETOKENIZE_NAME.as_ptr().cast(),
         ERR_SENTENCE_SPLIT => SENTENCE_SPLIT_NAME.as_ptr().cast(),
         ERR_INVALID_INDEX => INVALID_INDEX_NAME.as_ptr().cast(),
         ERR_MORPHEME_SPLIT => MORPHEME_SPLIT_NAME.as_ptr().cast(),
@@ -111,6 +115,7 @@ mod tests {
     #[test]
     fn status_code_names_are_stable() {
         assert_eq!(status_code_name(ERR_TOKENIZE), "TOKENIZE");
+        assert_eq!(status_code_name(ERR_PRETOKENIZE), "PRETOKENIZE");
         assert_eq!(status_code_name(ERR_SENTENCE_SPLIT), "SENTENCE_SPLIT");
         assert_eq!(status_code_name(ERR_INVALID_INDEX), "INVALID_INDEX");
         assert_eq!(status_code_name(ERR_MORPHEME_SPLIT), "MORPHEME_SPLIT");

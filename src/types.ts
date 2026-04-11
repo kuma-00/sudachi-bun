@@ -64,6 +64,37 @@ export interface LookupEntry {
   isOov: boolean;
 }
 
+export interface PretokenizedToken {
+  surface: string;
+  normalized: string;
+  dictionaryForm: string;
+  reading: string;
+  pos: string;
+  beginByte: number;
+  endByte: number;
+  beginChar: number;
+  endChar: number;
+  wordId: string;
+  posId: number;
+  dictionaryId: number;
+  isOov: boolean;
+  synonymGroupIds: number[];
+}
+
+export type PretokenizedResult = PretokenizedToken[];
+
+export interface PretokenizeOptions {
+  mode?: TokenizeMode;
+  projection?: SurfaceProjection;
+  subset?: InfoSubset;
+}
+
+export interface PretokenizerOptions extends NativeLibraryLoadOptions, PretokenizeOptions {
+  dictPath: string;
+  configPath?: string;
+  resourceDir?: string;
+}
+
 export type PosMatcherPatternItem = string | null | undefined;
 export type PosMatcherPattern = readonly PosMatcherPatternItem[];
 export type PosMatcherPatterns = readonly PosMatcherPattern[];
@@ -78,6 +109,8 @@ export type NativeSudachiErrorCode =
   | "TOKENIZE"
   | "SPLIT"
   | "LOOKUP"
+  | "PRETOKENIZE"
+  | "PRETOKENIZER"
   | "MORPHEME_SPLIT"
   | "SENTENCE_SPLIT"
   | "INTERNAL"
@@ -89,6 +122,7 @@ export type SudachiErrorCode =
   | "LAYOUT_MISMATCH"
   | "MISSING_ARGUMENT"
   | "TOKENIZER_CLOSED"
+  | "PRETOKENIZER_CLOSED"
   | "SENTENCE_SPLITTER_CLOSED";
 
 export interface SudachiErrorOptions {

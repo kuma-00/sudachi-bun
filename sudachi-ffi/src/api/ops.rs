@@ -15,13 +15,15 @@ use sudachi::sentence_splitter::{SentenceSplitter, SplitSentences};
 use crate::convert::{Projection, cstr_to_path, cstr_to_string, mode_from_raw, projection_from_raw};
 use crate::error::{
     ERR_CONFIG, ERR_INTERNAL, ERR_INVALID_INDEX, ERR_LOOKUP, ERR_MORPHEME_SPLIT,
-    ERR_SENTENCE_SPLIT, ERR_TOKENIZE, OK, clear_last_error, error,
+    ERR_PRETOKENIZE, ERR_SENTENCE_SPLIT, ERR_TOKENIZE, OK, clear_last_error, error,
 };
 use crate::result::{
     LookupResultArray, LookupResultLayout, MorphemeResultArray, MorphemeResultLayout,
-    PosMatcherResultArray, PosMatcherResultLayout, SentenceSpan, SentenceSpanArray,
-    SentenceSpanLayout, boxed_slice_into_raw_parts, lookup_morpheme_to_result,
-    lookup_result_layout, morpheme_result_layout, morpheme_to_result, pos_matcher_result_layout,
+    PosMatcherResultArray, PosMatcherResultLayout, PretokenizedResultArray,
+    PretokenizedResultLayout, SentenceSpan, SentenceSpanArray, SentenceSpanLayout,
+    boxed_slice_into_raw_parts, lookup_morpheme_to_result, lookup_result_layout,
+    morpheme_list_to_pretokenized_items, morpheme_result_layout, morpheme_to_result,
+    pos_matcher_result_layout, pretokenized_items_to_array, pretokenized_result_layout,
     require_non_null, sentence_span_layout, write_box_ptr, write_ptr,
 };
 
@@ -36,7 +38,33 @@ pub struct SentenceSplitterHandle {
     pub(crate) dictionary: Arc<JapaneseDictionary>,
 }
 
-const SUDACHI_FFI_ABI_VERSION: i32 = 1;
+#[repr(C)]
+pub struct PretokenizerHandle {
+    pub(crate) core: Arc<dyn PretokenizerCore>,
+}
+
+#[derive(Clone, Copy)]
+pub(crate) struct PretokenizeSettings {
+    pub mode: Mode,
+    pub split_mode: Mode,
+    pub subset: InfoSubset,
+    pub include_pos_text: bool,
+    pub projection: Projection,
+}
+
+pub(crate) trait PretokenizerCore: Send + Sync {
+    fn pretokenize(
+        &self,
+        text: &str,
+        settings: PretokenizeSettings,
+    ) -> Result<Vec<crate::result::PretokenizedItem>, i32>;
+}
+
+struct SudachiPretokenizer {
+    dictionary: Arc<JapaneseDictionary>,
+}
+
+const SUDACHI_FFI_ABI_VERSION: i32 = 2;
 const FFI_INFO_SUBSET_POS_TEXT_BIT: u32 = 1 << 30;
 
 #[derive(Clone, Copy)]
@@ -54,6 +82,14 @@ fn run_ffi(body: impl FnOnce() -> Result<(), i32>) -> i32 {
     match body() {
         Ok(()) => OK,
         Err(code) => code,
+    }
+}
+
+fn remap_pretokenize_status(code: i32) -> i32 {
+    if code == ERR_TOKENIZE {
+        ERR_PRETOKENIZE
+    } else {
+        code
     }
 }
 
@@ -527,6 +563,27 @@ fn split_all_morphemes(
     Ok(split_list)
 }
 
+impl PretokenizerCore for SudachiPretokenizer {
+    fn pretokenize(
+        &self,
+        text: &str,
+        settings: PretokenizeSettings,
+    ) -> Result<Vec<crate::result::PretokenizedItem>, i32> {
+        let tokenizer = TokenizerHandle {
+            dictionary: Arc::clone(&self.dictionary),
+            tokenizer: StatelessTokenizer::new(Arc::clone(&self.dictionary)),
+        };
+        let source_list = tokenize_text_with_subset(&tokenizer, text, settings.mode, settings.subset)?;
+        let split_list = split_all_morphemes(&source_list, settings.split_mode)?;
+        morpheme_list_to_pretokenized_items(
+            &split_list,
+            text,
+            settings.include_pos_text,
+            settings.projection,
+        )
+    }
+}
+
 pub(crate) fn create_tokenizer_impl(
     config_path: *const c_char,
     resource_dir: *const c_char,
@@ -573,11 +630,48 @@ pub(crate) fn create_sentence_splitter_from_tokenizer_impl(
     })
 }
 
+pub(crate) fn create_pretokenizer_impl(
+    config_path: *const c_char,
+    resource_dir: *const c_char,
+    dict_path: *const c_char,
+    out_handle: *mut *mut PretokenizerHandle,
+) -> i32 {
+    run_ffi(|| {
+        let dictionary = load_dictionary(config_path, resource_dir, dict_path)?;
+        let handle = Box::new(PretokenizerHandle {
+            core: Arc::new(SudachiPretokenizer { dictionary }),
+        });
+
+        write_box_ptr(out_handle, handle, "out_handle pointer was null")
+    })
+}
+
 pub(crate) fn free_tokenizer_impl(handle: *mut TokenizerHandle) {
     free_handle(handle);
 }
 
 pub(crate) fn free_sentence_splitter_impl(handle: *mut SentenceSplitterHandle) {
+    free_handle(handle);
+}
+
+pub(crate) fn create_pretokenizer_from_tokenizer_impl(
+    tokenizer_handle: *const TokenizerHandle,
+    out_handle: *mut *mut PretokenizerHandle,
+) -> i32 {
+    run_ffi(|| {
+        let tokenizer = require_non_null(tokenizer_handle, "tokenizer handle was null")?;
+        let tokenizer = unsafe { tokenizer.as_ref() };
+        let handle = Box::new(PretokenizerHandle {
+            core: Arc::new(SudachiPretokenizer {
+                dictionary: Arc::clone(&tokenizer.dictionary),
+            }),
+        });
+
+        write_box_ptr(out_handle, handle, "out_handle pointer was null")
+    })
+}
+
+pub(crate) fn free_pretokenizer_impl(handle: *mut PretokenizerHandle) {
     free_handle(handle);
 }
 
@@ -589,6 +683,59 @@ fn free_handle<T>(handle: *mut T) {
     unsafe {
         drop(Box::from_raw(handle));
     }
+}
+
+pub(crate) fn pretokenize_impl(
+    handle: *const PretokenizerHandle,
+    input_utf8: *const c_char,
+    mode: i32,
+    split_mode: i32,
+    projection: i32,
+    subset_bits: u32,
+    out_result: *mut *mut PretokenizedResultArray,
+) -> i32 {
+    run_ffi(|| {
+        let handle = require_non_null(handle, "pretokenizer handle was null")?;
+        let handle = unsafe { handle.as_ref() };
+        let text = cstr_to_string(input_utf8)?;
+        let mode = mode_from_raw(mode)?;
+        let split_mode = mode_from_raw(split_mode)?;
+        let projection = projection_from_raw(projection)?;
+        let selection = parsed_info_subset_from_bits(subset_bits)?;
+        let items = handle.core.pretokenize(
+            &text,
+            PretokenizeSettings {
+                mode,
+                split_mode,
+                subset: selection.subset,
+                include_pos_text: selection.include_pos_text,
+                projection,
+            },
+        )
+        .map_err(remap_pretokenize_status)?;
+        let array = pretokenized_items_to_array(items)?;
+
+        write_box_ptr(out_result, array, "out_result pointer was null")
+    })
+}
+
+pub(crate) fn pretokenize_subset_impl(
+    handle: *const PretokenizerHandle,
+    input_utf8: *const c_char,
+    mode: i32,
+    projection: i32,
+    subset_bits: u32,
+    out_result: *mut *mut PretokenizedResultArray,
+) -> i32 {
+    pretokenize_impl(
+        handle,
+        input_utf8,
+        mode,
+        mode,
+        projection,
+        subset_bits,
+        out_result,
+    )
 }
 
 pub(crate) fn tokenize_impl(
@@ -786,6 +933,18 @@ pub(crate) fn get_morpheme_result_layout_impl(out_layout: *mut MorphemeResultLay
     })
 }
 
+pub(crate) fn get_pretokenized_result_layout_impl(
+    out_layout: *mut PretokenizedResultLayout,
+) -> i32 {
+    run_ffi(|| {
+        write_ptr(
+            out_layout,
+            pretokenized_result_layout(),
+            "out_layout pointer was null",
+        )
+    })
+}
+
 pub(crate) fn get_lookup_result_layout_impl(out_layout: *mut LookupResultLayout) -> i32 {
     run_ffi(|| {
         write_ptr(
@@ -814,4 +973,19 @@ pub(crate) fn get_sentence_span_layout_impl(out_layout: *mut SentenceSpanLayout)
             "out_layout pointer was null",
         )
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn remaps_tokenize_failures_to_pretokenize_for_pretokenizer_api() {
+        assert_eq!(remap_pretokenize_status(ERR_TOKENIZE), ERR_PRETOKENIZE);
+    }
+
+    #[test]
+    fn preserves_other_error_codes_for_pretokenizer_api() {
+        assert_eq!(remap_pretokenize_status(ERR_CONFIG), ERR_CONFIG);
+    }
 }

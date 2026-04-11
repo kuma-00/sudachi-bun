@@ -2,8 +2,9 @@ use std::mem::{offset_of, size_of};
 
 use super::{
     LookupResultArray, LookupResultItem, LookupResultLayout, MorphemeResult, MorphemeResultArray,
-    MorphemeResultLayout, PosMatcherResultArray, PosMatcherResultLayout, SentenceSpan,
-    SentenceSpanArray, SentenceSpanLayout,
+    MorphemeResultLayout, PosMatcherResultArray, PosMatcherResultLayout, PretokenizedResult,
+    PretokenizedResultArray, PretokenizedResultLayout, SentenceSpan, SentenceSpanArray,
+    SentenceSpanLayout,
 };
 
 pub const MORPHEME_RESULT_ARRAY_LAYOUT_CONTIGUOUS: u64 = 0;
@@ -12,6 +13,8 @@ pub const LOOKUP_RESULT_ARRAY_LAYOUT_CONTIGUOUS: u64 = 0;
 pub const LOOKUP_RESULT_LAYOUT_VERSION: u64 = 1;
 pub const POS_MATCHER_RESULT_ARRAY_LAYOUT_CONTIGUOUS: u64 = 0;
 pub const POS_MATCHER_RESULT_LAYOUT_VERSION: u64 = 1;
+pub const PRETOKENIZED_RESULT_ARRAY_LAYOUT_CONTIGUOUS: u64 = 0;
+pub const PRETOKENIZED_RESULT_LAYOUT_VERSION: u64 = 1;
 pub const SENTENCE_SPAN_ARRAY_LAYOUT_CONTIGUOUS: u64 = 0;
 pub const SENTENCE_SPAN_LAYOUT_VERSION: u64 = 1;
 
@@ -50,6 +53,34 @@ impl SentenceSpanLayout {
             span_size: size_of::<SentenceSpan>() as u64,
             begin_offset: offset_of!(SentenceSpan, begin) as u64,
             end_offset: offset_of!(SentenceSpan, end) as u64,
+        }
+    }
+}
+
+impl PretokenizedResultLayout {
+    pub const fn new() -> Self {
+        Self {
+            layout_version: PRETOKENIZED_RESULT_LAYOUT_VERSION,
+            array_layout_kind: PRETOKENIZED_RESULT_ARRAY_LAYOUT_CONTIGUOUS,
+            array_items_offset: offset_of!(PretokenizedResultArray, items) as u64,
+            array_len_offset: offset_of!(PretokenizedResultArray, len) as u64,
+            result_size: size_of::<PretokenizedResult>() as u64,
+            surface_offset: offset_of!(PretokenizedResult, surface) as u64,
+            normalized_offset: offset_of!(PretokenizedResult, normalized) as u64,
+            dictionary_form_offset: offset_of!(PretokenizedResult, dictionary_form) as u64,
+            reading_offset: offset_of!(PretokenizedResult, reading) as u64,
+            pos_offset: offset_of!(PretokenizedResult, pos) as u64,
+            begin_byte_offset: offset_of!(PretokenizedResult, begin_byte) as u64,
+            end_byte_offset: offset_of!(PretokenizedResult, end_byte) as u64,
+            begin_char_offset: offset_of!(PretokenizedResult, begin_char) as u64,
+            end_char_offset: offset_of!(PretokenizedResult, end_char) as u64,
+            word_id_offset: offset_of!(PretokenizedResult, word_id) as u64,
+            pos_id_offset: offset_of!(PretokenizedResult, pos_id) as u64,
+            dictionary_id_offset: offset_of!(PretokenizedResult, dictionary_id) as u64,
+            is_oov_offset: offset_of!(PretokenizedResult, is_oov) as u64,
+            synonym_group_ids_offset: offset_of!(PretokenizedResult, synonym_group_ids) as u64,
+            synonym_group_ids_len_offset:
+                offset_of!(PretokenizedResult, synonym_group_ids_len) as u64,
         }
     }
 }

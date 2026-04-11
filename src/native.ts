@@ -8,11 +8,13 @@ import { SudachiError } from "./types.ts";
 
 const MORPHEME_RESULT_LAYOUT_FIELD_COUNT = 18;
 const LOOKUP_RESULT_LAYOUT_FIELD_COUNT = 11;
+const PRETOKENIZED_RESULT_LAYOUT_FIELD_COUNT = 20;
 const POS_MATCHER_RESULT_LAYOUT_FIELD_COUNT = 5;
 const SENTENCE_SPAN_RESULT_LAYOUT_FIELD_COUNT = 7;
 
 export const MORPHEME_RESULT_LAYOUT_VERSION = 1;
 export const LOOKUP_RESULT_LAYOUT_VERSION = 1;
+export const PRETOKENIZED_RESULT_LAYOUT_VERSION = 1;
 export const POS_MATCHER_RESULT_LAYOUT_VERSION = 1;
 export const SENTENCE_SPAN_RESULT_LAYOUT_VERSION = 1;
 
@@ -59,6 +61,29 @@ export interface LookupResultLayout {
   posIdOffset: number;
   dictionaryIdOffset: number;
   isOovOffset: number;
+}
+
+export interface PretokenizedResultLayout {
+  layoutVersion: number;
+  arrayLayoutKind: number;
+  arrayItemsOffset: number;
+  arrayLenOffset: number;
+  resultSize: number;
+  surfaceOffset: number;
+  normalizedOffset: number;
+  dictionaryFormOffset: number;
+  readingOffset: number;
+  posOffset: number;
+  beginByteOffset: number;
+  endByteOffset: number;
+  beginCharOffset: number;
+  endCharOffset: number;
+  wordIdOffset: number;
+  posIdOffset: number;
+  dictionaryIdOffset: number;
+  isOovOffset: number;
+  synonymGroupIdsOffset: number;
+  synonymGroupIdsLenOffset: number;
 }
 
 export interface PosMatcherResultLayout {
@@ -148,6 +173,38 @@ export interface NativeLookupLibrary {
   close(): void;
 }
 
+export interface NativePretokenizerLibrary {
+  symbols: {
+    sudachi_create_pretokenizer: (
+      configPath: string | null,
+      resourceDir: string | null,
+      dictPath: string,
+      outHandle: NodeJS.TypedArray | Pointer | null,
+    ) => number;
+    sudachi_free_pretokenizer: (handle: Pointer | NodeJS.TypedArray | null) => void;
+    sudachi_pretokenize: (
+      handle: Pointer | NodeJS.TypedArray | null,
+      inputUtf8: string,
+      mode: number,
+      projection: number,
+      outResult: NodeJS.TypedArray | Pointer | null,
+    ) => number;
+    sudachi_pretokenize_subset: (
+      handle: Pointer | NodeJS.TypedArray | null,
+      inputUtf8: string,
+      mode: number,
+      projection: number,
+      subsetBits: number,
+      outResult: NodeJS.TypedArray | Pointer | null,
+    ) => number;
+    sudachi_free_pretokenized_result: (result: Pointer | NodeJS.TypedArray | null) => void;
+    sudachi_get_pretokenized_result_layout: (outLayout: NodeJS.TypedArray | Pointer | null) => number;
+    sudachi_get_last_error: () => CString;
+    sudachi_status_code_name: (status: number) => CString;
+  };
+  close(): void;
+}
+
 export interface NativeSentenceSplitterLibrary {
   symbols: {
     sudachi_create_sentence_splitter: (
@@ -175,7 +232,11 @@ interface CommonNativeSymbols {
   sudachi_status_code_name: (status: number) => CString;
 }
 
-type NativeErrorLibrary = NativeLookupLibrary | NativeSudachiLibrary | NativeSentenceSplitterLibrary;
+type NativeErrorLibrary =
+  | NativeLookupLibrary
+  | NativePretokenizerLibrary
+  | NativeSudachiLibrary
+  | NativeSentenceSplitterLibrary;
 
 interface NativeSymbols extends CommonNativeSymbols {
   sudachi_create_tokenizer: (
@@ -261,6 +322,33 @@ interface NativeLookupSymbols extends CommonNativeSymbols {
   ) => number;
   sudachi_free_lookup_result: (result: Pointer | NodeJS.TypedArray | null) => void;
   sudachi_get_lookup_result_layout: (outLayout: NodeJS.TypedArray | Pointer | null) => number;
+}
+
+interface NativePretokenizerSymbols extends CommonNativeSymbols {
+  sudachi_create_pretokenizer: (
+    configPath: string | null,
+    resourceDir: string | null,
+    dictPath: string,
+    outHandle: NodeJS.TypedArray | Pointer | null,
+  ) => number;
+  sudachi_free_pretokenizer: (handle: Pointer | NodeJS.TypedArray | null) => void;
+  sudachi_pretokenize: (
+    handle: Pointer | NodeJS.TypedArray | null,
+    inputUtf8: string,
+    mode: number,
+    projection: number,
+    outResult: NodeJS.TypedArray | Pointer | null,
+  ) => number;
+  sudachi_pretokenize_subset: (
+    handle: Pointer | NodeJS.TypedArray | null,
+    inputUtf8: string,
+    mode: number,
+    projection: number,
+    subsetBits: number,
+    outResult: NodeJS.TypedArray | Pointer | null,
+  ) => number;
+  sudachi_free_pretokenized_result: (result: Pointer | NodeJS.TypedArray | null) => void;
+  sudachi_get_pretokenized_result_layout: (outLayout: NodeJS.TypedArray | Pointer | null) => number;
 }
 
 const MODULE_DIR = dirname(fileURLToPath(import.meta.url));
@@ -356,6 +444,16 @@ function validateLookupResultLayout(layout: LookupResultLayout): void {
     layout.resultSize,
     layout.arrayLayoutKind,
     "lookup result layout",
+  );
+}
+
+function validatePretokenizedResultLayout(layout: PretokenizedResultLayout): void {
+  validateArrayLayout(
+    layout.layoutVersion,
+    PRETOKENIZED_RESULT_LAYOUT_VERSION,
+    layout.resultSize,
+    layout.arrayLayoutKind,
+    "pretokenized result layout",
   );
 }
 
@@ -491,6 +589,34 @@ const LOOKUP_NATIVE_SYMBOL_DEFS = {
   },
 } as const;
 
+const PRETOKENIZER_NATIVE_SYMBOL_DEFS = {
+  ...COMMON_NATIVE_SYMBOL_DEFS,
+  sudachi_create_pretokenizer: {
+    args: ["cstring", "cstring", "cstring", "ptr"],
+    returns: "i32",
+  },
+  sudachi_free_pretokenizer: {
+    args: ["ptr"],
+    returns: "void",
+  },
+  sudachi_pretokenize: {
+    args: ["ptr", "cstring", "i32", "i32", "ptr"],
+    returns: "i32",
+  },
+  sudachi_pretokenize_subset: {
+    args: ["ptr", "cstring", "i32", "i32", "u32", "ptr"],
+    returns: "i32",
+  },
+  sudachi_free_pretokenized_result: {
+    args: ["ptr"],
+    returns: "void",
+  },
+  sudachi_get_pretokenized_result_layout: {
+    args: ["ptr"],
+    returns: "i32",
+  },
+} as const;
+
 type NativeLibraryLoader = (
   libraryPath: string,
   symbolDefinitions: typeof TOKENIZER_NATIVE_SYMBOL_DEFS,
@@ -512,6 +638,14 @@ type NativeLookupLibraryLoader = (
   symbolDefinitions: typeof LOOKUP_NATIVE_SYMBOL_DEFS,
 ) => {
   symbols: NativeLookupSymbols;
+  close(): void;
+};
+
+type NativePretokenizerLibraryLoader = (
+  libraryPath: string,
+  symbolDefinitions: typeof PRETOKENIZER_NATIVE_SYMBOL_DEFS,
+) => {
+  symbols: NativePretokenizerSymbols;
   close(): void;
 };
 
@@ -543,6 +677,25 @@ function createNativeLookupLibrary(symbols: NativeLookupSymbols, close: () => vo
       sudachi_lookup_subset: symbols.sudachi_lookup_subset,
       sudachi_free_lookup_result: symbols.sudachi_free_lookup_result,
       sudachi_get_lookup_result_layout: symbols.sudachi_get_lookup_result_layout,
+      sudachi_get_last_error: symbols.sudachi_get_last_error,
+      sudachi_status_code_name: symbols.sudachi_status_code_name,
+    },
+    close,
+  };
+}
+
+function createNativePretokenizerLibrary(
+  symbols: NativePretokenizerSymbols,
+  close: () => void,
+): NativePretokenizerLibrary {
+  return {
+    symbols: {
+      sudachi_create_pretokenizer: symbols.sudachi_create_pretokenizer,
+      sudachi_free_pretokenizer: symbols.sudachi_free_pretokenizer,
+      sudachi_pretokenize: symbols.sudachi_pretokenize,
+      sudachi_pretokenize_subset: symbols.sudachi_pretokenize_subset,
+      sudachi_free_pretokenized_result: symbols.sudachi_free_pretokenized_result,
+      sudachi_get_pretokenized_result_layout: symbols.sudachi_get_pretokenized_result_layout,
       sudachi_get_last_error: symbols.sudachi_get_last_error,
       sudachi_status_code_name: symbols.sudachi_status_code_name,
     },
@@ -591,6 +744,19 @@ export function loadLookupLibrary(
   return createNativeLookupLibrary(loaded.symbols, () => loaded.close());
 }
 
+export function loadPretokenizerLibrary(
+  options: NativeLibraryLoadOptions = {},
+  openLibrary: NativePretokenizerLibraryLoader = dlopen as unknown as NativePretokenizerLibraryLoader,
+): NativePretokenizerLibrary {
+  const libraryPath = loadNativeLibraryPath(options.libraryPath);
+  const loaded = openLibrary(libraryPath, PRETOKENIZER_NATIVE_SYMBOL_DEFS) as {
+    symbols: NativePretokenizerSymbols;
+    close(): void;
+  };
+
+  return createNativePretokenizerLibrary(loaded.symbols, () => loaded.close());
+}
+
 export function loadSentenceSplitterLibrary(
   options: NativeLibraryLoadOptions = {},
   openLibrary: NativeSentenceSplitterLibraryLoader = dlopen as unknown as NativeSentenceSplitterLibraryLoader,
@@ -628,6 +794,8 @@ export function readNativeStatusCodeName(
       case "TOKENIZE":
       case "SPLIT":
       case "LOOKUP":
+      case "PRETOKENIZE":
+      case "PRETOKENIZER":
       case "MORPHEME_SPLIT":
       case "SENTENCE_SPLIT":
       case "INTERNAL":
@@ -703,6 +871,39 @@ export function readLookupResultLayout(library: NativeLookupLibrary): LookupResu
         isOovOffset: values[10] ?? 0,
       }) satisfies LookupResultLayout,
     validateLookupResultLayout,
+  );
+}
+
+export function readPretokenizedResultLayout(library: NativePretokenizerLibrary): PretokenizedResultLayout {
+  return readResultLayout(
+    library,
+    PRETOKENIZED_RESULT_LAYOUT_FIELD_COUNT,
+    library.symbols.sudachi_get_pretokenized_result_layout,
+    "Failed to read the pretokenized result layout.",
+    (values) =>
+      ({
+        layoutVersion: values[0] ?? 0,
+        arrayLayoutKind: values[1] ?? 0,
+        arrayItemsOffset: values[2] ?? 0,
+        arrayLenOffset: values[3] ?? 0,
+        resultSize: values[4] ?? 0,
+        surfaceOffset: values[5] ?? 0,
+        normalizedOffset: values[6] ?? 0,
+        dictionaryFormOffset: values[7] ?? 0,
+        readingOffset: values[8] ?? 0,
+        posOffset: values[9] ?? 0,
+        beginByteOffset: values[10] ?? 0,
+        endByteOffset: values[11] ?? 0,
+        beginCharOffset: values[12] ?? 0,
+        endCharOffset: values[13] ?? 0,
+        wordIdOffset: values[14] ?? 0,
+        posIdOffset: values[15] ?? 0,
+        dictionaryIdOffset: values[16] ?? 0,
+        isOovOffset: values[17] ?? 0,
+        synonymGroupIdsOffset: values[18] ?? 0,
+        synonymGroupIdsLenOffset: values[19] ?? 0,
+      }) satisfies PretokenizedResultLayout,
+    validatePretokenizedResultLayout,
   );
 }
 

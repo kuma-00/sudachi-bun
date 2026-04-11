@@ -2,7 +2,7 @@ use super::*;
 use crate::error::{ERR_INVALID_INDEX, ERR_NULL_POINTER, OK, status_code_name};
 use crate::result::{
     LookupResultArray, LookupResultLayout, MorphemeResult, MorphemeResultArray,
-    PosMatcherResultArray, SentenceSpanLayout,
+    PosMatcherResultArray, PretokenizedResultArray, PretokenizedResultLayout, SentenceSpanLayout,
 };
 use std::env;
 use std::ffi::{CStr, CString};
@@ -14,6 +14,12 @@ use sudachi::dic::subset::InfoSubset;
 
 static TOKENIZER_TEST_COUNTER: AtomicU64 = AtomicU64::new(0);
 const FFI_INFO_SUBSET_POS_TEXT_BIT: u32 = 1 << 30;
+
+struct TestDictionaryConfig {
+    config_path: PathBuf,
+    config_path_c: CString,
+    dict_path_c: CString,
+}
 
 fn find_sudachi_checkout_dir() -> PathBuf {
     let cargo_home = env::var_os("CARGO_HOME")
@@ -61,7 +67,7 @@ fn find_sudachi_checkout_dir() -> PathBuf {
     );
 }
 
-fn with_test_tokenizer<T>(f: impl FnOnce(*mut TokenizerHandle) -> T) -> T {
+fn prepare_test_dictionary_config() -> TestDictionaryConfig {
     let checkout_dir = find_sudachi_checkout_dir();
     let test_resources = checkout_dir.join("sudachi").join("tests").join("resources");
     let resource_root = checkout_dir.join("resources");
@@ -105,15 +111,22 @@ fn with_test_tokenizer<T>(f: impl FnOnce(*mut TokenizerHandle) -> T) -> T {
     );
     fs::write(&config_path, config_json).expect("failed to write test sudachi config");
 
-    let config_path_c =
-        CString::new(config_path.to_str().expect("config path must be UTF-8")).unwrap();
-    let dict_path_c = CString::new(dict_path.to_str().expect("dict path must be UTF-8")).unwrap();
+    TestDictionaryConfig {
+        config_path_c: CString::new(config_path.to_str().expect("config path must be UTF-8"))
+            .unwrap(),
+        dict_path_c: CString::new(dict_path.to_str().expect("dict path must be UTF-8")).unwrap(),
+        config_path,
+    }
+}
+
+fn with_test_tokenizer<T>(f: impl FnOnce(*mut TokenizerHandle) -> T) -> T {
+    let test_config = prepare_test_dictionary_config();
 
     let mut handle = ptr::null_mut();
     let status = sudachi_create_tokenizer(
-        config_path_c.as_ptr(),
+        test_config.config_path_c.as_ptr(),
         ptr::null(),
-        dict_path_c.as_ptr(),
+        test_config.dict_path_c.as_ptr(),
         &mut handle,
     );
     assert_eq!(status, OK, "{}", last_error_message());
@@ -121,7 +134,26 @@ fn with_test_tokenizer<T>(f: impl FnOnce(*mut TokenizerHandle) -> T) -> T {
 
     let output = f(handle);
     sudachi_free_tokenizer(handle);
-    let _ = fs::remove_file(config_path);
+    let _ = fs::remove_file(test_config.config_path);
+    output
+}
+
+fn with_test_pretokenizer<T>(f: impl FnOnce(*mut PretokenizerHandle) -> T) -> T {
+    let test_config = prepare_test_dictionary_config();
+
+    let mut handle = ptr::null_mut();
+    let status = sudachi_create_pretokenizer(
+        test_config.config_path_c.as_ptr(),
+        ptr::null(),
+        test_config.dict_path_c.as_ptr(),
+        &mut handle,
+    );
+    assert_eq!(status, OK, "{}", last_error_message());
+    assert!(!handle.is_null());
+
+    let output = f(handle);
+    sudachi_free_pretokenizer(handle);
+    let _ = fs::remove_file(test_config.config_path);
     output
 }
 
@@ -226,6 +258,42 @@ fn collect_lookup_values(
     }
 }
 
+fn collect_pretokenized_values(
+    result: *mut PretokenizedResultArray,
+) -> Vec<(String, usize, usize, usize, usize)> {
+    assert!(!result.is_null());
+
+    unsafe {
+        let array = &*result;
+        if array.len == 0 {
+            return Vec::new();
+        }
+        let items = std::slice::from_raw_parts(array.items, array.len);
+        items
+            .iter()
+            .map(|item| {
+                let surface = CStr::from_ptr(item.surface).to_str().unwrap().to_owned();
+                (surface, item.begin_byte, item.end_byte, item.begin_char, item.end_char)
+            })
+            .collect()
+    }
+}
+
+fn utf16_index_for_byte_offset(text: &str, byte_offset: usize) -> usize {
+    assert!(byte_offset <= text.len());
+    assert!(text.is_char_boundary(byte_offset));
+
+    let mut utf16_index = 0usize;
+    for (index, ch) in text.char_indices() {
+        if index >= byte_offset {
+            break;
+        }
+        utf16_index += ch.len_utf16();
+    }
+
+    utf16_index
+}
+
 fn collect_pos_matcher_ids(result: *mut PosMatcherResultArray) -> Vec<u16> {
     assert!(!result.is_null());
 
@@ -246,6 +314,19 @@ fn last_error_message() -> String {
     }
 
     unsafe { CStr::from_ptr(ptr) }.to_str().unwrap().to_owned()
+}
+
+fn with_test_pretokenizer_from_tokenizer<T>(f: impl FnOnce(*mut PretokenizerHandle) -> T) -> T {
+    with_test_tokenizer(|tokenizer_handle| {
+        let mut handle = ptr::null_mut();
+        let status = sudachi_create_pretokenizer_from_tokenizer(tokenizer_handle, &mut handle);
+        assert_eq!(status, OK, "{}", last_error_message());
+        assert!(!handle.is_null());
+
+        let output = f(handle);
+        sudachi_free_pretokenizer(handle);
+        output
+    })
 }
 
 #[test]
@@ -282,7 +363,17 @@ fn get_sentence_span_layout_returns_stable_offsets() {
 
 #[test]
 fn get_abi_version_returns_expected_value() {
-    assert_eq!(sudachi_get_abi_version(), 1);
+    assert_eq!(sudachi_get_abi_version(), 2);
+}
+
+#[test]
+fn create_pretokenizer_from_tokenizer_requires_tokenizer_handle() {
+    let mut out_handle: *mut PretokenizerHandle = ptr::null_mut();
+    let status = sudachi_create_pretokenizer_from_tokenizer(ptr::null(), &mut out_handle);
+
+    assert_eq!(status, ERR_NULL_POINTER);
+    assert_eq!(status_code_name(status), "NULL_POINTER");
+    assert!(out_handle.is_null());
 }
 
 #[test]
@@ -320,6 +411,30 @@ fn lookup_requires_non_null_pointers() {
         assert_eq!(status, ERR_NULL_POINTER);
         assert_eq!(status_code_name(status), "NULL_POINTER");
     });
+}
+
+#[test]
+fn get_pretokenized_result_layout_requires_output_pointer() {
+    let status = sudachi_get_pretokenized_result_layout(ptr::null_mut());
+
+    assert_eq!(status, ERR_NULL_POINTER);
+    assert_eq!(status_code_name(status), "NULL_POINTER");
+}
+
+#[test]
+fn get_pretokenized_result_layout_returns_stable_offsets() {
+    let mut layout = MaybeUninit::<PretokenizedResultLayout>::uninit();
+    let status = sudachi_get_pretokenized_result_layout(layout.as_mut_ptr());
+
+    assert_eq!(status, OK);
+    let layout = unsafe { layout.assume_init() };
+    assert_eq!(
+        layout.layout_version,
+        crate::result::PRETOKENIZED_RESULT_LAYOUT_VERSION
+    );
+    assert!(layout.result_size > 0);
+    assert!(layout.begin_byte_offset > 0);
+    assert!(layout.begin_char_offset > 0);
 }
 
 #[test]
@@ -492,6 +607,93 @@ fn tokenize_projection_changes_surface_field() {
         assert_eq!(dictionary_values[0].0, surface_values[0].2);
         assert_eq!(normalized_values[0].0, surface_values[0].1);
         assert_eq!(reading_values[0].0, surface_values[0].3);
+    });
+}
+
+#[test]
+fn pretokenize_preserves_byte_and_char_offsets() {
+    with_test_pretokenizer(|handle| {
+        let text = CString::new("京都東京都").unwrap();
+        let mut out_result = ptr::null_mut();
+        let status = sudachi_pretokenize(
+            handle,
+            text.as_ptr(),
+            2,
+            Projection::Reading as i32,
+            &mut out_result,
+        );
+
+        assert_eq!(status, OK, "{}", last_error_message());
+        let values = collect_pretokenized_values(out_result);
+        sudachi_free_pretokenized_result(out_result);
+
+        assert_eq!(
+            values,
+            vec![
+                ("キョウト".to_owned(), 0, 6, 0, 2),
+                ("トウキョウト".to_owned(), 6, 15, 2, 5),
+            ]
+        );
+    });
+}
+
+#[test]
+fn pretokenize_uses_utf16_char_offsets_for_surrogate_pairs() {
+    with_test_pretokenizer(|handle| {
+        let text = CString::new("a😀b").unwrap();
+        let text_str = text.to_str().unwrap();
+        let mut out_result = ptr::null_mut();
+        let status = sudachi_pretokenize(
+            handle,
+            text.as_ptr(),
+            2,
+            Projection::Reading as i32,
+            &mut out_result,
+        );
+
+        assert_eq!(status, OK, "{}", last_error_message());
+        let values = collect_pretokenized_values(out_result);
+        sudachi_free_pretokenized_result(out_result);
+
+        assert!(!values.is_empty());
+        for (_, begin_byte, end_byte, begin_char, end_char) in values {
+            assert_eq!(begin_char, utf16_index_for_byte_offset(text_str, begin_byte));
+            assert_eq!(end_char, utf16_index_for_byte_offset(text_str, end_byte));
+        }
+    });
+}
+
+#[test]
+fn pretokenize_subset_matches_default_when_requesting_all_fields() {
+    with_test_pretokenizer(|handle| {
+        let text = CString::new("京都東京都").unwrap();
+
+        let mut default_result = ptr::null_mut();
+        let status = sudachi_pretokenize(
+            handle,
+            text.as_ptr(),
+            2,
+            Projection::Reading as i32,
+            &mut default_result,
+        );
+        assert_eq!(status, OK, "{}", last_error_message());
+        let default_values = collect_pretokenized_values(default_result);
+        sudachi_free_pretokenized_result(default_result);
+
+        let mut subset_result = ptr::null_mut();
+        let status = sudachi_pretokenize_subset(
+            handle,
+            text.as_ptr(),
+            2,
+            Projection::Reading as i32,
+            InfoSubset::all().bits(),
+            &mut subset_result,
+        );
+        assert_eq!(status, OK, "{}", last_error_message());
+        let subset_values = collect_pretokenized_values(subset_result);
+        sudachi_free_pretokenized_result(subset_result);
+
+        assert_eq!(subset_values, default_values);
     });
 }
 
