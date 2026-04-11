@@ -1,9 +1,11 @@
-import { existsSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
-import { dlopen, suffix, type CString, type Pointer } from "bun:ffi";
+import { dlopen, type CString, type Pointer } from "bun:ffi";
 
 import type { NativeLibraryLoadOptions } from "../types.ts";
+import { loadNativeLibraryPath } from "./path-resolver.ts";
+import { LOOKUP_NATIVE_SYMBOL_DEFS } from "./symbols/lookup.ts";
+import { PRETOKENIZER_NATIVE_SYMBOL_DEFS } from "./symbols/pretokenizer.ts";
+import { SENTENCE_SPLITTER_NATIVE_SYMBOL_DEFS } from "./symbols/sentence-splitter.ts";
+import { TOKENIZER_NATIVE_SYMBOL_DEFS } from "./symbols/tokenizer.ts";
 import type {
   NativeLookupLibrary,
   NativePretokenizerLibrary,
@@ -133,180 +135,6 @@ interface NativePretokenizerSymbols extends CommonNativeSymbols {
   sudachi_get_pretokenized_result_layout: (outLayout: NodeJS.TypedArray | Pointer | null) => number;
 }
 
-const MODULE_DIR = dirname(fileURLToPath(import.meta.url));
-const PROJECT_ROOT = resolve(MODULE_DIR, "../..");
-
-export function loadNativeLibraryPath(libraryPath?: string): string {
-  const explicitPath = libraryPath?.trim() || process.env.SUDACHI_FFI_PATH?.trim();
-  if (explicitPath) {
-    return resolve(explicitPath);
-  }
-
-  const explicitDir = process.env.SUDACHI_FFI_DIR?.trim();
-  const searchDirs = [
-    explicitDir ? resolve(explicitDir) : resolve(PROJECT_ROOT, "sudachi-ffi", "target", "release"),
-    resolve(PROJECT_ROOT, "sudachi-ffi", "target", "debug"),
-  ];
-  const candidateNames = [`libsudachi_ffi.${suffix}`, `sudachi_ffi.${suffix}`];
-
-  for (const dir of searchDirs) {
-    for (const candidateName of candidateNames) {
-      const candidatePath = join(dir, candidateName);
-      if (existsSync(candidatePath)) {
-        return candidatePath;
-      }
-    }
-  }
-
-  const formattedCandidates = searchDirs
-    .flatMap((dir) => candidateNames.map((name) => join(dir, name)))
-    .join("\n  - ");
-
-  throw new Error(
-    [
-      "Could not find the Sudachi native library.",
-      "Build it first with `cd sudachi-ffi && cargo build --release`.",
-      "Looked in:",
-      `  - ${formattedCandidates}`,
-    ].join("\n"),
-  );
-}
-
-export const COMMON_NATIVE_SYMBOL_DEFS = {
-  sudachi_get_last_error: {
-    args: [],
-    returns: "cstring",
-  },
-  sudachi_status_code_name: {
-    args: ["i32"],
-    returns: "cstring",
-  },
-} as const;
-
-export const TOKENIZER_NATIVE_SYMBOL_DEFS = {
-  ...COMMON_NATIVE_SYMBOL_DEFS,
-  sudachi_create_tokenizer: {
-    args: ["cstring", "cstring", "cstring", "ptr"],
-    returns: "i32",
-  },
-  sudachi_free_tokenizer: {
-    args: ["ptr"],
-    returns: "void",
-  },
-  sudachi_tokenize: {
-    args: ["ptr", "cstring", "i32", "i32", "ptr"],
-    returns: "i32",
-  },
-  sudachi_tokenize_subset: {
-    args: ["ptr", "cstring", "i32", "i32", "u32", "ptr"],
-    returns: "i32",
-  },
-  sudachi_split_morpheme: {
-    args: ["ptr", "cstring", "i32", "i32", "usize", "i32", "ptr"],
-    returns: "i32",
-  },
-  sudachi_split_morphemes: {
-    args: ["ptr", "cstring", "i32", "i32", "i32", "ptr"],
-    returns: "i32",
-  },
-  sudachi_compile_pos_matcher: {
-    args: ["ptr", "cstring", "ptr"],
-    returns: "i32",
-  },
-  sudachi_free_result: {
-    args: ["ptr"],
-    returns: "void",
-  },
-  sudachi_free_pos_matcher_result: {
-    args: ["ptr"],
-    returns: "void",
-  },
-  sudachi_get_morpheme_result_layout: {
-    args: ["ptr"],
-    returns: "i32",
-  },
-  sudachi_get_pos_matcher_result_layout: {
-    args: ["ptr"],
-    returns: "i32",
-  },
-} as const;
-
-export const SENTENCE_SPLITTER_NATIVE_SYMBOL_DEFS = {
-  ...COMMON_NATIVE_SYMBOL_DEFS,
-  sudachi_create_sentence_splitter: {
-    args: ["cstring", "cstring", "cstring", "ptr"],
-    returns: "i32",
-  },
-  sudachi_free_sentence_splitter: {
-    args: ["ptr"],
-    returns: "void",
-  },
-  sudachi_split_sentences: {
-    args: ["ptr", "cstring", "ptr"],
-    returns: "i32",
-  },
-  sudachi_free_sentence_spans: {
-    args: ["ptr"],
-    returns: "void",
-  },
-  sudachi_get_sentence_span_layout: {
-    args: ["ptr"],
-    returns: "i32",
-  },
-} as const;
-
-export const LOOKUP_NATIVE_SYMBOL_DEFS = {
-  ...COMMON_NATIVE_SYMBOL_DEFS,
-  sudachi_lookup: {
-    args: ["ptr", "cstring", "i32", "ptr"],
-    returns: "i32",
-  },
-  sudachi_lookup_subset: {
-    args: ["ptr", "cstring", "i32", "u32", "ptr"],
-    returns: "i32",
-  },
-  sudachi_free_lookup_result: {
-    args: ["ptr"],
-    returns: "void",
-  },
-  sudachi_get_lookup_result_layout: {
-    args: ["ptr"],
-    returns: "i32",
-  },
-} as const;
-
-export const PRETOKENIZER_NATIVE_SYMBOL_DEFS = {
-  ...COMMON_NATIVE_SYMBOL_DEFS,
-  sudachi_create_pretokenizer: {
-    args: ["cstring", "cstring", "cstring", "ptr"],
-    returns: "i32",
-  },
-  sudachi_set_pretokenizer_debug: {
-    args: ["ptr", "i32"],
-    returns: "i32",
-  },
-  sudachi_free_pretokenizer: {
-    args: ["ptr"],
-    returns: "void",
-  },
-  sudachi_pretokenize: {
-    args: ["ptr", "cstring", "i32", "i32", "ptr"],
-    returns: "i32",
-  },
-  sudachi_pretokenize_subset: {
-    args: ["ptr", "cstring", "i32", "i32", "u32", "ptr"],
-    returns: "i32",
-  },
-  sudachi_free_pretokenized_result: {
-    args: ["ptr"],
-    returns: "void",
-  },
-  sudachi_get_pretokenized_result_layout: {
-    args: ["ptr"],
-    returns: "i32",
-  },
-} as const;
-
 export type NativeLibraryLoader = (
   libraryPath: string,
   symbolDefinitions: typeof TOKENIZER_NATIVE_SYMBOL_DEFS,
@@ -338,6 +166,22 @@ export type NativePretokenizerLibraryLoader = (
   symbols: NativePretokenizerSymbols;
   close(): void;
 };
+
+interface LoadedLibrary<TSymbols> {
+  symbols: TSymbols;
+  close(): void;
+}
+
+function loadLibrary<TSymbols, TLibrary, TSymbolDefinitions>(
+  options: NativeLibraryLoadOptions,
+  openLibrary: (libraryPath: string, symbolDefinitions: TSymbolDefinitions) => LoadedLibrary<TSymbols>,
+  symbolDefinitions: TSymbolDefinitions,
+  createLibrary: (symbols: TSymbols, close: () => void) => TLibrary,
+): TLibrary {
+  const libraryPath = loadNativeLibraryPath(options.libraryPath);
+  const loaded = openLibrary(libraryPath, symbolDefinitions);
+  return createLibrary(loaded.symbols, () => loaded.close());
+}
 
 export function createNativeSudachiLibrary(symbols: NativeSymbols, close: () => void): NativeSudachiLibrary {
   return {
@@ -416,47 +260,31 @@ export function loadNativeLibrary(
   options: NativeLibraryLoadOptions = {},
   openLibrary: NativeLibraryLoader = dlopen as unknown as NativeLibraryLoader,
 ): NativeSudachiLibrary {
-  const libraryPath = loadNativeLibraryPath(options.libraryPath);
-  const loaded = openLibrary(libraryPath, TOKENIZER_NATIVE_SYMBOL_DEFS) as { symbols: NativeSymbols; close(): void };
-
-  return createNativeSudachiLibrary(loaded.symbols, () => loaded.close());
+  return loadLibrary(options, openLibrary, TOKENIZER_NATIVE_SYMBOL_DEFS, createNativeSudachiLibrary);
 }
 
 export function loadLookupLibrary(
   options: NativeLibraryLoadOptions = {},
   openLibrary: NativeLookupLibraryLoader = dlopen as unknown as NativeLookupLibraryLoader,
 ): NativeLookupLibrary {
-  const libraryPath = loadNativeLibraryPath(options.libraryPath);
-  const loaded = openLibrary(libraryPath, LOOKUP_NATIVE_SYMBOL_DEFS) as {
-    symbols: NativeLookupSymbols;
-    close(): void;
-  };
-
-  return createNativeLookupLibrary(loaded.symbols, () => loaded.close());
+  return loadLibrary(options, openLibrary, LOOKUP_NATIVE_SYMBOL_DEFS, createNativeLookupLibrary);
 }
 
 export function loadPretokenizerLibrary(
   options: NativeLibraryLoadOptions = {},
   openLibrary: NativePretokenizerLibraryLoader = dlopen as unknown as NativePretokenizerLibraryLoader,
 ): NativePretokenizerLibrary {
-  const libraryPath = loadNativeLibraryPath(options.libraryPath);
-  const loaded = openLibrary(libraryPath, PRETOKENIZER_NATIVE_SYMBOL_DEFS) as {
-    symbols: NativePretokenizerSymbols;
-    close(): void;
-  };
-
-  return createNativePretokenizerLibrary(loaded.symbols, () => loaded.close());
+  return loadLibrary(options, openLibrary, PRETOKENIZER_NATIVE_SYMBOL_DEFS, createNativePretokenizerLibrary);
 }
 
 export function loadSentenceSplitterLibrary(
   options: NativeLibraryLoadOptions = {},
   openLibrary: NativeSentenceSplitterLibraryLoader = dlopen as unknown as NativeSentenceSplitterLibraryLoader,
 ): NativeSentenceSplitterLibrary {
-  const libraryPath = loadNativeLibraryPath(options.libraryPath);
-  const loaded = openLibrary(libraryPath, SENTENCE_SPLITTER_NATIVE_SYMBOL_DEFS) as {
-    symbols: NativeSentenceSplitterSymbols;
-    close(): void;
-  };
-
-  return createNativeSentenceSplitterLibrary(loaded.symbols, () => loaded.close());
+  return loadLibrary(
+    options,
+    openLibrary,
+    SENTENCE_SPLITTER_NATIVE_SYMBOL_DEFS,
+    createNativeSentenceSplitterLibrary,
+  );
 }
