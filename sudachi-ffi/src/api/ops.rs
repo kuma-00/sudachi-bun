@@ -1,6 +1,8 @@
 use std::os::raw::c_char;
 use std::panic::{AssertUnwindSafe, catch_unwind};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::time::Instant;
 
 use sudachi::analysis::Mode;
 use sudachi::analysis::mlist::MorphemeList;
@@ -41,6 +43,8 @@ pub struct SentenceSplitterHandle {
 #[repr(C)]
 pub struct PretokenizerHandle {
     pub(crate) core: Arc<dyn PretokenizerCore>,
+    pub(crate) debug_enabled: AtomicBool,
+    pub(crate) debug_sink: Arc<dyn PretokenizerDebugSink>,
 }
 
 #[derive(Clone, Copy)]
@@ -50,6 +54,19 @@ pub(crate) struct PretokenizeSettings {
     pub subset: InfoSubset,
     pub include_pos_text: bool,
     pub projection: Projection,
+    pub debug: bool,
+}
+
+#[derive(Clone, Copy)]
+pub(crate) struct PretokenizeDebugRecord {
+    pub mode: Mode,
+    pub split_mode: Mode,
+    pub projection: Projection,
+    pub subset_bits: u32,
+    pub include_pos_text: bool,
+    pub input_bytes: usize,
+    pub token_count: usize,
+    pub elapsed_us: u128,
 }
 
 pub(crate) trait PretokenizerCore: Send + Sync {
@@ -60,11 +77,17 @@ pub(crate) trait PretokenizerCore: Send + Sync {
     ) -> Result<Vec<crate::result::PretokenizedItem>, i32>;
 }
 
+pub(crate) trait PretokenizerDebugSink: Send + Sync {
+    fn emit(&self, record: &PretokenizeDebugRecord);
+}
+
 struct SudachiPretokenizer {
     dictionary: Arc<JapaneseDictionary>,
 }
 
-const SUDACHI_FFI_ABI_VERSION: i32 = 2;
+struct StderrPretokenizerDebugSink;
+
+const SUDACHI_FFI_ABI_VERSION: i32 = 3;
 const FFI_INFO_SUBSET_POS_TEXT_BIT: u32 = 1 << 30;
 
 #[derive(Clone, Copy)]
@@ -75,6 +98,73 @@ struct ParsedInfoSubset {
 
 pub(crate) fn abi_version() -> i32 {
     SUDACHI_FFI_ABI_VERSION
+}
+
+fn mode_name(mode: Mode) -> &'static str {
+    match mode {
+        Mode::A => "A",
+        Mode::B => "B",
+        Mode::C => "C",
+    }
+}
+
+fn projection_name(projection: Projection) -> &'static str {
+    match projection {
+        Projection::Surface => "surface",
+        Projection::Normalized => "normalized",
+        Projection::DictionaryForm => "dictionary_form",
+        Projection::Reading => "reading",
+    }
+}
+
+pub(crate) fn format_pretokenize_debug_record(record: &PretokenizeDebugRecord) -> String {
+    format!(
+        concat!(
+            "{{",
+            "\"event\":\"pretokenize\",",
+            "\"mode\":\"{}\",",
+            "\"split_mode\":\"{}\",",
+            "\"projection\":\"{}\",",
+            "\"subset_bits\":{},",
+            "\"include_pos_text\":{},",
+            "\"input_bytes\":{},",
+            "\"token_count\":{},",
+            "\"elapsed_us\":{}",
+            "}}"
+        ),
+        mode_name(record.mode),
+        mode_name(record.split_mode),
+        projection_name(record.projection),
+        record.subset_bits,
+        record.include_pos_text,
+        record.input_bytes,
+        record.token_count,
+        record.elapsed_us,
+    )
+}
+
+impl PretokenizerDebugSink for StderrPretokenizerDebugSink {
+    fn emit(&self, record: &PretokenizeDebugRecord) {
+        eprintln!("{}", format_pretokenize_debug_record(record));
+    }
+}
+
+fn default_pretokenizer_debug_sink() -> Arc<dyn PretokenizerDebugSink> {
+    Arc::new(StderrPretokenizerDebugSink)
+}
+
+fn new_pretokenizer_handle(dictionary: Arc<JapaneseDictionary>) -> Box<PretokenizerHandle> {
+    Box::new(PretokenizerHandle {
+        core: Arc::new(SudachiPretokenizer { dictionary }),
+        debug_enabled: AtomicBool::new(false),
+        debug_sink: default_pretokenizer_debug_sink(),
+    })
+}
+
+fn emit_pretokenizer_debug(handle: &PretokenizerHandle, record: &PretokenizeDebugRecord) {
+    if handle.debug_enabled.load(Ordering::Relaxed) {
+        handle.debug_sink.emit(record);
+    }
 }
 
 fn run_ffi(body: impl FnOnce() -> Result<(), i32>) -> i32 {
@@ -569,6 +659,7 @@ impl PretokenizerCore for SudachiPretokenizer {
         text: &str,
         settings: PretokenizeSettings,
     ) -> Result<Vec<crate::result::PretokenizedItem>, i32> {
+        let _debug_enabled = settings.debug;
         let tokenizer = TokenizerHandle {
             dictionary: Arc::clone(&self.dictionary),
             tokenizer: StatelessTokenizer::new(Arc::clone(&self.dictionary)),
@@ -638,9 +729,7 @@ pub(crate) fn create_pretokenizer_impl(
 ) -> i32 {
     run_ffi(|| {
         let dictionary = load_dictionary(config_path, resource_dir, dict_path)?;
-        let handle = Box::new(PretokenizerHandle {
-            core: Arc::new(SudachiPretokenizer { dictionary }),
-        });
+        let handle = new_pretokenizer_handle(dictionary);
 
         write_box_ptr(out_handle, handle, "out_handle pointer was null")
     })
@@ -661,11 +750,7 @@ pub(crate) fn create_pretokenizer_from_tokenizer_impl(
     run_ffi(|| {
         let tokenizer = require_non_null(tokenizer_handle, "tokenizer handle was null")?;
         let tokenizer = unsafe { tokenizer.as_ref() };
-        let handle = Box::new(PretokenizerHandle {
-            core: Arc::new(SudachiPretokenizer {
-                dictionary: Arc::clone(&tokenizer.dictionary),
-            }),
-        });
+        let handle = new_pretokenizer_handle(Arc::clone(&tokenizer.dictionary));
 
         write_box_ptr(out_handle, handle, "out_handle pointer was null")
     })
@@ -673,6 +758,20 @@ pub(crate) fn create_pretokenizer_from_tokenizer_impl(
 
 pub(crate) fn free_pretokenizer_impl(handle: *mut PretokenizerHandle) {
     free_handle(handle);
+}
+
+pub(crate) fn set_pretokenizer_debug_impl(
+    handle: *const PretokenizerHandle,
+    enabled: i32,
+) -> i32 {
+    run_ffi(|| {
+        let handle = require_non_null(handle, "pretokenizer handle was null")?;
+        let handle = unsafe { handle.as_ref() };
+        handle
+            .debug_enabled
+            .store(enabled != 0, Ordering::Relaxed);
+        Ok(())
+    })
 }
 
 fn free_handle<T>(handle: *mut T) {
@@ -702,6 +801,8 @@ pub(crate) fn pretokenize_impl(
         let split_mode = mode_from_raw(split_mode)?;
         let projection = projection_from_raw(projection)?;
         let selection = parsed_info_subset_from_bits(subset_bits)?;
+        let debug_enabled = handle.debug_enabled.load(Ordering::Relaxed);
+        let started = debug_enabled.then(Instant::now);
         let items = handle.core.pretokenize(
             &text,
             PretokenizeSettings {
@@ -710,11 +811,36 @@ pub(crate) fn pretokenize_impl(
                 subset: selection.subset,
                 include_pos_text: selection.include_pos_text,
                 projection,
+                debug: debug_enabled,
             },
         )
         .map_err(remap_pretokenize_status)?;
+        let token_count = items.len();
+        if debug_enabled {
+            let debug_record = PretokenizeDebugRecord {
+                mode,
+                split_mode,
+                projection,
+                subset_bits,
+                include_pos_text: selection.include_pos_text,
+                input_bytes: text.len(),
+                token_count,
+                elapsed_us: started
+                    .expect("debug timing not captured")
+                    .elapsed()
+                    .as_micros(),
+            };
+            let debug_result = catch_unwind(AssertUnwindSafe(|| {
+                emit_pretokenizer_debug(handle, &debug_record);
+            }));
+            if debug_result.is_err() {
+                return Err(error(
+                    ERR_PRETOKENIZE,
+                    "pretokenizer debug sink panicked while emitting debug output",
+                ));
+            }
+        }
         let array = pretokenized_items_to_array(items)?;
-
         write_box_ptr(out_result, array, "out_result pointer was null")
     })
 }

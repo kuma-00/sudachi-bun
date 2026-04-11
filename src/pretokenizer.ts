@@ -22,6 +22,8 @@ import {
   type TokenizeMode,
 } from "./types.ts";
 
+export * from "./pretokenizer-hf.ts";
+
 const INFO_SUBSET_FFI_POS_TEXT_BIT = 1 << 30;
 
 const INFO_SUBSET_FIELD_BITS: Record<
@@ -213,6 +215,21 @@ function openNativePretokenizer(options: PretokenizerOptions): NativePretokenize
   );
 }
 
+function setNativePretokenizerDebug(
+  session: NativePretokenizerSession,
+  debug: boolean | undefined,
+): void {
+  const setDebug = session.library.symbols.sudachi_set_pretokenizer_debug;
+  if (setDebug === undefined) {
+    return;
+  }
+
+  const status = setDebug(session.handle, debug ? 1 : 0);
+  if (status !== 0) {
+    throw createNativeSudachiError(session.library, status, "Failed to configure pretokenizer debug mode.");
+  }
+}
+
 export class Pretokenizer {
   #library: NativePretokenizerLibrary | null;
   #layout: PretokenizedResultLayout | null;
@@ -304,6 +321,7 @@ export class Pretokenizer {
 export function createPretokenizer(options: PretokenizerOptions): Pretokenizer {
   const session = openNativePretokenizer(options);
   try {
+    setNativePretokenizerDebug(session, options.debug);
     return new Pretokenizer(session, options);
   } catch (error) {
     session.library.symbols.sudachi_free_pretokenizer(session.handle);

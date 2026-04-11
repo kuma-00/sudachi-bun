@@ -11,6 +11,7 @@ TypeScript から Rust FFI (`sudachi-ffi`) を呼び出して、日本語テキ�
 - CLI で `--text`、stdin、位置引数のファイル入力に対応
 - TypeScript API として package root の `createTokenizer` / `createSentenceSplitter` から直接トークナイズ/文分割
 - TypeScript API として package root の `createPretokenizer` から pretokenized 形式を生成
+- TypeScript API として package root の `createHuggingFacePretokenizer` から HuggingFace tokenizers 向けアダプタを生成
 - TypeScript API から既存 morpheme の再分割（単一 morpheme / morpheme list）
 - TypeScript API から辞書 lookup 候補を `LookupEntry[]` として取得
 - Sudachi 辞書のダウンロードと展開を補助するセットアップスクリプトを提供
@@ -90,7 +91,7 @@ bun run index.ts dump --help
 - `--text "<text>"`: 解析対象テキスト（未指定時は位置引数ファイルまたは stdin から解決）
 - `--split-sentences`: 入力を文単位に分けて解析する。文境界の byte offset は Rust 側 sentence splitter の結果をそのまま使う
 - `--debug`: デバッグ情報を標準エラー出力に追加する。標準出力の解析結果はそのまま維持される
-  lookup シンボルが利用可能なライブラリでは、入力文字列に対する `Tokenizer.lookup()` の結果も stderr に JSON で出力する。出力は指定した `--projection` を使う
+  - `[debug] tokenize ...` 形式の実行条件ログと、lookup シンボルが利用可能な場合は `Tokenizer.lookup()` の診断を stderr に出力する
 - `--resource-dir <path>`: 辞書・設定の探索基準ディレクトリを指定する
 
 ### 入力ソース
@@ -216,7 +217,25 @@ Pretokenizer の各トークンは、UTF-8 byte offset と character index の�
 - `beginByte` / `endByte`: 元テキストに対する UTF-8 byte offset
 - `beginChar` / `endChar`: 元テキストに対する JavaScript string index
 
+`debug: true` を指定した場合は、Pretokenizer の解析ごとに stderr へ 1 行の JSONL を出力します。主な項目は `mode`, `split_mode`, `projection`, `subset_bits`, `input_bytes`, `token_count`, `elapsed_us` です。
+
 byte は Rust 側の生の UTF-8 オフセット、char は JavaScript string index として扱う文字位置です。`Morpheme` と pretokenized 出力の両方でこの境界を共有します。
+
+`createHuggingFacePretokenizer()` は `Pretokenizer` を HuggingFace tokenizers の pre-tokenizer として使うためのアダプタです。第2引数の `PretokenizeOptions`（`mode` / `projection` / `subset`）は内部の `pretokenize` 呼び出しへ渡されますが、HuggingFace 側の `pre_tokenize(pretok)` は surface projection のみ対応し、`projection: "reading"` などの非 surface projection は例外になります。raw string の確認用には `pre_tokenize_str()` と `pre_tokenize_text()` があり、こちらは projected token text をそのまま返します。byte offset が必要な場合は、`Pretokenizer` の生の出力にある `beginByte` / `endByte` を参照してください。
+
+```ts
+import { createHuggingFacePretokenizer, createPretokenizer } from "sudachi-bun";
+
+const pretokenizer = createPretokenizer({
+  dictPath: "./dict/system_core.dic",
+  projection: "surface",
+  debug: false,
+});
+
+const hfPretokenizer = createHuggingFacePretokenizer(pretokenizer, {
+  projection: "surface",
+});
+```
 
 `Morpheme` は以下の情報を含みます。
 

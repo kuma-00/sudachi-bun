@@ -75,6 +75,14 @@ pub extern "C" fn sudachi_free_pretokenizer(handle: *mut ops::PretokenizerHandle
 }
 
 #[unsafe(no_mangle)]
+pub extern "C" fn sudachi_set_pretokenizer_debug(
+    handle: *const ops::PretokenizerHandle,
+    enabled: i32,
+) -> i32 {
+    ops::set_pretokenizer_debug_impl(handle, enabled)
+}
+
+#[unsafe(no_mangle)]
 pub extern "C" fn sudachi_tokenize(
     handle: *mut ops::TokenizerHandle,
     input_utf8: *const c_char,

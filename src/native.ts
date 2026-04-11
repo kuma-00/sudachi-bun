@@ -181,6 +181,10 @@ export interface NativePretokenizerLibrary {
       dictPath: string,
       outHandle: NodeJS.TypedArray | Pointer | null,
     ) => number;
+    sudachi_set_pretokenizer_debug?: (
+      handle: Pointer | NodeJS.TypedArray | null,
+      debug: number,
+    ) => number;
     sudachi_free_pretokenizer: (handle: Pointer | NodeJS.TypedArray | null) => void;
     sudachi_pretokenize: (
       handle: Pointer | NodeJS.TypedArray | null,
@@ -330,6 +334,10 @@ interface NativePretokenizerSymbols extends CommonNativeSymbols {
     resourceDir: string | null,
     dictPath: string,
     outHandle: NodeJS.TypedArray | Pointer | null,
+  ) => number;
+  sudachi_set_pretokenizer_debug?: (
+    handle: Pointer | NodeJS.TypedArray | null,
+    debug: number,
   ) => number;
   sudachi_free_pretokenizer: (handle: Pointer | NodeJS.TypedArray | null) => void;
   sudachi_pretokenize: (
@@ -595,6 +603,10 @@ const PRETOKENIZER_NATIVE_SYMBOL_DEFS = {
     args: ["cstring", "cstring", "cstring", "ptr"],
     returns: "i32",
   },
+  sudachi_set_pretokenizer_debug: {
+    args: ["ptr", "i32"],
+    returns: "i32",
+  },
   sudachi_free_pretokenizer: {
     args: ["ptr"],
     returns: "void",
@@ -691,6 +703,7 @@ function createNativePretokenizerLibrary(
   return {
     symbols: {
       sudachi_create_pretokenizer: symbols.sudachi_create_pretokenizer,
+      sudachi_set_pretokenizer_debug: symbols.sudachi_set_pretokenizer_debug,
       sudachi_free_pretokenizer: symbols.sudachi_free_pretokenizer,
       sudachi_pretokenize: symbols.sudachi_pretokenize,
       sudachi_pretokenize_subset: symbols.sudachi_pretokenize_subset,

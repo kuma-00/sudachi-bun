@@ -5,6 +5,10 @@ mod tests;
 
 #[cfg(test)]
 pub(crate) use crate::convert::Projection;
+#[cfg(test)]
+pub(crate) use ops::{
+    PretokenizeDebugRecord, PretokenizerDebugSink, format_pretokenize_debug_record,
+};
 
 pub use exports::{
     sudachi_compile_pos_matcher, sudachi_create_pretokenizer,
@@ -16,7 +20,7 @@ pub use exports::{
     sudachi_get_last_error, sudachi_get_lookup_result_layout, sudachi_get_morpheme_result_layout,
     sudachi_get_pos_matcher_result_layout, sudachi_get_pretokenized_result_layout,
     sudachi_get_sentence_span_layout, sudachi_lookup, sudachi_lookup_subset, sudachi_pretokenize,
-    sudachi_pretokenize_subset,
+    sudachi_pretokenize_subset, sudachi_set_pretokenizer_debug,
     sudachi_split_morpheme, sudachi_split_morphemes, sudachi_split_sentences,
     sudachi_status_code_name, sudachi_tokenize, sudachi_tokenize_subset,
 };

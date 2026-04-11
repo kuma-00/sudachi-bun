@@ -1,6 +1,6 @@
 import { afterEach, expect, spyOn, test } from "bun:test";
 
-import { Pretokenizer, createPretokenizer } from "../index.ts";
+import { Pretokenizer, createPretokenizer } from "./pretokenizer.ts";
 import * as ffi from "./ffi.ts";
 import * as native from "./native.ts";
 import * as nativeSession from "./native-session.ts";
@@ -64,9 +64,13 @@ function createLibrary(): NativePretokenizerLibrary {
   return {
     symbols: {
       sudachi_create_pretokenizer: () => 0,
+      sudachi_set_pretokenizer_debug: () => 0,
       sudachi_free_pretokenizer: () => {},
       sudachi_pretokenize: () => 0,
       sudachi_pretokenize_subset: (handle, inputUtf8, mode, projection, subsetBits, outResult) => {
+        if (!(outResult instanceof BigUint64Array)) {
+          throw new Error("pretokenize subset result buffer missing");
+        }
         outResult[0] = 1n;
         return 0;
       },
@@ -110,13 +114,44 @@ test("pretokenize forwards projection settings and preserves byte/char offsets",
   expect(call).toBeDefined();
   if (call) {
     const [handle, inputUtf8, mode, projection, subsetBits, outResult] = call;
-    expect(handle).toBe(1);
+    expect(handle).toBe(1 as never);
     expect(inputUtf8).toBe("a😀b");
     expect(typeof mode).toBe("number");
     expect(typeof projection).toBe("number");
     expect(typeof subsetBits).toBe("number");
     expect(outResult).toBeInstanceOf(BigUint64Array);
   }
+});
+
+function expectDebugPropagation(debug: boolean): void {
+  const library = createLibrary();
+  const loadSpy = trackSpy(spyOn(native, "loadPretokenizerLibrary").mockReturnValue(library));
+  const openSessionSpy = trackSpy(spyOn(nativeSession, "openNativeHandleSession").mockReturnValue({
+    handle: 1 as never,
+    layout: FAKE_LAYOUT,
+    library,
+  }));
+  const debugSetterSpy = trackSpy(spyOn(library.symbols, "sudachi_set_pretokenizer_debug"));
+
+  const pretokenizer = createPretokenizer({
+    dictPath: "/tmp/dict",
+    debug,
+  });
+
+  expect(loadSpy).toHaveBeenCalledTimes(1);
+  expect(loadSpy).toHaveBeenCalledWith(expect.objectContaining({ debug }));
+  expect(openSessionSpy).toHaveBeenCalledTimes(1);
+  expect(debugSetterSpy).toHaveBeenCalledTimes(1);
+  expect(debugSetterSpy).toHaveBeenCalledWith(1 as never, debug ? 1 : 0);
+  pretokenizer.close();
+}
+
+test("createPretokenizer forwards debug=true to the native loader", () => {
+  expectDebugPropagation(true);
+});
+
+test("createPretokenizer forwards debug=false to the native loader", () => {
+  expectDebugPropagation(false);
 });
 
 test("close releases the pretokenizer handle and closes the library", () => {
@@ -148,7 +183,7 @@ test("createPretokenizer closes native resources when default parsing throws", (
     library,
   }));
 
-  expect(() => createPretokenizer({ mode: "invalid-mode" as never })).toThrow();
+  expect(() => createPretokenizer({ dictPath: "/tmp/dict", mode: "invalid-mode" as never })).toThrow();
 
   expect(loadSpy).toHaveBeenCalledTimes(1);
   expect(openSessionSpy).toHaveBeenCalledTimes(1);

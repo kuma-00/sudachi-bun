@@ -1,7 +1,7 @@
 # Task 12: HuggingFace Pretokenizer 連携 + Debug 切替（API/FFI）
 
 ## 目的
-HuggingFace tokenizers と接続し、Tokenizer のデバッグ切替を API/FFI で有効化する。
+HuggingFace tokenizers と接続し、Pretokenizer のデバッグ切替を API/FFI で有効化する。
 
 ## スコープ
 - HuggingFace tokenizers 連携アダプタ

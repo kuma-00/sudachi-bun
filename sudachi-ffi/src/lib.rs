@@ -14,8 +14,9 @@ pub use api::{
     sudachi_get_last_error, sudachi_get_lookup_result_layout, sudachi_get_morpheme_result_layout,
     sudachi_get_pos_matcher_result_layout, sudachi_get_pretokenized_result_layout,
     sudachi_get_sentence_span_layout, sudachi_lookup, sudachi_lookup_subset, sudachi_pretokenize,
-    sudachi_pretokenize_subset, sudachi_split_morpheme, sudachi_split_morphemes,
-    sudachi_split_sentences, sudachi_status_code_name, sudachi_tokenize, sudachi_tokenize_subset,
+    sudachi_pretokenize_subset, sudachi_set_pretokenizer_debug, sudachi_split_morpheme,
+    sudachi_split_morphemes, sudachi_split_sentences, sudachi_status_code_name, sudachi_tokenize,
+    sudachi_tokenize_subset,
 };
 pub use result::{
     LookupResultArray, LookupResultItem, LookupResultLayout, MorphemeResult, MorphemeResultArray,

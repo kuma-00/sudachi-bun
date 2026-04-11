@@ -593,7 +593,7 @@ test("createPosMatcher compiles native POS matcher ids and filters morphemes and
       ];
       expect(matcher.matches(1)).toBe(true);
       expect(matcher.matches(2)).toBe(false);
-      expect(matcher.filter(morphemes)).toEqual([morphemes[0], morphemes[2]]);
+      expect(matcher.filter(morphemes)).toEqual([morphemes[0]!, morphemes[2]!]);
 
       const lookupEntries = [
         createLookupEntry("東京", "(0, 5)", 0, false, 1),
@@ -602,7 +602,7 @@ test("createPosMatcher compiles native POS matcher ids and filters morphemes and
       ];
       expect(matcher.matches(lookupEntries[0]!)).toBe(true);
       expect(matcher.matches(lookupEntries[1]!)).toBe(false);
-      expect(matcher.filter(lookupEntries)).toEqual([lookupEntries[0], lookupEntries[2]]);
+      expect(matcher.filter(lookupEntries)).toEqual([lookupEntries[0]!, lookupEntries[2]!]);
     } finally {
       freeSpy.mockRestore();
       compileSpy.mockRestore();
