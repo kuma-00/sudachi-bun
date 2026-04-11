@@ -7,13 +7,15 @@ import {
   loadNativeLibrary,
   readLookupResultLayout,
   readMorphemeResultLayout,
-  type LookupResultLayout,
-  type NativeLookupLibrary,
-  type MorphemeResultLayout,
-  type PosMatcherResultLayout,
-  type NativeSudachiLibrary,
   readPosMatcherResultLayout,
 } from "../native.ts";
+import type {
+  LookupResultLayout,
+  MorphemeResultLayout,
+  NativeLookupLibrary,
+  NativeSudachiLibrary,
+  PosMatcherResultLayout,
+} from "../native/types.ts";
 import { SudachiError, type TokenizerOptions } from "../types.ts";
 
 export interface NativeTokenizerSession {

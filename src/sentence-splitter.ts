@@ -6,9 +6,8 @@ import {
   createNativeSudachiError,
   loadSentenceSplitterLibrary,
   readSentenceSpanResultLayout,
-  type NativeSentenceSplitterLibrary,
-  type SentenceSpanResultLayout,
 } from "./native.ts";
+import type { NativeSentenceSplitterLibrary, SentenceSpanResultLayout } from "./native/types.ts";
 import { SudachiError, type SentenceSpan, type SentenceSplitterOptions } from "./types.ts";
 
 function invalidSentenceSpan(message: string): never {

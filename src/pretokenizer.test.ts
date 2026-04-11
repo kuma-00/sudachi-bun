@@ -4,7 +4,7 @@ import { Pretokenizer, createPretokenizer } from "./pretokenizer.ts";
 import * as ffi from "./ffi.ts";
 import * as native from "./native.ts";
 import * as nativeSession from "./native-session.ts";
-import type { NativePretokenizerLibrary, PretokenizedResultLayout } from "./native.ts";
+import type { NativePretokenizerLibrary, PretokenizedResultLayout } from "./native/types.ts";
 import type { PretokenizedToken } from "./types.ts";
 
 const FAKE_LAYOUT: PretokenizedResultLayout = {

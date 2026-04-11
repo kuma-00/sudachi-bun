@@ -8,7 +8,7 @@ import type {
   PretokenizedResultLayout,
   PosMatcherResultLayout,
   SentenceSpanResultLayout,
-} from "./native.ts";
+} from "./native/types.ts";
 
 export interface SentenceSpanOffsets {
   start: number;

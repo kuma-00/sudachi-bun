@@ -10,7 +10,7 @@ import type {
   NativeLookupLibrary,
   NativeSudachiLibrary,
   PosMatcherResultLayout,
-} from "./native.ts";
+} from "./native/types.ts";
 
 const INFO_SUBSET_FFI_POS_TEXT_BIT = 1 << 30;
 const DEFAULT_PROJECTION = "surface";

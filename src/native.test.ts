@@ -3,17 +3,15 @@ import { expect, test } from "bun:test";
 import {
   LOOKUP_RESULT_LAYOUT_VERSION,
   MORPHEME_RESULT_LAYOUT_VERSION,
-  PRETOKENIZED_RESULT_LAYOUT_VERSION,
   POS_MATCHER_RESULT_LAYOUT_VERSION,
+  PRETOKENIZED_RESULT_LAYOUT_VERSION,
   readLookupResultLayout,
   readMorphemeResultLayout,
-  readPretokenizedResultLayout,
-  readPosMatcherResultLayout,
   readNativeStatusCodeName,
-  type NativeLookupLibrary,
-  type NativePretokenizerLibrary,
-  type NativeSudachiLibrary,
+  readPosMatcherResultLayout,
+  readPretokenizedResultLayout,
 } from "./native.ts";
+import type { NativeLookupLibrary, NativePretokenizerLibrary, NativeSudachiLibrary } from "./native/types.ts";
 
 function createLibrary(
   layoutWriter: (outLayout: BigUint64Array) => number = (outLayout) => {

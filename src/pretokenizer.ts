@@ -6,9 +6,8 @@ import {
   createNativeSudachiError,
   loadPretokenizerLibrary,
   readPretokenizedResultLayout,
-  type NativePretokenizerLibrary,
-  type PretokenizedResultLayout,
 } from "./native.ts";
+import type { NativePretokenizerLibrary, PretokenizedResultLayout } from "./native/types.ts";
 import {
   parseSurfaceProjection,
   parseTokenizeMode,

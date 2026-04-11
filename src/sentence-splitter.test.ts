@@ -3,7 +3,7 @@ import { expect, spyOn, test } from "bun:test";
 import * as ffi from "./ffi.ts";
 import * as native from "./native.ts";
 import { SentenceSplitter, createSentenceSplitter } from "./sentence-splitter.ts";
-import type { NativeSentenceSplitterLibrary, SentenceSpanResultLayout } from "./native.ts";
+import type { NativeSentenceSplitterLibrary, SentenceSpanResultLayout } from "./native/types.ts";
 
 const SENTENCE_SPAN_LAYOUT: SentenceSpanResultLayout = {
   layoutVersion: 1,

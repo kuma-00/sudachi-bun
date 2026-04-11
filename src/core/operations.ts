@@ -1,5 +1,6 @@
 import { readLookupEntryArray, readMorphemeArray, readPosMatcherIdArray } from "../ffi.ts";
-import { createNativeSudachiError, type MorphemeResultLayout } from "../native.ts";
+import { createNativeSudachiError } from "../native.ts";
+import type { MorphemeResultLayout } from "../native/types.ts";
 import { readOwnedNativeResult } from "../native-session.ts";
 import {
   SudachiError,
