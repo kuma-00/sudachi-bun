@@ -17,17 +17,8 @@ import type {
   PosMatcherResultLayout,
 } from "../native/types.ts";
 import { SudachiError, type TokenizerOptions } from "../types.ts";
-
-export interface NativeTokenizerSession {
-  handle: Pointer;
-  layout: MorphemeResultLayout;
-  library: NativeSudachiLibrary;
-}
-
-export interface NativeLookupSession {
-  layout: LookupResultLayout;
-  library: NativeLookupLibrary;
-}
+import { createTokenizerGateway, type NativeLookupSession, type NativeTokenizerSession, type TokenizerGateway } from "./tokenizer-gateway.ts";
+export type { NativeLookupSession, NativeTokenizerSession, TokenizerGateway } from "./tokenizer-gateway.ts";
 
 function openNativeTokenizer(options: TokenizerOptions): NativeTokenizerSession {
   const library = loadNativeLibrary(options);
@@ -53,6 +44,7 @@ export class TokenizerSessionManager {
   #lookupLibrary: NativeLookupLibrary | null;
   #lookupLayout: LookupResultLayout | null;
   #posMatcherLayout: PosMatcherResultLayout | null;
+  #gateway: TokenizerGateway | null;
   #loadOptions: TokenizerOptions;
 
   constructor(options: TokenizerOptions) {
@@ -64,6 +56,7 @@ export class TokenizerSessionManager {
     this.#lookupLibrary = null;
     this.#lookupLayout = null;
     this.#posMatcherLayout = null;
+    this.#gateway = null;
     this.#loadOptions = { ...options };
   }
 
@@ -118,6 +111,22 @@ export class TokenizerSessionManager {
     return layout;
   }
 
+  getGateway(): TokenizerGateway {
+    this.getOpenSession();
+
+    if (this.#gateway !== null) {
+      return this.#gateway;
+    }
+
+    const gateway = createTokenizerGateway({
+      getOpenSession: () => this.getOpenSession(),
+      getLookupSession: () => this.getLookupSession(),
+      getPosMatcherLayout: () => this.getPosMatcherLayout(),
+    });
+    this.#gateway = gateway;
+    return gateway;
+  }
+
   close(): void {
     if (this.#library === null) {
       return;
@@ -130,6 +139,7 @@ export class TokenizerSessionManager {
 
     this.#lookupLayout = null;
     this.#posMatcherLayout = null;
+    this.#gateway = null;
 
     if (this.#handle !== null) {
       this.#library.symbols.sudachi_free_tokenizer(this.#handle);
