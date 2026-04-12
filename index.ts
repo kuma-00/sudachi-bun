@@ -1,7 +1,5 @@
-export { PosMatcher, createTokenizer } from "./src/core.ts";
-export { createSentenceSplitter } from "./src/sentence-splitter.ts";
-export * from "./src/pretokenizer.ts";
-import { Pretokenizer } from "./src/pretokenizer.ts";
+export { createSudachi } from "./src/sudachi.ts";
+import type { Pretokenizer } from "./src/pretokenizer.ts";
 import {
   createHfPretokenizerAdapter,
   ensureHfPretokenizeOptions,
@@ -16,6 +14,10 @@ export { runMain as main };
 export { runTokenizeCommand } from "./src/cli/execute.ts";
 export { parseCliArgs } from "./src/cli/parser.ts";
 export { formatSudachiError, SudachiError, TOKENIZE_MODES } from "./src/types.ts";
+export type {
+  CreateSudachiOptions,
+  Sudachi,
+} from "./src/sudachi.ts";
 export type {
   InfoSubset,
   InfoSubsetField,
@@ -55,11 +57,14 @@ export function createHuggingFacePretokenizer(
     projection: "surface",
     ...options,
   });
-  const adapter = createHfPretokenizerAdapter({
-    pretokenize(text: string): PretokenizedResult {
-      return pretokenizer.pretokenize(text, pretokenizeOptions);
+  const adapter = createHfPretokenizerAdapter(
+    {
+      pretokenize(text: string): PretokenizedResult {
+        return pretokenizer.pretokenize(text, pretokenizeOptions);
+      },
     },
-  }, pretokenizeOptions);
+    pretokenizeOptions,
+  );
 
   return {
     pretokenizer,

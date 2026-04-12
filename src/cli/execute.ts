@@ -1,6 +1,6 @@
-import { createTokenizer, type Tokenizer } from "../core.ts";
+import { createTokenizer } from "../core.ts";
 import { createSentenceSplitter } from "../sentence-splitter.ts";
-import { formatSudachiError, type Morpheme, type TokenizeMode, type TokenizerOptions } from "../types.ts";
+import { formatSudachiError, type Morpheme, type SentenceSpan, type SurfaceProjection, type TokenizeMode } from "../types.ts";
 import { formatTokenizeOutput, type TokenizeOutputFormat } from "./output.ts";
 
 import type { TokenizeCliCommand } from "./normalize.ts";
@@ -10,45 +10,40 @@ interface CliIO {
 }
 
 function tokenizeSentenceUnits(
-  tokenizer: Tokenizer,
-  splitterOptions: TokenizerOptions,
+  tokenizer: { tokenize(params: { text: string; projection: SurfaceProjection; mode?: TokenizeMode }): Morpheme[] },
+  splitter: { split(text: string): SentenceSpan[] } | null,
   text: string,
   projection: TokenizeCliCommand["projection"],
   mode: TokenizeMode,
   splitSentences: boolean,
 ): Morpheme[] {
-  if (!splitSentences) {
-    return tokenizer.tokenize(text, projection, mode);
+  if (!splitSentences || splitter === null) {
+    return tokenizer.tokenize({ text, projection, mode });
   }
 
-  const splitter = createSentenceSplitter(splitterOptions);
-  try {
-    const units = splitter.split(text);
-    if (units.length === 0) {
-      return tokenizer.tokenize(text, projection, mode);
-    }
-
-    const morphemes: Morpheme[] = [];
-    for (const unit of units) {
-      const unitMorphemes = tokenizer.tokenize(unit.text, projection, mode);
-      if (unit.start === 0) {
-        morphemes.push(...unitMorphemes);
-        continue;
-      }
-
-      morphemes.push(
-        ...unitMorphemes.map((morpheme) => ({
-          ...morpheme,
-          begin: morpheme.begin + unit.start,
-          end: morpheme.end + unit.start,
-        })),
-      );
-    }
-
-    return morphemes;
-  } finally {
-    splitter.close();
+  const units = splitter.split(text);
+  if (units.length === 0) {
+    return tokenizer.tokenize({ text, projection, mode });
   }
+
+  const morphemes: Morpheme[] = [];
+  for (const unit of units) {
+    const unitMorphemes = tokenizer.tokenize({ text: unit.text, projection, mode });
+    if (unit.start === 0) {
+      morphemes.push(...unitMorphemes);
+      continue;
+    }
+
+    morphemes.push(
+      ...unitMorphemes.map((morpheme) => ({
+        ...morpheme,
+        begin: morpheme.begin + unit.start,
+        end: morpheme.end + unit.start,
+      })),
+    );
+  }
+
+  return morphemes;
 }
 
 export function runTokenizeCommand(
@@ -57,6 +52,7 @@ export function runTokenizeCommand(
   io?: Pick<CliIO, "error">,
 ): string {
   const tokenizer = createTokenizer(command);
+  const splitter = command.splitSentences ? createSentenceSplitter(command) : null;
 
   try {
     if (command.debug) {
@@ -71,7 +67,7 @@ export function runTokenizeCommand(
       );
 
       try {
-        io?.error(`[debug] lookup=${JSON.stringify(tokenizer.lookup(command.text, command.projection))}`);
+        io?.error(`[debug] lookup=${JSON.stringify(tokenizer.lookup({ surface: command.text, projection: command.projection }))}`);
       } catch (error) {
         io?.error(`[debug] lookup-unavailable=${formatSudachiError(error)}`);
       }
@@ -79,7 +75,7 @@ export function runTokenizeCommand(
 
     const morphemes = tokenizeSentenceUnits(
       tokenizer,
-      command,
+      splitter,
       command.text,
       command.projection,
       command.mode,
@@ -92,6 +88,7 @@ export function runTokenizeCommand(
 
     return formatTokenizeOutput(morphemes, format, command.projection);
   } finally {
+    splitter?.close();
     tokenizer.close();
   }
 }

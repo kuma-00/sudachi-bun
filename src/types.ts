@@ -99,6 +99,35 @@ export type PosMatcherPatternItem = string | null | undefined;
 export type PosMatcherPattern = readonly PosMatcherPatternItem[];
 export type PosMatcherPatterns = readonly PosMatcherPattern[];
 
+export interface TokenizeArgs {
+  text: string;
+  projection: SurfaceProjection;
+  mode?: TokenizeMode;
+  subset?: InfoSubset;
+}
+
+export interface LookupArgs {
+  surface: string;
+  projection: SurfaceProjection;
+  subset?: InfoSubset;
+}
+
+export interface SplitArgs {
+  morpheme: Morpheme;
+  projection: SurfaceProjection;
+  mode?: TokenizeMode;
+}
+
+export interface SplitIntoArgs {
+  morphemes: readonly Morpheme[];
+  projection: SurfaceProjection;
+  mode?: TokenizeMode;
+}
+
+export interface CreatePosMatcherArgs {
+  patterns: PosMatcherPatterns;
+}
+
 export type NativeSudachiErrorCode =
   | "OK"
   | "NULL_POINTER"

@@ -9,8 +9,7 @@ TypeScript から Rust FFI (`sudachi-ffi`) を呼び出して、日本語テキ�
 - Rust 側の sentence splitter を通して `SentenceSpan[]` を取得し、UTF-8 バイトオフセットをそのまま扱う
 - CLI の `tokenize` サブコマンドで `--mode A|B|C` の分割モードと必須の `--projection surface|normalized|dictionary_form|reading`、`--wakati` / `--all` / `--output <path>`、`--split-sentences` / `--debug` / `--resource-dir` を指定して出力
 - CLI で `--text`、stdin、位置引数のファイル入力に対応
-- TypeScript API として package root の `createTokenizer` / `createSentenceSplitter` から直接トークナイズ/文分割
-- TypeScript API として package root の `createPretokenizer` から pretokenized 形式を生成
+- TypeScript API として package root の `createSudachi` から tokenizer/splitter/pretokenizer をまとめて生成
 - TypeScript API として package root の `createHuggingFacePretokenizer` から HuggingFace tokenizers 向けアダプタを生成
 - TypeScript API から既存 morpheme の再分割（単一 morpheme / morpheme list）
 - TypeScript API から辞書 lookup 候補を `LookupEntry[]` として取得
@@ -145,71 +144,71 @@ bun run setup:dict -- --url https://example.com/sudachi-dictionary.zip --out ./d
 
 ## TypeScript API
 
-`createTokenizer` / `createSentenceSplitter` を package root から import して使います。
+`createSudachi` を package root から import して使います。
 
 ```ts
-import { createSentenceSplitter, createTokenizer } from "sudachi-bun";
+import { createSudachi } from "sudachi-bun";
 
-const splitter = createSentenceSplitter({
-  dictPath: "./dict/system_core.dic",
-});
-const tokenizer = createTokenizer({
+const sudachi = createSudachi({
   dictPath: "./dict/system_core.dic",
   // configPath: "./dict/sudachi.json",
   // libraryPath: "./sudachi-ffi/target/release/libsudachi_ffi.dylib",
 });
 
 try {
+  const { tokenizer, splitter, pretokenizer } = sudachi;
   const text = "今日は晴れです。明日も晴れです。";
   const tokenText = "東京都に";
-  const tokens = tokenizer.tokenize(tokenText, "surface", "C");
-  const lookup = tokenizer.lookup("東京", "surface");
-  const finer = tokenizer.split(tokens[0], "surface", "A");
-  const flattened = tokenizer.splitInto(tokens, "surface", "A");
+  const tokens = tokenizer.tokenize({ text: tokenText, projection: "surface", mode: "C" });
+  const lookup = tokenizer.lookup({ surface: "東京", projection: "surface" });
+  const finer = tokenizer.split({ morpheme: tokens[0], projection: "surface", mode: "A" });
+  const flattened = tokenizer.splitInto({ morphemes: tokens, projection: "surface", mode: "A" });
+  const pretokenized = pretokenizer.pretokenize("東京タワー");
   console.log(lookup, finer, flattened);
+  console.log(pretokenized);
 
   for (const span of splitter.split(text)) {
-    const morphemes = tokenizer.tokenize(span.text, "surface", "C");
+    const morphemes = tokenizer.tokenize({ text: span.text, projection: "surface", mode: "C" });
     console.log(span.start, span.end, morphemes);
   }
 } finally {
-  splitter.close();
-  tokenizer.close();
+  sudachi.close();
 }
 ```
 
-`projection` は `tokenize()` / `lookup()` / `split()` / `splitInto()` の必須引数です。サポートする値は `surface`, `normalized`, `dictionary_form`, `reading` です。`Morpheme.surface` と `LookupEntry.surface` はこの投影結果を持ち、`--wakati` もこの値を使って表示します。
+`projection` は `tokenizer.tokenize()` / `tokenizer.lookup()` / `tokenizer.split()` / `tokenizer.splitInto()` の必須プロパティです。サポートする値は `surface`, `normalized`, `dictionary_form`, `reading` です。`Morpheme.surface` と `LookupEntry.surface` はこの投影結果を持ち、`--wakati` もこの値を使って表示します。
 
-`createSentenceSplitter()` が返す `SentenceSplitter` は Rust FFI の sentence splitter ハンドルを保持し、`split(text)` で `SentenceSpan[]` を返します。各 span は文テキスト `text` と UTF-8 バイトオフセット `start` / `end` を持ちます。
+`createSudachi()` が返す `splitter` は Rust FFI の sentence splitter ハンドルを保持し、`split(text)` で `SentenceSpan[]` を返します。各 span は文テキスト `text` と UTF-8 バイトオフセット `start` / `end` を持ちます。
 
-`createTokenizer()` が返す `Tokenizer` には Task-06 相当の再分割 API があります。
+`createSudachi()` が返す `tokenizer` には Task-06 相当の再分割 API があります。
 
-- `tokenizer.split(morpheme, projection, mode)`: 既存の単一 morpheme をより細かい `mode` へ再分割する
-- `tokenizer.splitInto(morphemes, projection, mode)`: morpheme list 全体を再分割する
+- `tokenizer.split({ morpheme, projection, mode })`: 既存の単一 morpheme をより細かい `mode` へ再分割する
+- `tokenizer.splitInto({ morphemes, projection, mode })`: morpheme list 全体を再分割する
 
 どちらも `tokenize()` と同じ `Morpheme[]` を返し、内部では既存の morpheme 読み出し処理を再利用します。`splitInto()` は `tokenize()` や `split()` が返した配列をそのまま渡した場合はネイティブの list resplit を使い、コピー済み配列のように list コンテキストが失われた場合は各 morpheme の `split()` を順に適用します。
 
-`split()` / `splitInto()` は、同じ `Tokenizer` が生成した morpheme のみ受け付けます。`tokenize(text, projection, mode)` との差分として、再分割は既存解析結果を起点にするため、元トークン境界に従って細分化されます。
+`split()` / `splitInto()` は、同じ `tokenizer` が生成した morpheme のみ受け付けます。`tokenize({ text, projection, mode })` との差分として、再分割は既存解析結果を起点にするため、元トークン境界に従って細分化されます。
 
 Task-07 相当の lookup API も利用できます。
 
-- `tokenizer.lookup(surface, projection)`: 入力 surface に一致する辞書候補を `LookupEntry[]` として返す
+- `tokenizer.lookup({ surface, projection })`: 入力 surface に一致する辞書候補を `LookupEntry[]` として返す
 
 `LookupEntry` は `surface`, `pos`, `wordId`, `dictionaryId`, `isOov` を持ちます。lookup 用の Rust FFI シンボルが未実装または古いライブラリでは `lookup()` が失敗するため、その場合は最新の `sudachi-ffi` をビルドしてください。
 
-`createPretokenizer()` は辞書設定から pretokenized 形式を生成する API です。
+`createSudachi()` が返す `pretokenizer` は辞書設定から pretokenized 形式を生成する API です。
 
 ```ts
-import { createPretokenizer } from "sudachi-bun";
+import { createSudachi } from "sudachi-bun";
 
-const pretokenizer = createPretokenizer({
+const { pretokenizer } = createSudachi({
   dictPath: "./dict/system_core.dic",
+});
+
+const tokens = pretokenizer.pretokenize("東京タワー", {
   mode: "C",
   projection: "surface",
   subset: { fields: ["surface", "pos"] },
 });
-
-const tokens = pretokenizer.pretokenize("東京タワー");
 ```
 
 Pretokenizer の各トークンは、UTF-8 byte offset と character index の両方を保持します。
@@ -224,15 +223,13 @@ byte は Rust 側の生の UTF-8 オフセット、char は JavaScript string in
 `createHuggingFacePretokenizer()` は `Pretokenizer` を HuggingFace tokenizers の pre-tokenizer として使うためのアダプタです。第2引数の `PretokenizeOptions`（`mode` / `projection` / `subset`）は内部の `pretokenize` 呼び出しへ渡されますが、HuggingFace 側の `pre_tokenize(pretok)` は surface projection のみ対応し、`projection: "reading"` などの非 surface projection は例外になります。raw string の確認用には `pre_tokenize_str()` と `pre_tokenize_text()` があり、こちらは projected token text をそのまま返します。byte offset が必要な場合は、`Pretokenizer` の生の出力にある `beginByte` / `endByte` を参照してください。
 
 ```ts
-import { createHuggingFacePretokenizer, createPretokenizer } from "sudachi-bun";
+import { createHuggingFacePretokenizer, createSudachi } from "sudachi-bun";
 
-const pretokenizer = createPretokenizer({
+const sudachi = createSudachi({
   dictPath: "./dict/system_core.dic",
-  projection: "surface",
-  debug: false,
 });
 
-const hfPretokenizer = createHuggingFacePretokenizer(pretokenizer, {
+const hfPretokenizer = createHuggingFacePretokenizer(sudachi.pretokenizer, {
   projection: "surface",
 });
 ```

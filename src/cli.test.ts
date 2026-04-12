@@ -4,23 +4,11 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import * as core from "./core.ts";
 import { runCli } from "./cli.ts";
+import * as core from "./core.ts";
 import * as sentenceSplitter from "./sentence-splitter.ts";
-import type { Tokenizer } from "./core.ts";
 
 type Projection = "surface" | "normalized" | "dictionary_form" | "reading";
-const PROJECTION_VALUES = new Set<Projection>(["surface", "normalized", "dictionary_form", "reading"]);
-
-function firstProjectionArg(args: readonly unknown[]): Projection | undefined {
-  return args.find((value): value is Projection => typeof value === "string" && PROJECTION_VALUES.has(value as Projection)) as
-    | Projection
-    | undefined;
-}
-
-function nonProjectionStrings(args: readonly unknown[]): string[] {
-  return args.filter((value): value is string => typeof value === "string" && !PROJECTION_VALUES.has(value as Projection));
-}
 
 function createCapturedIo() {
   const logs: string[] = [];
@@ -100,34 +88,34 @@ const NORMALIZED_SAMPLE_MORPHEMES = [
 
 function createFakeTokenizer() {
   const tokenizeCalls: Array<{ text: string; mode: string; projection: Projection }> = [];
-  const lookupCalls: Array<{ text: string; projection: Projection }> = [];
+  const lookupCalls: Array<{ surface: string; projection: Projection }> = [];
 
   return {
     lastTokenizeArgs: () => tokenizeCalls[tokenizeCalls.length - 1],
     lookupCalls: () => [...lookupCalls],
     tokenizeCalls: () => [...tokenizeCalls],
     tokenizer: {
-      tokenize(...args: unknown[]) {
-        const [text = "", mode = "C"] = nonProjectionStrings(args);
-        const projection = firstProjectionArg(args) ?? "surface";
+      tokenize({ text = "", mode = "C", projection = "surface" }: { text: string; mode?: string; projection?: Projection }) {
         tokenizeCalls.push({ text, mode, projection });
-        return (projection === "normalized" ? NORMALIZED_SAMPLE_MORPHEMES : SAMPLE_MORPHEMES) as unknown as ReturnType<
-          Tokenizer["tokenize"]
-        >;
+        return projection === "normalized" ? [...NORMALIZED_SAMPLE_MORPHEMES] : [...SAMPLE_MORPHEMES];
       },
-      lookup(...args: unknown[]) {
-        const [text = ""] = nonProjectionStrings(args);
-        const projection = firstProjectionArg(args) ?? "surface";
-        lookupCalls.push({ text, projection });
+      lookup({
+        surface = "",
+        projection = "surface",
+      }: {
+        surface: string;
+        projection?: Projection;
+      }) {
+        lookupCalls.push({ surface, projection });
         return [
           {
-            surface: text,
+            surface,
             pos: "名詞,普通名詞,一般,*,*,*",
             wordId: "(0, 1)",
             dictionaryId: 0,
             isOov: false,
           },
-        ] as ReturnType<Tokenizer["lookup"]>;
+        ];
       },
       close() {},
     },
@@ -163,6 +151,7 @@ test("runCli requires an explicit subcommand", async () => {
 test("runCli tokenizes text when tokenize subcommand is specified", async () => {
   const { io, logs, errors } = createCapturedIo();
   const fakeTokenizer = createFakeTokenizer();
+  const closeSpy = spyOn(fakeTokenizer.tokenizer, "close");
   const loadSpy = spyOn(core, "createTokenizer").mockImplementation(() => fakeTokenizer.tokenizer as never);
 
   try {
@@ -177,8 +166,10 @@ test("runCli tokenizes text when tokenize subcommand is specified", async () => 
     expect(fakeTokenizer.lastTokenizeArgs()).toEqual({ text: "ignored", mode: "C", projection: "surface" });
     expect(logs[0]).toBe(JSON.stringify(SAMPLE_MORPHEMES, null, 2));
     expect(loadSpy).toHaveBeenCalledTimes(1);
+    expect(closeSpy).toHaveBeenCalledTimes(1);
   } finally {
     loadSpy.mockRestore();
+    closeSpy.mockRestore();
   }
 });
 
@@ -270,22 +261,17 @@ test("runCli handles sentence splitting and byte offsets", async () => {
       ];
     },
   };
+  const splitterCloseSpy = spyOn({ close() {} }, "close");
   const fakeSplitter = {
     split: spyOn(splitterTarget, "split"),
-    close() {},
+    close: splitterCloseSpy,
   };
-  const createSpy = spyOn(sentenceSplitter, "createSentenceSplitter").mockReturnValue(fakeSplitter as never);
-  const loadSpy = spyOn(core, "createTokenizer").mockImplementation(
+  const tokenizeSpy = spyOn(core, "createTokenizer").mockImplementation(
     () =>
       ({
-        tokenize(...args: unknown[]) {
-          const [text = "", mode = "C"] = nonProjectionStrings(args);
-          const projection = firstProjectionArg(args) ?? "surface";
+        tokenize({ text = "", mode = "C", projection = "surface" }: { text: string; mode?: string; projection?: Projection }) {
           tokenizeCalls.push({ text, mode, projection });
-          const morphemes =
-            projection === "normalized"
-              ? (NORMALIZED_SAMPLE_MORPHEMES as unknown as ReturnType<Tokenizer["tokenize"]>)
-              : (SAMPLE_MORPHEMES as unknown as ReturnType<Tokenizer["tokenize"]>);
+          const morphemes = projection === "normalized" ? NORMALIZED_SAMPLE_MORPHEMES : SAMPLE_MORPHEMES;
           return [
             {
               ...morphemes[0],
@@ -293,11 +279,15 @@ test("runCli handles sentence splitting and byte offsets", async () => {
               begin: 0,
               end: Buffer.byteLength(text, "utf8"),
             },
-          ] as unknown as ReturnType<Tokenizer["tokenize"]>;
+          ];
+        },
+        lookup() {
+          return [];
         },
         close() {},
       }) as never,
   );
+  const splitSpy = spyOn(sentenceSplitter, "createSentenceSplitter").mockImplementation(() => fakeSplitter as never);
 
   try {
     const exitCode = await runCliMaybeAsync(
@@ -308,10 +298,13 @@ test("runCli handles sentence splitting and byte offsets", async () => {
 
     expect(exitCode).toBe(0);
     expect(errors).toEqual([]);
-    expect(createSpy).toHaveBeenCalledTimes(1);
-    expect(createSpy).toHaveBeenCalledWith(expect.objectContaining({ dictPath: "/tmp/dict" }));
+    expect(tokenizeSpy).toHaveBeenCalledTimes(1);
+    expect(tokenizeSpy).toHaveBeenCalledWith(expect.objectContaining({ dictPath: "/tmp/dict", splitSentences: true }));
+    expect(splitSpy).toHaveBeenCalledTimes(1);
+    expect(splitSpy).toHaveBeenCalledWith(expect.objectContaining({ dictPath: "/tmp/dict", splitSentences: true }));
     expect(fakeSplitter.split).toHaveBeenCalledTimes(1);
     expect(fakeSplitter.split).toHaveBeenCalledWith("😀。B？");
+    expect(splitterCloseSpy).toHaveBeenCalledTimes(1);
     expect(tokenizeCalls).toEqual([
       { text: "😀。", mode: "C", projection: "surface" },
       { text: "B？", mode: "C", projection: "surface" },
@@ -323,9 +316,10 @@ test("runCli handles sentence splitting and byte offsets", async () => {
       { begin: 7, end: 11 },
     ]);
   } finally {
-    createSpy.mockRestore();
+    tokenizeSpy.mockRestore();
+    splitSpy.mockRestore();
     fakeSplitter.split.mockRestore();
-    loadSpy.mockRestore();
+    splitterCloseSpy.mockRestore();
   }
 });
 
@@ -361,7 +355,7 @@ test("runCli emits lookup debug output via stderr", async () => {
 
     expect(exitCode).toBe(0);
     expect(logs[0]).toBe(JSON.stringify(SAMPLE_MORPHEMES, null, 2));
-    expect(fakeTokenizer.lookupCalls()).toEqual([{ text: "東京", projection: "surface" }]);
+    expect(fakeTokenizer.lookupCalls()).toEqual([{ surface: "東京", projection: "surface" }]);
     expect(errors).toContain(
       "[debug] lookup=[{\"surface\":\"東京\",\"pos\":\"名詞,普通名詞,一般,*,*,*\",\"wordId\":\"(0, 1)\",\"dictionaryId\":0,\"isOov\":false}]",
     );
@@ -375,10 +369,10 @@ test("runCli keeps debug tokenize working when lookup is unavailable", async () 
   const loadSpy = spyOn(core, "createTokenizer").mockImplementation(
     () =>
       ({
-        tokenize(..._args: unknown[]) {
-          return SAMPLE_MORPHEMES as unknown as ReturnType<Tokenizer["tokenize"]>;
+        tokenize(_args: unknown) {
+          return [...SAMPLE_MORPHEMES];
         },
-        lookup(..._args: unknown[]) {
+        lookup(_args: unknown) {
           throw new Error("missing lookup symbols");
         },
         close() {},

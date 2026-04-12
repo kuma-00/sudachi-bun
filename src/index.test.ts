@@ -1,11 +1,16 @@
 import { expect, test } from "bun:test";
 
-const { createHuggingFacePretokenizer, createPretokenizer, main, PosMatcher, runCli } = await import("../index.ts");
+const pkg = await import("../index.ts");
 
-test("package root exports the CLI entrypoint", () => {
-  expect(typeof main).toBe("function");
-  expect(typeof runCli).toBe("function");
-  expect(typeof PosMatcher).toBe("function");
-  expect(typeof createPretokenizer).toBe("function");
-  expect(typeof createHuggingFacePretokenizer).toBe("function");
+test("package root exports the new API entrypoint", () => {
+  expect(typeof pkg.main).toBe("function");
+  expect(typeof pkg.runCli).toBe("function");
+  expect(typeof pkg.createSudachi).toBe("function");
+  expect(typeof pkg.createHuggingFacePretokenizer).toBe("function");
+});
+
+test("package root no longer exports legacy create* APIs", () => {
+  expect("createTokenizer" in pkg).toBe(false);
+  expect("createSentenceSplitter" in pkg).toBe(false);
+  expect("createPretokenizer" in pkg).toBe(false);
 });
