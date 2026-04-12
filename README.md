@@ -142,6 +142,22 @@ bun run setup:dict -- --type full --version v20240416 --out ./dict
 bun run setup:dict -- --url https://example.com/sudachi-dictionary.zip --out ./dict
 ```
 
+ライブラリ利用時にも同等の処理を実行できます。
+
+```ts
+import { ensureDictionary } from "sudachi-bun";
+
+const installed = await ensureDictionary({
+  type: "core",
+  version: "latest",
+  outDir: "./dict",
+});
+
+console.log(installed.dictPath);
+```
+
+`ensureDictionary()` は、指定ディレクトリ内に既存辞書があれば再利用し、見つからない場合のみダウンロードと展開を行います。強制再ダウンロードしたい場合は `forceDownload: true` を指定します。
+
 ## TypeScript API
 
 `createSudachi` を package root から import して使います。

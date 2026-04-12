@@ -13,6 +13,12 @@ export { runCli } from "./src/cli.ts";
 export { runMain as main };
 export { runTokenizeCommand } from "./src/cli/execute.ts";
 export { parseCliArgs } from "./src/cli/parser.ts";
+export {
+  setupDictionary,
+  ensureDictionary,
+  listInstalledDictionaries,
+  findInstalledDictionary,
+} from "./src/dictionary.ts";
 export { formatSudachiError, SudachiError, TOKENIZE_MODES } from "./src/types.ts";
 export type {
   CreateSudachiOptions,
@@ -39,6 +45,14 @@ export type {
   TokenizeMode,
   TokenizerOptions,
 } from "./src/types.ts";
+export type {
+  DictionaryDownload,
+  DictionarySetupResult,
+  DictionaryType,
+  EnsureDictionaryOptions,
+  InstalledDictionary,
+  SetupDictionaryOptions,
+} from "./src/dictionary.ts";
 export type { HfOffsets, HfPretokenizedToken, HfPretokenizerAdapter } from "./src/pretokenizer-hf.ts";
 export type { HfNormalizedStringLike, HfPreTokenizedStringLike } from "./src/pretokenizer-hf.ts";
 
