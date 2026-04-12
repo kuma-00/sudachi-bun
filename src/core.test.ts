@@ -2,7 +2,7 @@ import { expect, spyOn, test } from "bun:test";
 
 import * as ffi from "./ffi.ts";
 import * as native from "./native.ts";
-import { PosMatcher, Tokenizer, createTokenizer } from "./core.ts";
+import  { PosMatcher, Tokenizer, createTokenizer } from "./core.ts";
 import type { LookupEntry, Morpheme } from "./types.ts";
 import type {
   LookupResultLayout,

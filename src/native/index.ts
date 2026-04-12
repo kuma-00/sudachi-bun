@@ -1,6 +1,6 @@
 export * from "./types.ts";
 export * from "./errors.ts";
-export * from "./layouts.ts";
+export * from "./layout/index.ts";
 export * from "./loader.ts";
 export * from "./path-resolver.ts";
 export * from "./symbols/common.ts";
