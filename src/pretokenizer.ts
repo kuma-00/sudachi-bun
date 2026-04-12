@@ -8,6 +8,8 @@ import {
   readPretokenizedResultLayout,
 } from "./native.ts";
 import type { NativePretokenizerLibrary, PretokenizedResultLayout } from "./native/types.ts";
+import { resolveInfoSubsetBits } from "./core/info-subset.ts";
+import { createUtf8ByteOffsetIndexMap } from "./shared/utf8-offset.ts";
 import {
   parseSurfaceProjection,
   parseTokenizeMode,
@@ -22,30 +24,6 @@ import {
 } from "./types.ts";
 
 export * from "./pretokenizer-hf.ts";
-
-const INFO_SUBSET_FFI_POS_TEXT_BIT = 1 << 30;
-
-const INFO_SUBSET_FIELD_BITS: Record<
-  "surface" | "pos" | "posId" | "normalized" | "dictionaryForm" | "reading" | "synonymGroupIds",
-  number
-> = {
-  surface: 1 << 0,
-  pos: (1 << 2) | INFO_SUBSET_FFI_POS_TEXT_BIT,
-  posId: 1 << 2,
-  normalized: 1 << 3,
-  dictionaryForm: 1 << 4,
-  reading: 1 << 5,
-  synonymGroupIds: 1 << 9,
-};
-
-const ALL_INFO_SUBSET_BITS =
-  INFO_SUBSET_FIELD_BITS.surface |
-  INFO_SUBSET_FIELD_BITS.pos |
-  INFO_SUBSET_FIELD_BITS.posId |
-  INFO_SUBSET_FIELD_BITS.normalized |
-  INFO_SUBSET_FIELD_BITS.dictionaryForm |
-  INFO_SUBSET_FIELD_BITS.reading |
-  INFO_SUBSET_FIELD_BITS.synonymGroupIds;
 
 interface NativePretokenizerSession {
   handle: Pointer;
@@ -67,72 +45,14 @@ function invalidPretokenizedResult(message: string): never {
 }
 
 function createByteOffsetIndexMap(text: string, offsets: readonly number[]): Map<number, number> {
-  const uniqueOffsets = [...new Set(offsets)].sort((left, right) => left - right);
-  const totalBytes = Buffer.byteLength(text, "utf8");
-
-  for (const offset of uniqueOffsets) {
-    if (!Number.isInteger(offset) || offset < 0 || offset > totalBytes) {
-      invalidPretokenizedResult(`Pretokenizer returned an out-of-range byte offset: ${offset}.`);
-    }
-  }
-
-  const resolved = new Map<number, number>();
-  let targetIndex = 0;
-
-  while (targetIndex < uniqueOffsets.length && uniqueOffsets[targetIndex] === 0) {
-    resolved.set(0, 0);
-    targetIndex += 1;
-  }
-
-  let byteOffset = 0;
-  for (let textIndex = 0; textIndex < text.length && targetIndex < uniqueOffsets.length; ) {
-    const codePoint = text.codePointAt(textIndex);
-    if (codePoint === undefined) {
-      break;
-    }
-
-    const codePointText = String.fromCodePoint(codePoint);
-    byteOffset += Buffer.byteLength(codePointText, "utf8");
-    textIndex += codePoint > 0xffff ? 2 : 1;
-
-    while (targetIndex < uniqueOffsets.length && uniqueOffsets[targetIndex] === byteOffset) {
-      resolved.set(byteOffset, textIndex);
-      targetIndex += 1;
-    }
-  }
-
-  if (targetIndex !== uniqueOffsets.length) {
-    invalidPretokenizedResult(
-      `Pretokenizer returned a byte offset that does not align to a UTF-8 boundary: ${uniqueOffsets[targetIndex]}.`,
-    );
-  }
-
-  return resolved;
-}
-
-function resolveInfoSubsetBits(options: InfoSubset | undefined): number | null {
-  if (options === undefined) {
-    return null;
-  }
-
-  const fields = options.fields;
-  if (fields === undefined) {
-    return ALL_INFO_SUBSET_BITS;
-  }
-
-  let bits = 0;
-  for (const field of fields) {
-    const bit = INFO_SUBSET_FIELD_BITS[field as keyof typeof INFO_SUBSET_FIELD_BITS];
-    if (bit === undefined) {
-      throw new SudachiError(`Unsupported info subset field: ${field}.`, {
-        code: "INVALID_ARGUMENT",
-      });
-    }
-
-    bits |= bit;
-  }
-
-  return bits;
+  return createUtf8ByteOffsetIndexMap(text, offsets, {
+    throwInvalid: (message) => invalidPretokenizedResult(message),
+    messages: {
+      outOfRange: (offset) => `Pretokenizer returned an out-of-range byte offset: ${offset}.`,
+      notBoundary: (offset) =>
+        `Pretokenizer returned a byte offset that does not align to a UTF-8 boundary: ${offset}.`,
+    },
+  });
 }
 
 function normalizePretokenizedTokens(text: string, tokens: readonly PretokenizedToken[]): PretokenizedToken[] {

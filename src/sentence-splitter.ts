@@ -8,6 +8,7 @@ import {
   readSentenceSpanResultLayout,
 } from "./native.ts";
 import type { NativeSentenceSplitterLibrary, SentenceSpanResultLayout } from "./native/types.ts";
+import { createUtf8ByteOffsetIndexMap } from "./shared/utf8-offset.ts";
 import { SudachiError, type SentenceSpan, type SentenceSplitterOptions } from "./types.ts";
 
 function invalidSentenceSpan(message: string): never {
@@ -15,50 +16,6 @@ function invalidSentenceSpan(message: string): never {
     code: "INTERNAL",
     nativeStatus: 255,
   });
-}
-
-function createByteOffsetIndexMap(text: string, offsets: number[]): Map<number, number> {
-  const uniqueOffsets = [...new Set(offsets)].sort((left, right) => left - right);
-  const totalBytes = Buffer.byteLength(text, "utf8");
-
-  for (const offset of uniqueOffsets) {
-    if (!Number.isInteger(offset) || offset < 0 || offset > totalBytes) {
-      invalidSentenceSpan(`Sentence splitter returned an out-of-range byte offset: ${offset}.`);
-    }
-  }
-
-  const resolved = new Map<number, number>();
-  let targetIndex = 0;
-
-  while (targetIndex < uniqueOffsets.length && uniqueOffsets[targetIndex] === 0) {
-    resolved.set(0, 0);
-    targetIndex += 1;
-  }
-
-  let byteOffset = 0;
-  for (let textIndex = 0; textIndex < text.length && targetIndex < uniqueOffsets.length; ) {
-    const codePoint = text.codePointAt(textIndex);
-    if (codePoint === undefined) {
-      break;
-    }
-
-    const codePointText = String.fromCodePoint(codePoint);
-    byteOffset += Buffer.byteLength(codePointText, "utf8");
-    textIndex += codePoint > 0xffff ? 2 : 1;
-
-    while (targetIndex < uniqueOffsets.length && uniqueOffsets[targetIndex] === byteOffset) {
-      resolved.set(byteOffset, textIndex);
-      targetIndex += 1;
-    }
-  }
-
-  if (targetIndex !== uniqueOffsets.length) {
-    invalidSentenceSpan(
-      `Sentence splitter returned a byte offset that does not align to a UTF-8 boundary: ${uniqueOffsets[targetIndex]}.`,
-    );
-  }
-
-  return resolved;
 }
 
 function materializeSentenceSpans(text: string, offsets: SentenceSpanOffsets[]): SentenceSpan[] {
@@ -75,7 +32,15 @@ function materializeSentenceSpans(text: string, offsets: SentenceSpanOffsets[]):
     boundaries.push(start, end);
   }
 
-  const indexMap = createByteOffsetIndexMap(text, boundaries);
+  const indexMap = createUtf8ByteOffsetIndexMap(text, boundaries, {
+    throwInvalid: invalidSentenceSpan,
+    messages: {
+      outOfRange: (offset) =>
+        `Sentence splitter returned an out-of-range byte offset: ${offset}.`,
+      notBoundary: (offset) =>
+        `Sentence splitter returned a byte offset that does not align to a UTF-8 boundary: ${offset}.`,
+    },
+  });
   return offsets.map(({ start, end }) => {
     const startIndex = indexMap.get(start);
     const endIndex = indexMap.get(end);

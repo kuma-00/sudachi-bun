@@ -13,13 +13,13 @@ import type {
 import {
   SudachiError,
   type InfoSubset,
-  type InfoSubsetField,
   type LookupEntry,
   type Morpheme,
   type PosMatcherPatterns,
   type SurfaceProjection,
   type TokenizeMode,
 } from "../types.ts";
+import { resolveInfoSubsetBits } from "./info-subset.ts";
 
 const MODE_TO_NATIVE: Record<TokenizeMode, number> = {
   A: 0,
@@ -33,27 +33,6 @@ const PROJECTION_TO_NATIVE: Record<SurfaceProjection, number> = {
   dictionary_form: 2,
   reading: 3,
 };
-
-const INFO_SUBSET_FFI_POS_TEXT_BIT = 1 << 30;
-
-const INFO_SUBSET_FIELD_BITS: Record<InfoSubsetField, number> = {
-  surface: 1 << 0,
-  pos: (1 << 2) | INFO_SUBSET_FFI_POS_TEXT_BIT,
-  posId: 1 << 2,
-  normalized: 1 << 3,
-  dictionaryForm: 1 << 4,
-  reading: 1 << 5,
-  synonymGroupIds: 1 << 9,
-};
-
-const ALL_INFO_SUBSET_BITS =
-  INFO_SUBSET_FIELD_BITS.surface |
-  INFO_SUBSET_FIELD_BITS.pos |
-  INFO_SUBSET_FIELD_BITS.posId |
-  INFO_SUBSET_FIELD_BITS.normalized |
-  INFO_SUBSET_FIELD_BITS.dictionaryForm |
-  INFO_SUBSET_FIELD_BITS.reading |
-  INFO_SUBSET_FIELD_BITS.synonymGroupIds;
 
 export interface NativeTokenizerSession {
   handle: Pointer;
@@ -117,37 +96,12 @@ function normalizePosPatterns(patterns: PosMatcherPatterns): string {
   return JSON.stringify(normalized);
 }
 
-function infoSubsetBits(options: InfoSubset | undefined): number | null {
-  if (options === undefined) {
-    return null;
-  }
-
-  const fields = options.fields;
-  if (fields === undefined) {
-    return ALL_INFO_SUBSET_BITS;
-  }
-
-  let bits = 0;
-  for (const field of fields) {
-    const bit = INFO_SUBSET_FIELD_BITS[field];
-    if (bit === undefined) {
-      throw new SudachiError(`Unsupported info subset field: ${field}.`, {
-        code: "INVALID_ARGUMENT",
-      });
-    }
-
-    bits |= bit;
-  }
-
-  return bits;
-}
-
 export function createTokenizerGateway(deps: TokenizerGatewayDeps): TokenizerGateway {
   return {
     tokenize(text, projection, mode, options) {
       const { library, handle, layout } = deps.getOpenSession();
       const resultOut = new BigUint64Array(1);
-      const subsetBits = infoSubsetBits(options);
+      const subsetBits = resolveInfoSubsetBits(options);
       const status =
         subsetBits === null
           ? library.symbols.sudachi_tokenize(handle, text, MODE_TO_NATIVE[mode], PROJECTION_TO_NATIVE[projection], resultOut)
@@ -176,7 +130,7 @@ export function createTokenizerGateway(deps: TokenizerGatewayDeps): TokenizerGat
       const { handle } = deps.getOpenSession();
       const { library, layout } = deps.getLookupSession();
       const resultOut = new BigUint64Array(1);
-      const subsetBits = infoSubsetBits(options);
+      const subsetBits = resolveInfoSubsetBits(options);
       const status =
         subsetBits === null
           ? library.symbols.sudachi_lookup(handle, surface, PROJECTION_TO_NATIVE[projection], resultOut)
