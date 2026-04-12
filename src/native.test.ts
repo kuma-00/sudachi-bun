@@ -1,5 +1,10 @@
 import { expect, test } from "bun:test";
-
+import { readNativeStatusCodeName } from "./native/error/mapper.ts";
+import type {
+  NativeLookupLibrary,
+  NativePretokenizerLibrary,
+  NativeSudachiLibrary,
+} from "./native/types.ts";
 import {
   LOOKUP_RESULT_LAYOUT_VERSION,
   MORPHEME_RESULT_LAYOUT_VERSION,
@@ -10,8 +15,6 @@ import {
   readPosMatcherResultLayout,
   readPretokenizedResultLayout,
 } from "./native.ts";
-import { readNativeStatusCodeName } from "./native/error/mapper.ts";
-import type { NativeLookupLibrary, NativePretokenizerLibrary, NativeSudachiLibrary } from "./native/types.ts";
 
 function createLibrary(
   layoutWriter: (outLayout: BigUint64Array) => number = (outLayout) => {
@@ -55,9 +58,12 @@ function createLibrary(
       sudachi_compile_pos_matcher: () => 0,
       sudachi_free_result: () => {},
       sudachi_free_pos_matcher_result: () => {},
-      sudachi_get_morpheme_result_layout: (outLayout) => layoutWriter(outLayout as BigUint64Array),
-      sudachi_get_pos_matcher_result_layout: (outLayout) => posMatcherLayoutWriter(outLayout as BigUint64Array),
-      sudachi_get_last_error: () => "native error" as unknown as import("bun:ffi").CString,
+      sudachi_get_morpheme_result_layout: (outLayout) =>
+        layoutWriter(outLayout as BigUint64Array),
+      sudachi_get_pos_matcher_result_layout: (outLayout) =>
+        posMatcherLayoutWriter(outLayout as BigUint64Array),
+      sudachi_get_last_error: () =>
+        "native error" as unknown as import("bun:ffi").CString,
       sudachi_status_code_name: (status) =>
         (status === 5
           ? "TOKENIZE"
@@ -97,10 +103,14 @@ function createLookupLibrary(
       sudachi_lookup: () => 0,
       sudachi_lookup_subset: () => 0,
       sudachi_free_lookup_result: () => {},
-      sudachi_get_lookup_result_layout: (outLayout) => layoutWriter(outLayout as BigUint64Array),
-      sudachi_get_last_error: () => "native error" as unknown as import("bun:ffi").CString,
+      sudachi_get_lookup_result_layout: (outLayout) =>
+        layoutWriter(outLayout as BigUint64Array),
+      sudachi_get_last_error: () =>
+        "native error" as unknown as import("bun:ffi").CString,
       sudachi_status_code_name: (status) =>
-        (status === 9 ? "LOOKUP" : "UNKNOWN") as unknown as import("bun:ffi").CString,
+        (status === 9
+          ? "LOOKUP"
+          : "UNKNOWN") as unknown as import("bun:ffi").CString,
     },
     close: () => {},
   };
@@ -159,10 +169,14 @@ function createPretokenizerLibrary(
       sudachi_pretokenize: () => 0,
       sudachi_pretokenize_subset: () => 0,
       sudachi_free_pretokenized_result: () => {},
-      sudachi_get_pretokenized_result_layout: (outLayout) => layoutWriter(outLayout as BigUint64Array),
-      sudachi_get_last_error: () => "native error" as unknown as import("bun:ffi").CString,
+      sudachi_get_pretokenized_result_layout: (outLayout) =>
+        layoutWriter(outLayout as BigUint64Array),
+      sudachi_get_last_error: () =>
+        "native error" as unknown as import("bun:ffi").CString,
       sudachi_status_code_name: (status) =>
-        (status === 10 ? "PRETOKENIZE" : "UNKNOWN") as unknown as import("bun:ffi").CString,
+        (status === 10
+          ? "PRETOKENIZE"
+          : "UNKNOWN") as unknown as import("bun:ffi").CString,
     },
     close: () => {},
   };
@@ -249,9 +263,12 @@ test("readNativeStatusCodeName accepts the PRETOKENIZER alias", () => {
       sudachi_pretokenize_subset: () => 0,
       sudachi_free_pretokenized_result: () => {},
       sudachi_get_pretokenized_result_layout: () => 0,
-      sudachi_get_last_error: () => "native error" as unknown as import("bun:ffi").CString,
+      sudachi_get_last_error: () =>
+        "native error" as unknown as import("bun:ffi").CString,
       sudachi_status_code_name: (status) =>
-        (status === 10 ? "PRETOKENIZER" : "UNKNOWN") as unknown as import("bun:ffi").CString,
+        (status === 10
+          ? "PRETOKENIZER"
+          : "UNKNOWN") as unknown as import("bun:ffi").CString,
     },
     close: () => {},
   };

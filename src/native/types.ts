@@ -84,7 +84,9 @@ export interface NativeSudachiLibrary {
       dictPath: string,
       outHandle: NodeJS.TypedArray | Pointer | null,
     ) => number;
-    sudachi_free_tokenizer: (handle: Pointer | NodeJS.TypedArray | null) => void;
+    sudachi_free_tokenizer: (
+      handle: Pointer | NodeJS.TypedArray | null,
+    ) => void;
     sudachi_tokenize: (
       handle: Pointer | NodeJS.TypedArray | null,
       inputUtf8: string,
@@ -123,9 +125,15 @@ export interface NativeSudachiLibrary {
       outResult: NodeJS.TypedArray | Pointer | null,
     ) => number;
     sudachi_free_result: (result: Pointer | NodeJS.TypedArray | null) => void;
-    sudachi_free_pos_matcher_result: (result: Pointer | NodeJS.TypedArray | null) => void;
-    sudachi_get_morpheme_result_layout: (outLayout: NodeJS.TypedArray | Pointer | null) => number;
-    sudachi_get_pos_matcher_result_layout: (outLayout: NodeJS.TypedArray | Pointer | null) => number;
+    sudachi_free_pos_matcher_result: (
+      result: Pointer | NodeJS.TypedArray | null,
+    ) => void;
+    sudachi_get_morpheme_result_layout: (
+      outLayout: NodeJS.TypedArray | Pointer | null,
+    ) => number;
+    sudachi_get_pos_matcher_result_layout: (
+      outLayout: NodeJS.TypedArray | Pointer | null,
+    ) => number;
     sudachi_get_last_error: () => CString;
     sudachi_status_code_name: (status: number) => CString;
   };
@@ -147,8 +155,12 @@ export interface NativeLookupLibrary {
       subsetBits: number,
       outResult: NodeJS.TypedArray | Pointer | null,
     ) => number;
-    sudachi_free_lookup_result: (result: Pointer | NodeJS.TypedArray | null) => void;
-    sudachi_get_lookup_result_layout: (outLayout: NodeJS.TypedArray | Pointer | null) => number;
+    sudachi_free_lookup_result: (
+      result: Pointer | NodeJS.TypedArray | null,
+    ) => void;
+    sudachi_get_lookup_result_layout: (
+      outLayout: NodeJS.TypedArray | Pointer | null,
+    ) => number;
     sudachi_get_last_error: () => CString;
     sudachi_status_code_name: (status: number) => CString;
   };
@@ -167,7 +179,9 @@ export interface NativePretokenizerLibrary {
       handle: Pointer | NodeJS.TypedArray | null,
       debug: number,
     ) => number;
-    sudachi_free_pretokenizer: (handle: Pointer | NodeJS.TypedArray | null) => void;
+    sudachi_free_pretokenizer: (
+      handle: Pointer | NodeJS.TypedArray | null,
+    ) => void;
     sudachi_pretokenize: (
       handle: Pointer | NodeJS.TypedArray | null,
       inputUtf8: string,
@@ -183,8 +197,12 @@ export interface NativePretokenizerLibrary {
       subsetBits: number,
       outResult: NodeJS.TypedArray | Pointer | null,
     ) => number;
-    sudachi_free_pretokenized_result: (result: Pointer | NodeJS.TypedArray | null) => void;
-    sudachi_get_pretokenized_result_layout: (outLayout: NodeJS.TypedArray | Pointer | null) => number;
+    sudachi_free_pretokenized_result: (
+      result: Pointer | NodeJS.TypedArray | null,
+    ) => void;
+    sudachi_get_pretokenized_result_layout: (
+      outLayout: NodeJS.TypedArray | Pointer | null,
+    ) => number;
     sudachi_get_last_error: () => CString;
     sudachi_status_code_name: (status: number) => CString;
   };
@@ -199,14 +217,20 @@ export interface NativeSentenceSplitterLibrary {
       dictPath: string,
       outHandle: NodeJS.TypedArray | Pointer | null,
     ) => number;
-    sudachi_free_sentence_splitter: (handle: Pointer | NodeJS.TypedArray | null) => void;
+    sudachi_free_sentence_splitter: (
+      handle: Pointer | NodeJS.TypedArray | null,
+    ) => void;
     sudachi_split_sentences: (
       handle: Pointer | NodeJS.TypedArray | null,
       inputUtf8: string,
       outResult: NodeJS.TypedArray | Pointer | null,
     ) => number;
-    sudachi_free_sentence_spans: (result: Pointer | NodeJS.TypedArray | null) => void;
-    sudachi_get_sentence_span_layout: (outLayout: NodeJS.TypedArray | Pointer | null) => number;
+    sudachi_free_sentence_spans: (
+      result: Pointer | NodeJS.TypedArray | null,
+    ) => void;
+    sudachi_get_sentence_span_layout: (
+      outLayout: NodeJS.TypedArray | Pointer | null,
+    ) => number;
     sudachi_get_last_error: () => CString;
     sudachi_status_code_name: (status: number) => CString;
   };

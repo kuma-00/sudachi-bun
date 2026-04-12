@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 
 import { SudachiError } from "../types.ts";
-import { resolveInputText, type InputResolutionDependencies } from "./input.ts";
+import { type InputResolutionDependencies, resolveInputText } from "./input.ts";
 
 function createDeps(overrides: Partial<InputResolutionDependencies> = {}) {
   const fileReads: string[] = [];
@@ -40,7 +40,10 @@ function createDeps(overrides: Partial<InputResolutionDependencies> = {}) {
   };
 }
 
-function expectInvalidArgumentError(callback: () => string, message: string): void {
+function expectInvalidArgumentError(
+  callback: () => string,
+  message: string,
+): void {
   try {
     callback();
     throw new Error("Expected resolveInputText to throw");
@@ -54,7 +57,9 @@ function expectInvalidArgumentError(callback: () => string, message: string): vo
 test("resolveInputText returns explicit text when it is the only source", () => {
   const { deps, state } = createDeps();
 
-  expect(resolveInputText({ text: "explicit text" }, deps)).toBe("explicit text");
+  expect(resolveInputText({ text: "explicit text" }, deps)).toBe(
+    "explicit text",
+  );
   expect(state.fileReads).toEqual([]);
   expect(state.stdinChecks).toBe(1);
   expect(state.stdinReads).toBe(0);
@@ -64,7 +69,11 @@ test("resolveInputText rejects combining --text with positional files", () => {
   const { deps, state } = createDeps();
 
   expectInvalidArgumentError(
-    () => resolveInputText({ text: "explicit text", positionalFiles: ["input.txt"] }, deps),
+    () =>
+      resolveInputText(
+        { text: "explicit text", positionalFiles: ["input.txt"] },
+        deps,
+      ),
     "Cannot combine --text with positional file input.",
   );
   expect(state.fileReads).toEqual([]);
@@ -115,7 +124,9 @@ test("resolveInputText concatenates multiple positional files with newlines", ()
     },
   });
 
-  expect(resolveInputText({ positionalFiles: ["first.txt", "second.txt"] }, deps)).toBe("first\nsecond");
+  expect(
+    resolveInputText({ positionalFiles: ["first.txt", "second.txt"] }, deps),
+  ).toBe("first\nsecond");
   expect(state.fileReads).toEqual(["first.txt", "second.txt"]);
   expect(state.stdinChecks).toBe(1);
   expect(state.stdinReads).toBe(0);

@@ -1,6 +1,8 @@
 import type { NativeSudachiErrorCode } from "../../types.ts";
 
-export const NATIVE_STATUS_CODE_MAP: Readonly<Record<string, NativeSudachiErrorCode>> = {
+export const NATIVE_STATUS_CODE_MAP: Readonly<
+  Record<string, NativeSudachiErrorCode>
+> = {
   OK: "OK",
   NULL_POINTER: "NULL_POINTER",
   INVALID_UTF8: "INVALID_UTF8",
@@ -17,6 +19,8 @@ export const NATIVE_STATUS_CODE_MAP: Readonly<Record<string, NativeSudachiErrorC
   INTERNAL: "INTERNAL",
 };
 
-export function normalizeNativeStatusCodeName(code: string): NativeSudachiErrorCode {
+export function normalizeNativeStatusCodeName(
+  code: string,
+): NativeSudachiErrorCode {
   return NATIVE_STATUS_CODE_MAP[code] ?? "UNKNOWN";
 }

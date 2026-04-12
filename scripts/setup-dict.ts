@@ -1,7 +1,7 @@
 import {
-  setupDictionary,
   type DictionaryType,
   type SetupDictionaryOptions,
+  setupDictionary,
 } from "../src/dictionary.ts";
 
 const DEFAULT_VERSION = "latest";
@@ -19,13 +19,19 @@ Examples:
 `);
 }
 
-function readOptionValue(argv: string[], index: number, flag: string): { value: string; nextIndex: number } {
+function readOptionValue(
+  argv: string[],
+  index: number,
+  flag: string,
+): { value: string; nextIndex: number } {
   const arg = argv[index];
   if (!arg) {
     throw new Error(`Missing value for ${flag}`);
   }
 
-  const [rawFlag, inlineValue] = arg.includes("=") ? arg.split(/=(.*)/s, 2) : [arg, undefined];
+  const [rawFlag, inlineValue] = arg.includes("=")
+    ? arg.split(/=(.*)/s, 2)
+    : [arg, undefined];
   if (rawFlag !== flag) {
     throw new Error(`Unknown argument: ${arg}`);
   }
@@ -51,10 +57,14 @@ function normalizeType(input: string): DictionaryType {
     return input as DictionaryType;
   }
 
-  throw new Error(`Unsupported dictionary type: ${input}. Expected one of: ${VALID_TYPES.join(", ")}`);
+  throw new Error(
+    `Unsupported dictionary type: ${input}. Expected one of: ${VALID_TYPES.join(", ")}`,
+  );
 }
 
-export function parseSetupDictionaryArgs(argv: string[]): SetupDictionaryOptions {
+export function parseSetupDictionaryArgs(
+  argv: string[],
+): SetupDictionaryOptions {
   const parsed: SetupDictionaryOptions = {
     type: "core",
     version: DEFAULT_VERSION,

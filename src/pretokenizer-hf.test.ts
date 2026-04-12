@@ -10,7 +10,10 @@ type HfNormalizedStringMock = {
 
 type HfPreTokenizedStringMock = {
   split(
-    callback: (index: number, normalized: HfNormalizedStringMock) => HfNormalizedStringMock[],
+    callback: (
+      index: number,
+      normalized: HfNormalizedStringMock,
+    ) => HfNormalizedStringMock[],
   ): void;
 };
 
@@ -60,13 +63,20 @@ test("createHuggingFacePretokenizer forwards options, preserves projected token 
   let splitCalled = false;
   expect(() =>
     adapter.pre_tokenize({
-      split(callback: (index: number, normalized: HfNormalizedStringMock) => HfNormalizedStringMock[]) {
+      split(
+        callback: (
+          index: number,
+          normalized: HfNormalizedStringMock,
+        ) => HfNormalizedStringMock[],
+      ) {
         splitCalled = true;
         const normalized = createNormalizedStringMock("東京");
         callback(0, normalized);
       },
     } as HfPreTokenizedStringMock),
-  ).toThrow("HuggingFace pre_tokenize(pretok) only supports surface projection.");
+  ).toThrow(
+    "HuggingFace pre_tokenize(pretok) only supports surface projection.",
+  );
   expect(splitCalled).toBe(false);
   expect(calls).toEqual([
     {
@@ -104,7 +114,12 @@ test("createHuggingFacePretokenizer pre_tokenize uses the PreTokenizedString spl
   let splitResult: string[] | null = null;
   const splitCalls: number[] = [];
   adapter.pre_tokenize({
-    split(callback: (index: number, normalized: HfNormalizedStringMock) => HfNormalizedStringMock[]) {
+    split(
+      callback: (
+        index: number,
+        normalized: HfNormalizedStringMock,
+      ) => HfNormalizedStringMock[],
+    ) {
       splitCalls.push(1);
       const normalized = createNormalizedStringMock("東京");
       splitResult = callback(0, normalized).map(String);
@@ -144,7 +159,12 @@ test("createHuggingFacePretokenizer defaults adapter calls to surface projection
 
   let splitResult: string[] | null = null;
   adapter.pre_tokenize({
-    split(callback: (index: number, normalized: HfNormalizedStringMock) => HfNormalizedStringMock[]) {
+    split(
+      callback: (
+        index: number,
+        normalized: HfNormalizedStringMock,
+      ) => HfNormalizedStringMock[],
+    ) {
       const normalized = createNormalizedStringMock("東京");
       splitResult = callback(0, normalized).map(String);
     },

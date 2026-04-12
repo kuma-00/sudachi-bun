@@ -1,4 +1,9 @@
-import type { SudachiError, SurfaceProjection, TokenizeMode, TokenizerOptions } from "../types.ts";
+import type {
+  SudachiError,
+  SurfaceProjection,
+  TokenizeMode,
+  TokenizerOptions,
+} from "../types.ts";
 
 export const CLI_SUBCOMMANDS = ["tokenize", "build", "ubuild", "dump"] as const;
 
@@ -42,4 +47,7 @@ export interface CliCommandResult {
   command: CliCommand;
 }
 
-export type CliParseResult = CliHelpResult | CliParseErrorResult | CliCommandResult;
+export type CliParseResult =
+  | CliHelpResult
+  | CliParseErrorResult
+  | CliCommandResult;

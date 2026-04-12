@@ -1,4 +1,9 @@
-import { SudachiError, type PretokenizeOptions, type PretokenizedResult, type PretokenizedToken } from "./types.ts";
+import {
+  type PretokenizedResult,
+  type PretokenizedToken,
+  type PretokenizeOptions,
+  SudachiError,
+} from "./types.ts";
 
 export type HfOffsets = readonly [number, number];
 export type HfPretokenizedToken = readonly [string, HfOffsets];
@@ -14,7 +19,10 @@ export interface HfNormalizedStringLike {
 
 export interface HfPreTokenizedStringLike {
   split(
-    callback: (index: number, normalized: HfNormalizedStringLike) => HfNormalizedStringLike[],
+    callback: (
+      index: number,
+      normalized: HfNormalizedStringLike,
+    ) => HfNormalizedStringLike[],
   ): void;
 }
 
@@ -24,7 +32,9 @@ export interface HfPretokenizerAdapter {
   pre_tokenize(pretok: HfPreTokenizedStringLike): void;
 }
 
-export function ensureHfPretokenizeOptions(options: PretokenizeOptions): PretokenizeOptions {
+export function ensureHfPretokenizeOptions(
+  options: PretokenizeOptions,
+): PretokenizeOptions {
   const fields = options.subset?.fields;
   if (fields === undefined || fields.includes("surface")) {
     return options;
@@ -50,7 +60,9 @@ export function toHfPretokenizedTokens(
   return tokens.map((token) => toHfPretokenizedToken(token));
 }
 
-function assertSurfaceProjectionForHfPipeline(options: PretokenizeOptions | undefined): void {
+function assertSurfaceProjectionForHfPipeline(
+  options: PretokenizeOptions | undefined,
+): void {
   const projection = options?.projection;
   if (projection === undefined || projection === "surface") {
     return;
@@ -79,8 +91,8 @@ export function createHfPretokenizerAdapter(
     assertSurfaceProjectionForHfPipeline(options);
     pretok.split((_index, normalized) => {
       const text = normalized.toString();
-      return toHfPretokenizedTokens(pretokenizer.pretokenize(text)).map((token) =>
-        normalized.slice(token[1][0], token[1][1]),
+      return toHfPretokenizedTokens(pretokenizer.pretokenize(text)).map(
+        (token) => normalized.slice(token[1][0], token[1][1]),
       );
     });
   };

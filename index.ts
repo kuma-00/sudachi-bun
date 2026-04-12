@@ -1,4 +1,6 @@
 export { createSudachi } from "./src/sudachi.ts";
+
+import { main as runMain } from "./src/cli.ts";
 import type { Pretokenizer } from "./src/pretokenizer.ts";
 import {
   createHfPretokenizerAdapter,
@@ -6,20 +8,32 @@ import {
   type HfPretokenizedToken,
   type HfPretokenizerAdapter,
 } from "./src/pretokenizer-hf.ts";
-import { main as runMain } from "./src/cli.ts";
-import type { PretokenizeOptions, PretokenizedResult } from "./src/types.ts";
+import type { PretokenizedResult, PretokenizeOptions } from "./src/types.ts";
 
-export { runCli } from "./src/cli.ts";
-export { runMain as main };
 export { runTokenizeCommand } from "./src/cli/execute.ts";
 export { parseCliArgs } from "./src/cli/parser.ts";
-export {
-  setupDictionary,
-  ensureDictionary,
-  listInstalledDictionaries,
-  findInstalledDictionary,
+export { runCli } from "./src/cli.ts";
+export type {
+  DictionaryDownload,
+  DictionarySetupResult,
+  DictionaryType,
+  EnsureDictionaryOptions,
+  InstalledDictionary,
+  SetupDictionaryOptions,
 } from "./src/dictionary.ts";
-export { formatSudachiError, SudachiError, TOKENIZE_MODES } from "./src/types.ts";
+export {
+  ensureDictionary,
+  findInstalledDictionary,
+  listInstalledDictionaries,
+  setupDictionary,
+} from "./src/dictionary.ts";
+export type {
+  HfNormalizedStringLike,
+  HfOffsets,
+  HfPreTokenizedStringLike,
+  HfPretokenizedToken,
+  HfPretokenizerAdapter,
+} from "./src/pretokenizer-hf.ts";
 export type {
   CreateSudachiOptions,
   Sudachi,
@@ -30,37 +44,35 @@ export type {
   InfoSubsetFields,
   LookupEntry,
   Morpheme,
+  NativeLibraryLoadOptions,
+  NativeSudachiErrorCode,
   PosMatcherPattern,
   PosMatcherPatterns,
-  NativeSudachiErrorCode,
-  NativeLibraryLoadOptions,
-  SentenceSpan,
-  SentenceSplitterOptions,
-  PretokenizeOptions,
   PretokenizedResult,
   PretokenizedToken,
+  PretokenizeOptions,
   PretokenizerOptions,
-  SurfaceProjection,
+  SentenceSpan,
+  SentenceSplitterOptions,
   SudachiErrorCode,
+  SurfaceProjection,
   TokenizeMode,
   TokenizerOptions,
 } from "./src/types.ts";
-export type {
-  DictionaryDownload,
-  DictionarySetupResult,
-  DictionaryType,
-  EnsureDictionaryOptions,
-  InstalledDictionary,
-  SetupDictionaryOptions,
-} from "./src/dictionary.ts";
-export type { HfOffsets, HfPretokenizedToken, HfPretokenizerAdapter } from "./src/pretokenizer-hf.ts";
-export type { HfNormalizedStringLike, HfPreTokenizedStringLike } from "./src/pretokenizer-hf.ts";
+export {
+  formatSudachiError,
+  SudachiError,
+  TOKENIZE_MODES,
+} from "./src/types.ts";
+export { runMain as main };
 
 export interface HuggingFacePretokenizerAdapter extends HfPretokenizerAdapter {
   readonly pretokenizer: Pretokenizer;
   readonly options: PretokenizeOptions;
   pre_tokenize_str(text: string): HfPretokenizedToken[];
-  pre_tokenize(pretok: Parameters<HfPretokenizerAdapter["pre_tokenize"]>[0]): void;
+  pre_tokenize(
+    pretok: Parameters<HfPretokenizerAdapter["pre_tokenize"]>[0],
+  ): void;
 }
 
 export function createHuggingFacePretokenizer(

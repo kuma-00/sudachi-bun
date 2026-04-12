@@ -15,7 +15,9 @@ function validateLookupResultLayout(layout: LookupResultLayout): void {
   );
 }
 
-export function readLookupResultLayout(library: NativeLookupLibrary): LookupResultLayout {
+export function readLookupResultLayout(
+  library: NativeLookupLibrary,
+): LookupResultLayout {
   return readResultLayout(
     library,
     LOOKUP_RESULT_LAYOUT_FIELD_COUNT,

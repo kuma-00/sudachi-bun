@@ -13,7 +13,8 @@ export interface InputResolutionDependencies {
   readFileText?: (path: string) => string;
 }
 
-const NO_INPUT_MESSAGE = "No input was resolved from --text, positional file paths, or stdin.";
+const NO_INPUT_MESSAGE =
+  "No input was resolved from --text, positional file paths, or stdin.";
 
 function invalidInputError(message: string): SudachiError {
   return new SudachiError(message, {
@@ -49,7 +50,10 @@ function readStdinText(deps: InputResolutionDependencies): string {
   return readFileSync(0, "utf8");
 }
 
-function readInputFile(path: string, deps: InputResolutionDependencies): string {
+function readInputFile(
+  path: string,
+  deps: InputResolutionDependencies,
+): string {
   if (deps.readFileText) {
     return deps.readFileText(path);
   }
@@ -57,7 +61,10 @@ function readInputFile(path: string, deps: InputResolutionDependencies): string 
   return readFileSync(path, "utf8");
 }
 
-function readPositionalFiles(positionalFiles: readonly string[], deps: InputResolutionDependencies): string {
+function readPositionalFiles(
+  positionalFiles: readonly string[],
+  deps: InputResolutionDependencies,
+): string {
   const contents: string[] = [];
 
   for (const path of positionalFiles) {
@@ -84,7 +91,9 @@ export function resolveInputText(
 
   if (options.text !== undefined) {
     if (positionalFiles.length > 0) {
-      throw invalidInputError("Cannot combine --text with positional file input.");
+      throw invalidInputError(
+        "Cannot combine --text with positional file input.",
+      );
     }
 
     if (hasStdinInput(deps)) {
@@ -96,7 +105,9 @@ export function resolveInputText(
 
   if (positionalFiles.length > 0) {
     if (hasStdinInput(deps)) {
-      throw invalidInputError("Cannot combine positional file input with stdin input.");
+      throw invalidInputError(
+        "Cannot combine positional file input with stdin input.",
+      );
     }
 
     const resolvedText = readPositionalFiles(positionalFiles, deps);

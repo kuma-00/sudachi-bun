@@ -1,4 +1,9 @@
-import { SudachiError, parseSurfaceProjection, parseTokenizeMode, type TokenizeMode } from "../types.ts";
+import {
+  parseSurfaceProjection,
+  parseTokenizeMode,
+  SudachiError,
+  type TokenizeMode,
+} from "../types.ts";
 import {
   CLI_SUBCOMMANDS,
   type CliCommand,
@@ -51,9 +56,12 @@ function invalidBooleanFlagSyntaxError(name: string): SudachiError {
 }
 
 function missingSubcommandError(): SudachiError {
-  return new SudachiError("A subcommand is required. Use tokenize, build, ubuild, or dump.", {
-    code: "INVALID_ARGUMENT",
-  });
+  return new SudachiError(
+    "A subcommand is required. Use tokenize, build, ubuild, or dump.",
+    {
+      code: "INVALID_ARGUMENT",
+    },
+  );
 }
 
 function invalidSubcommandError(value: string): SudachiError {
@@ -62,14 +70,18 @@ function invalidSubcommandError(value: string): SudachiError {
   });
 }
 
-function isKnownFlagToken(value: string, knownFlags: ReadonlySet<string>): boolean {
+function isKnownFlagToken(
+  value: string,
+  knownFlags: ReadonlySet<string>,
+): boolean {
   if (!value.startsWith("--")) {
     return false;
   }
 
   const flagBody = value.slice(2);
   const separatorIndex = flagBody.indexOf("=");
-  const flagName = separatorIndex === -1 ? flagBody : flagBody.slice(0, separatorIndex);
+  const flagName =
+    separatorIndex === -1 ? flagBody : flagBody.slice(0, separatorIndex);
   return knownFlags.has(flagName);
 }
 
@@ -78,7 +90,7 @@ function hasBooleanFlag(argv: string[], name: string): boolean {
 
   for (let index = 0; index < argv.length; index += 1) {
     const token = argv[index];
-    if (!token || !token.startsWith(prefix)) {
+    if (!token?.startsWith(prefix)) {
       continue;
     }
 
@@ -89,8 +101,6 @@ function hasBooleanFlag(argv: string[], name: string): boolean {
     if (nextChar.length === 0) {
       return true;
     }
-
-    continue;
   }
 
   return false;
@@ -106,13 +116,14 @@ function parseKnownFlagToken(
   consumed: number;
 } {
   const token = argv[index];
-  if (!token || !token.startsWith("--")) {
+  if (!token?.startsWith("--")) {
     throw new Error("parseKnownFlagToken requires a flag token.");
   }
 
   const flagBody = token.slice(2);
   const separatorIndex = flagBody.indexOf("=");
-  const name = separatorIndex === -1 ? flagBody : flagBody.slice(0, separatorIndex);
+  const name =
+    separatorIndex === -1 ? flagBody : flagBody.slice(0, separatorIndex);
 
   if (!knownFlags.has(name)) {
     throw unknownFlagError(token);
@@ -134,7 +145,11 @@ function parseKnownFlagToken(
   }
 
   const nextToken = argv[index + 1];
-  if (!nextToken || isHelpToken(nextToken) || isKnownFlagToken(nextToken, knownFlags)) {
+  if (
+    !nextToken ||
+    isHelpToken(nextToken) ||
+    isKnownFlagToken(nextToken, knownFlags)
+  ) {
     throw missingArgumentError(name);
   }
 
@@ -148,13 +163,14 @@ export function parseArgValue(
 ): string | undefined {
   for (let index = 0; index < argv.length; index += 1) {
     const token = argv[index];
-    if (!token || !token.startsWith("--")) {
+    if (!token?.startsWith("--")) {
       continue;
     }
 
     const flagBody = token.slice(2);
     const separatorIndex = flagBody.indexOf("=");
-    const flagName = separatorIndex === -1 ? flagBody : flagBody.slice(0, separatorIndex);
+    const flagName =
+      separatorIndex === -1 ? flagBody : flagBody.slice(0, separatorIndex);
     if (flagName !== name) {
       continue;
     }
@@ -175,7 +191,11 @@ export function parseArgValue(
     }
 
     const nextToken = argv[index + 1];
-    if (!nextToken || isHelpToken(nextToken) || isKnownFlagToken(nextToken, knownFlags)) {
+    if (
+      !nextToken ||
+      isHelpToken(nextToken) ||
+      isKnownFlagToken(nextToken, knownFlags)
+    ) {
       throw missingArgumentError(name);
     }
 
@@ -185,7 +205,10 @@ export function parseArgValue(
   return undefined;
 }
 
-function errorResult(error: SudachiError, helpTarget: CliHelpResult["target"]): CliParseErrorResult {
+function errorResult(
+  error: SudachiError,
+  helpTarget: CliHelpResult["target"],
+): CliParseErrorResult {
   return {
     kind: "error",
     error,
@@ -195,7 +218,7 @@ function errorResult(error: SudachiError, helpTarget: CliHelpResult["target"]): 
 
 function firstUnsupportedFlag(argv: string[]): string | undefined {
   for (const token of argv) {
-    if (token && token.startsWith("--") && !isHelpToken(token)) {
+    if (token?.startsWith("--") && !isHelpToken(token)) {
       return token;
     }
   }
@@ -203,9 +226,14 @@ function firstUnsupportedFlag(argv: string[]): string | undefined {
   return undefined;
 }
 
-function tokenizeCommandFrom(argv: string[], env: NodeJS.ProcessEnv): CliTokenizeCommand | CliParseErrorResult {
+function tokenizeCommandFrom(
+  argv: string[],
+  env: NodeJS.ProcessEnv,
+): CliTokenizeCommand | CliParseErrorResult {
   const dictPath =
-    parseArgValue(argv, "dict-path", KNOWN_FLAGS) ?? env.SUDACHI_DICT_PATH ?? env.SUDACHI_DICTIONARY_PATH;
+    parseArgValue(argv, "dict-path", KNOWN_FLAGS) ??
+    env.SUDACHI_DICT_PATH ??
+    env.SUDACHI_DICTIONARY_PATH;
   if (!dictPath) {
     return errorResult(missingArgumentError("dict-path"), "tokenize");
   }
@@ -220,7 +248,9 @@ function tokenizeCommandFrom(argv: string[], env: NodeJS.ProcessEnv): CliTokeniz
     projection = parseSurfaceProjection(projectionValue);
   } catch (error) {
     return errorResult(
-      error instanceof SudachiError ? error : new SudachiError(String(error), { code: "INVALID_ARGUMENT" }),
+      error instanceof SudachiError
+        ? error
+        : new SudachiError(String(error), { code: "INVALID_ARGUMENT" }),
       "tokenize",
     );
   }
@@ -230,15 +260,23 @@ function tokenizeCommandFrom(argv: string[], env: NodeJS.ProcessEnv): CliTokeniz
   try {
     parsedMode = parseTokenizeMode(mode ?? "C");
   } catch (error) {
-    return errorResult(error instanceof SudachiError ? error : new SudachiError(String(error), { code: "INVALID_ARGUMENT" }), "tokenize");
+    return errorResult(
+      error instanceof SudachiError
+        ? error
+        : new SudachiError(String(error), { code: "INVALID_ARGUMENT" }),
+      "tokenize",
+    );
   }
 
   const command: CliTokenizeCommand = {
     kind: "tokenize",
     dictPath,
     projection,
-    configPath: parseArgValue(argv, "config-path", KNOWN_FLAGS) ?? env.SUDACHI_CONFIG_PATH,
-    libraryPath: parseArgValue(argv, "library-path", KNOWN_FLAGS) ?? env.SUDACHI_FFI_PATH,
+    configPath:
+      parseArgValue(argv, "config-path", KNOWN_FLAGS) ??
+      env.SUDACHI_CONFIG_PATH,
+    libraryPath:
+      parseArgValue(argv, "library-path", KNOWN_FLAGS) ?? env.SUDACHI_FFI_PATH,
     resourceDir: parseArgValue(argv, "resource-dir", KNOWN_FLAGS),
     mode: parsedMode,
     wakati: hasBooleanFlag(argv, "wakati"),
@@ -264,7 +302,10 @@ function commandFromSubcommand(command: CliSubcommand): CliCommand {
   };
 }
 
-export function parseCliArgs(argv: string[], env: NodeJS.ProcessEnv = process.env): CliParseResult {
+export function parseCliArgs(
+  argv: string[],
+  env: NodeJS.ProcessEnv = process.env,
+): CliParseResult {
   let command: CliSubcommand | undefined;
   const positionals: string[] = [];
 
@@ -290,7 +331,12 @@ export function parseCliArgs(argv: string[], env: NodeJS.ProcessEnv = process.en
         const parsed = parseKnownFlagToken(argv, index, KNOWN_FLAGS);
         index += parsed.consumed - 1;
       } catch (error) {
-        return errorResult(error instanceof SudachiError ? error : new SudachiError(String(error), { code: "INVALID_ARGUMENT" }), command ?? "top-level");
+        return errorResult(
+          error instanceof SudachiError
+            ? error
+            : new SudachiError(String(error), { code: "INVALID_ARGUMENT" }),
+          command ?? "top-level",
+        );
       }
       continue;
     }

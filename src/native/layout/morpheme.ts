@@ -15,7 +15,9 @@ function validateMorphemeResultLayout(layout: MorphemeResultLayout): void {
   );
 }
 
-export function readMorphemeResultLayout(library: NativeSudachiLibrary): MorphemeResultLayout {
+export function readMorphemeResultLayout(
+  library: NativeSudachiLibrary,
+): MorphemeResultLayout {
   return readResultLayout(
     library,
     MORPHEME_RESULT_LAYOUT_FIELD_COUNT,

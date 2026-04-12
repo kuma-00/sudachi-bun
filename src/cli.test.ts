@@ -87,7 +87,11 @@ const NORMALIZED_SAMPLE_MORPHEMES = [
 ] as const;
 
 function createFakeTokenizer() {
-  const tokenizeCalls: Array<{ text: string; mode: string; projection: Projection }> = [];
+  const tokenizeCalls: Array<{
+    text: string;
+    mode: string;
+    projection: Projection;
+  }> = [];
   const lookupCalls: Array<{ surface: string; projection: Projection }> = [];
 
   return {
@@ -95,9 +99,19 @@ function createFakeTokenizer() {
     lookupCalls: () => [...lookupCalls],
     tokenizeCalls: () => [...tokenizeCalls],
     tokenizer: {
-      tokenize({ text = "", mode = "C", projection = "surface" }: { text: string; mode?: string; projection?: Projection }) {
+      tokenize({
+        text = "",
+        mode = "C",
+        projection = "surface",
+      }: {
+        text: string;
+        mode?: string;
+        projection?: Projection;
+      }) {
         tokenizeCalls.push({ text, mode, projection });
-        return projection === "normalized" ? [...NORMALIZED_SAMPLE_MORPHEMES] : [...SAMPLE_MORPHEMES];
+        return projection === "normalized"
+          ? [...NORMALIZED_SAMPLE_MORPHEMES]
+          : [...SAMPLE_MORPHEMES];
       },
       lookup({
         surface = "",
@@ -145,25 +159,41 @@ test("runCli requires an explicit subcommand", async () => {
   expect(exitCode).toBe(1);
   expect(errors[0]).toContain("[INVALID_ARGUMENT] A subcommand is required");
   expect(logs[0]).toContain("Commands:");
-  expect(logs[0]).toContain("tokenize  Tokenize text with a required projection.");
+  expect(logs[0]).toContain(
+    "tokenize  Tokenize text with a required projection.",
+  );
 });
 
 test("runCli tokenizes text when tokenize subcommand is specified", async () => {
   const { io, logs, errors } = createCapturedIo();
   const fakeTokenizer = createFakeTokenizer();
   const closeSpy = spyOn(fakeTokenizer.tokenizer, "close");
-  const loadSpy = spyOn(core, "createTokenizer").mockImplementation(() => fakeTokenizer.tokenizer as never);
+  const loadSpy = spyOn(core, "createTokenizer").mockImplementation(
+    () => fakeTokenizer.tokenizer as never,
+  );
 
   try {
     const exitCode = await runCliMaybeAsync(
-      ["tokenize", "--dict-path", "/tmp/dict", "--projection", "surface", "--text", "ignored"],
+      [
+        "tokenize",
+        "--dict-path",
+        "/tmp/dict",
+        "--projection",
+        "surface",
+        "--text",
+        "ignored",
+      ],
       {},
       io,
     );
 
     expect(exitCode).toBe(0);
     expect(errors).toEqual([]);
-    expect(fakeTokenizer.lastTokenizeArgs()).toEqual({ text: "ignored", mode: "C", projection: "surface" });
+    expect(fakeTokenizer.lastTokenizeArgs()).toEqual({
+      text: "ignored",
+      mode: "C",
+      projection: "surface",
+    });
     expect(logs[0]).toBe(JSON.stringify(SAMPLE_MORPHEMES, null, 2));
     expect(loadSpy).toHaveBeenCalledTimes(1);
     expect(closeSpy).toHaveBeenCalledTimes(1);
@@ -176,11 +206,22 @@ test("runCli tokenizes text when tokenize subcommand is specified", async () => 
 test("runCli supports wakati output", async () => {
   const { io, logs, errors } = createCapturedIo();
   const fakeTokenizer = createFakeTokenizer();
-  const loadSpy = spyOn(core, "createTokenizer").mockImplementation(() => fakeTokenizer.tokenizer as never);
+  const loadSpy = spyOn(core, "createTokenizer").mockImplementation(
+    () => fakeTokenizer.tokenizer as never,
+  );
 
   try {
     const exitCode = await runCliMaybeAsync(
-      ["tokenize", "--dict-path", "/tmp/dict", "--projection", "surface", "--text", "ignored", "--wakati"],
+      [
+        "tokenize",
+        "--dict-path",
+        "/tmp/dict",
+        "--projection",
+        "surface",
+        "--text",
+        "ignored",
+        "--wakati",
+      ],
       {},
       io,
     );
@@ -196,7 +237,11 @@ test("runCli supports wakati output", async () => {
 test("runCli rejects tokenize when projection is omitted", async () => {
   const { io, logs, errors } = createCapturedIo();
 
-  const exitCode = await runCliMaybeAsync(["tokenize", "--dict-path", "/tmp/dict", "--text", "x"], {}, io);
+  const exitCode = await runCliMaybeAsync(
+    ["tokenize", "--dict-path", "/tmp/dict", "--text", "x"],
+    {},
+    io,
+  );
 
   expect(exitCode).toBe(1);
   expect(errors[0]).toContain("projection");
@@ -232,10 +277,16 @@ test("runCli rejects --resource_dir alias", async () => {
 test("runCli rejects when no input source is provided", async () => {
   const { io, logs, errors } = createCapturedIo();
 
-  const exitCode = await runCliMaybeAsync(["tokenize", "--dict-path", "/tmp/dict", "--projection", "surface"], {}, io);
+  const exitCode = await runCliMaybeAsync(
+    ["tokenize", "--dict-path", "/tmp/dict", "--projection", "surface"],
+    {},
+    io,
+  );
 
   expect(exitCode).toBe(1);
-  expect(errors[0]).toBe("[INVALID_ARGUMENT] No input was resolved from --text, positional file paths, or stdin.");
+  expect(errors[0]).toBe(
+    "[INVALID_ARGUMENT] No input was resolved from --text, positional file paths, or stdin.",
+  );
   expect(logs[0]).toContain("Usage:");
   expect(logs[0]).toContain("tokenize");
 });
@@ -252,7 +303,11 @@ test("runCli rejects unknown subcommand typos", async () => {
 
 test("runCli handles sentence splitting and byte offsets", async () => {
   const { io, logs, errors } = createCapturedIo();
-  const tokenizeCalls: Array<{ text: string; mode: string; projection: Projection }> = [];
+  const tokenizeCalls: Array<{
+    text: string;
+    mode: string;
+    projection: Projection;
+  }> = [];
   const splitterTarget = {
     split(_text: string) {
       return [
@@ -269,9 +324,20 @@ test("runCli handles sentence splitting and byte offsets", async () => {
   const tokenizeSpy = spyOn(core, "createTokenizer").mockImplementation(
     () =>
       ({
-        tokenize({ text = "", mode = "C", projection = "surface" }: { text: string; mode?: string; projection?: Projection }) {
+        tokenize({
+          text = "",
+          mode = "C",
+          projection = "surface",
+        }: {
+          text: string;
+          mode?: string;
+          projection?: Projection;
+        }) {
           tokenizeCalls.push({ text, mode, projection });
-          const morphemes = projection === "normalized" ? NORMALIZED_SAMPLE_MORPHEMES : SAMPLE_MORPHEMES;
+          const morphemes =
+            projection === "normalized"
+              ? NORMALIZED_SAMPLE_MORPHEMES
+              : SAMPLE_MORPHEMES;
           return [
             {
               ...morphemes[0],
@@ -287,11 +353,23 @@ test("runCli handles sentence splitting and byte offsets", async () => {
         close() {},
       }) as never,
   );
-  const splitSpy = spyOn(sentenceSplitter, "createSentenceSplitter").mockImplementation(() => fakeSplitter as never);
+  const splitSpy = spyOn(
+    sentenceSplitter,
+    "createSentenceSplitter",
+  ).mockImplementation(() => fakeSplitter as never);
 
   try {
     const exitCode = await runCliMaybeAsync(
-      ["tokenize", "--dict-path", "/tmp/dict", "--projection", "surface", "--split-sentences", "--text", "😀。B？"],
+      [
+        "tokenize",
+        "--dict-path",
+        "/tmp/dict",
+        "--projection",
+        "surface",
+        "--split-sentences",
+        "--text",
+        "😀。B？",
+      ],
       {},
       io,
     );
@@ -299,9 +377,13 @@ test("runCli handles sentence splitting and byte offsets", async () => {
     expect(exitCode).toBe(0);
     expect(errors).toEqual([]);
     expect(tokenizeSpy).toHaveBeenCalledTimes(1);
-    expect(tokenizeSpy).toHaveBeenCalledWith(expect.objectContaining({ dictPath: "/tmp/dict", splitSentences: true }));
+    expect(tokenizeSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ dictPath: "/tmp/dict", splitSentences: true }),
+    );
     expect(splitSpy).toHaveBeenCalledTimes(1);
-    expect(splitSpy).toHaveBeenCalledWith(expect.objectContaining({ dictPath: "/tmp/dict", splitSentences: true }));
+    expect(splitSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ dictPath: "/tmp/dict", splitSentences: true }),
+    );
     expect(fakeSplitter.split).toHaveBeenCalledTimes(1);
     expect(fakeSplitter.split).toHaveBeenCalledWith("😀。B？");
     expect(splitterCloseSpy).toHaveBeenCalledTimes(1);
@@ -310,7 +392,10 @@ test("runCli handles sentence splitting and byte offsets", async () => {
       { text: "B？", mode: "C", projection: "surface" },
     ]);
 
-    const output = JSON.parse(logs[0] ?? "[]") as Array<{ begin: number; end: number }>;
+    const output = JSON.parse(logs[0] ?? "[]") as Array<{
+      begin: number;
+      end: number;
+    }>;
     expect(output.map(({ begin, end }) => ({ begin, end }))).toEqual([
       { begin: 0, end: 7 },
       { begin: 7, end: 11 },
@@ -326,15 +411,32 @@ test("runCli handles sentence splitting and byte offsets", async () => {
 test("runCli tokenizes positional file input", async () => {
   const { io, logs, errors } = createCapturedIo();
   const fakeTokenizer = createFakeTokenizer();
-  const loadSpy = spyOn(core, "createTokenizer").mockImplementation(() => fakeTokenizer.tokenizer as never);
+  const loadSpy = spyOn(core, "createTokenizer").mockImplementation(
+    () => fakeTokenizer.tokenizer as never,
+  );
   const inputPath = createTempInputFile("input.txt", "file input");
 
   try {
-    const exitCode = await runCliMaybeAsync(["tokenize", "--dict-path", "/tmp/dict", "--projection", "surface", inputPath], {}, io);
+    const exitCode = await runCliMaybeAsync(
+      [
+        "tokenize",
+        "--dict-path",
+        "/tmp/dict",
+        "--projection",
+        "surface",
+        inputPath,
+      ],
+      {},
+      io,
+    );
 
     expect(exitCode).toBe(0);
     expect(errors).toEqual([]);
-    expect(fakeTokenizer.lastTokenizeArgs()).toEqual({ text: "file input", mode: "C", projection: "surface" });
+    expect(fakeTokenizer.lastTokenizeArgs()).toEqual({
+      text: "file input",
+      mode: "C",
+      projection: "surface",
+    });
     expect(logs[0]).toBe(JSON.stringify(SAMPLE_MORPHEMES, null, 2));
   } finally {
     loadSpy.mockRestore();
@@ -344,20 +446,33 @@ test("runCli tokenizes positional file input", async () => {
 test("runCli emits lookup debug output via stderr", async () => {
   const { io, logs, errors } = createCapturedIo();
   const fakeTokenizer = createFakeTokenizer();
-  const loadSpy = spyOn(core, "createTokenizer").mockImplementation(() => fakeTokenizer.tokenizer as never);
+  const loadSpy = spyOn(core, "createTokenizer").mockImplementation(
+    () => fakeTokenizer.tokenizer as never,
+  );
 
   try {
     const exitCode = await runCliMaybeAsync(
-      ["tokenize", "--dict-path", "/tmp/dict", "--projection", "surface", "--debug", "--text", "東京"],
+      [
+        "tokenize",
+        "--dict-path",
+        "/tmp/dict",
+        "--projection",
+        "surface",
+        "--debug",
+        "--text",
+        "東京",
+      ],
       {},
       io,
     );
 
     expect(exitCode).toBe(0);
     expect(logs[0]).toBe(JSON.stringify(SAMPLE_MORPHEMES, null, 2));
-    expect(fakeTokenizer.lookupCalls()).toEqual([{ surface: "東京", projection: "surface" }]);
+    expect(fakeTokenizer.lookupCalls()).toEqual([
+      { surface: "東京", projection: "surface" },
+    ]);
     expect(errors).toContain(
-      "[debug] lookup=[{\"surface\":\"東京\",\"pos\":\"名詞,普通名詞,一般,*,*,*\",\"wordId\":\"(0, 1)\",\"dictionaryId\":0,\"isOov\":false}]",
+      '[debug] lookup=[{"surface":"東京","pos":"名詞,普通名詞,一般,*,*,*","wordId":"(0, 1)","dictionaryId":0,"isOov":false}]',
     );
   } finally {
     loadSpy.mockRestore();
@@ -381,14 +496,25 @@ test("runCli keeps debug tokenize working when lookup is unavailable", async () 
 
   try {
     const exitCode = await runCliMaybeAsync(
-      ["tokenize", "--dict-path", "/tmp/dict", "--projection", "surface", "--debug", "--text", "東京"],
+      [
+        "tokenize",
+        "--dict-path",
+        "/tmp/dict",
+        "--projection",
+        "surface",
+        "--debug",
+        "--text",
+        "東京",
+      ],
       {},
       io,
     );
 
     expect(exitCode).toBe(0);
     expect(logs[0]).toBe(JSON.stringify(SAMPLE_MORPHEMES, null, 2));
-    expect(errors).toContain("[debug] lookup-unavailable=missing lookup symbols");
+    expect(errors).toContain(
+      "[debug] lookup-unavailable=missing lookup symbols",
+    );
   } finally {
     loadSpy.mockRestore();
   }
@@ -398,16 +524,36 @@ test("runCli wakati output changes when projection changes", async () => {
   const surfaceIo = createCapturedIo();
   const normalizedIo = createCapturedIo();
   const fakeTokenizer = createFakeTokenizer();
-  const loadSpy = spyOn(core, "createTokenizer").mockImplementation(() => fakeTokenizer.tokenizer as never);
+  const loadSpy = spyOn(core, "createTokenizer").mockImplementation(
+    () => fakeTokenizer.tokenizer as never,
+  );
 
   try {
     const surfaceExitCode = await runCliMaybeAsync(
-      ["tokenize", "--dict-path", "/tmp/dict", "--projection", "surface", "--wakati", "--text", "ignored"],
+      [
+        "tokenize",
+        "--dict-path",
+        "/tmp/dict",
+        "--projection",
+        "surface",
+        "--wakati",
+        "--text",
+        "ignored",
+      ],
       {},
       surfaceIo.io,
     );
     const normalizedExitCode = await runCliMaybeAsync(
-      ["tokenize", "--dict-path", "/tmp/dict", "--projection", "normalized", "--wakati", "--text", "ignored"],
+      [
+        "tokenize",
+        "--dict-path",
+        "/tmp/dict",
+        "--projection",
+        "normalized",
+        "--wakati",
+        "--text",
+        "ignored",
+      ],
       {},
       normalizedIo.io,
     );
@@ -434,6 +580,8 @@ test("runCli returns an error for unimplemented build command", async () => {
   const exitCode = await runCliMaybeAsync(["build"], {}, io);
 
   expect(exitCode).toBe(1);
-  expect(errors[0]).toContain("[INVALID_ARGUMENT] The build command is not implemented yet.");
+  expect(errors[0]).toContain(
+    "[INVALID_ARGUMENT] The build command is not implemented yet.",
+  );
   expect(logs[0]).toContain("bun run index.ts build [--help]");
 });

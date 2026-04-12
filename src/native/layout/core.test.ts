@@ -1,17 +1,20 @@
 import { expect, test } from "bun:test";
-
-import { validateArrayLayout, readResultLayout } from "./core.ts";
 import type { NativeErrorLibrary } from "../types.ts";
+import { readResultLayout, validateArrayLayout } from "./core.ts";
 
-function createNativeErrorLibrary(errorText = "native layout error"): NativeErrorLibrary {
+function createNativeErrorLibrary(
+  errorText = "native layout error",
+): NativeErrorLibrary {
   return {
     symbols: {
       sudachi_lookup: () => 0,
       sudachi_lookup_subset: () => 0,
       sudachi_free_lookup_result: () => {},
       sudachi_get_lookup_result_layout: () => 0,
-      sudachi_get_last_error: () => errorText as unknown as import("bun:ffi").CString,
-      sudachi_status_code_name: () => "LOOKUP" as unknown as import("bun:ffi").CString,
+      sudachi_get_last_error: () =>
+        errorText as unknown as import("bun:ffi").CString,
+      sudachi_status_code_name: () =>
+        "LOOKUP" as unknown as import("bun:ffi").CString,
     },
     close: () => {},
   };

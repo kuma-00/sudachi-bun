@@ -24,7 +24,9 @@ function tokenizeHelp(): string {
   ].join("\n");
 }
 
-function notImplementedHelp(command: Exclude<CliHelpTarget, "top-level" | "tokenize">): string {
+function notImplementedHelp(
+  command: Exclude<CliHelpTarget, "top-level" | "tokenize">,
+): string {
   return [
     "Usage:",
     `  bun run index.ts ${command} [--help]`,

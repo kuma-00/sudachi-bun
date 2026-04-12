@@ -18,7 +18,9 @@ export function readNativeStatusCodeName(
   status: number,
 ): NativeSudachiErrorCode {
   try {
-    const code = String(library.symbols.sudachi_status_code_name(status) ?? "UNKNOWN");
+    const code = String(
+      library.symbols.sudachi_status_code_name(status) ?? "UNKNOWN",
+    );
     return normalizeNativeStatusCodeName(code);
   } catch {
     return "UNKNOWN";

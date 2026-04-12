@@ -1,4 +1,4 @@
-import { type Pointer } from "bun:ffi";
+import type { Pointer } from "bun:ffi";
 
 import { SudachiError } from "./types.ts";
 
@@ -12,7 +12,10 @@ export interface NativeHandleSession<TLibrary, TLayout> {
   library: TLibrary;
 }
 
-export function openNativeHandleSession<TLibrary extends { close(): void }, TLayout>(
+export function openNativeHandleSession<
+  TLibrary extends { close(): void },
+  TLayout,
+>(
   library: TLibrary,
   readLayout: (library: TLibrary) => TLayout,
   createHandle: (library: TLibrary, outHandle: BigUint64Array) => number,

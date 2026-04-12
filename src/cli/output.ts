@@ -5,7 +5,7 @@ export type TokenizeOutputFormat = "normal" | "wakati" | "all";
 export function formatTokenizeOutput(
   morphemes: Morpheme[],
   format: TokenizeOutputFormat,
-  projection: SurfaceProjection,
+  _projection: SurfaceProjection,
 ): string {
   switch (format) {
     case "wakati":

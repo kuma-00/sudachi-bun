@@ -24,10 +24,21 @@ test("createSudachi returns tokenizer/splitter/pretokenizer and close()", () => 
   const pretokenizer = createCloseable("pretokenizer", calls);
   const options = { dictPath: "/tmp/dict", debug: true };
   const splitterOptions = { dictPath: "/tmp/split-dict", debug: false };
-  const pretokenizerOptions = { dictPath: "/tmp/pre-dict", projection: "normalized" as const };
-  const createTokenizerSpy = spyOn(core, "createTokenizer").mockReturnValue(tokenizer as never);
-  const createSplitterSpy = spyOn(sentenceSplitterModule, "createSentenceSplitter").mockReturnValue(splitter as never);
-  const createPretokenizerSpy = spyOn(pretokenizerModule, "createPretokenizer").mockReturnValue(pretokenizer as never);
+  const pretokenizerOptions = {
+    dictPath: "/tmp/pre-dict",
+    projection: "normalized" as const,
+  };
+  const createTokenizerSpy = spyOn(core, "createTokenizer").mockReturnValue(
+    tokenizer as never,
+  );
+  const createSplitterSpy = spyOn(
+    sentenceSplitterModule,
+    "createSentenceSplitter",
+  ).mockReturnValue(splitter as never);
+  const createPretokenizerSpy = spyOn(
+    pretokenizerModule,
+    "createPretokenizer",
+  ).mockReturnValue(pretokenizer as never);
 
   try {
     const sudachi = createSudachi({
@@ -63,14 +74,24 @@ test("createSudachi closes already-created resources when construction fails", (
   const tokenizer = createCloseable("tokenizer", calls);
   const splitter = createCloseable("splitter", calls);
   const constructionError = new Error("pretokenizer init failed");
-  const createTokenizerSpy = spyOn(core, "createTokenizer").mockReturnValue(tokenizer as never);
-  const createSplitterSpy = spyOn(sentenceSplitterModule, "createSentenceSplitter").mockReturnValue(splitter as never);
-  const createPretokenizerSpy = spyOn(pretokenizerModule, "createPretokenizer").mockImplementation(() => {
+  const createTokenizerSpy = spyOn(core, "createTokenizer").mockReturnValue(
+    tokenizer as never,
+  );
+  const createSplitterSpy = spyOn(
+    sentenceSplitterModule,
+    "createSentenceSplitter",
+  ).mockReturnValue(splitter as never);
+  const createPretokenizerSpy = spyOn(
+    pretokenizerModule,
+    "createPretokenizer",
+  ).mockImplementation(() => {
     throw constructionError;
   });
 
   try {
-    expect(() => createSudachi({ dictPath: "/tmp/dict" })).toThrow(constructionError);
+    expect(() => createSudachi({ dictPath: "/tmp/dict" })).toThrow(
+      constructionError,
+    );
     expect(calls).toEqual(["splitter", "tokenizer"]);
     expect(createTokenizerSpy).toHaveBeenCalledTimes(1);
     expect(createSplitterSpy).toHaveBeenCalledTimes(1);
@@ -88,10 +109,22 @@ test("close throws first close error but attempts all component closes", () => {
   const splitterError = new Error("splitter close failed");
   const tokenizer = createCloseable("tokenizer", calls);
   const splitter = createCloseable("splitter", calls, splitterError);
-  const pretokenizer = createCloseable("pretokenizer", calls, pretokenizerError);
-  const createTokenizerSpy = spyOn(core, "createTokenizer").mockReturnValue(tokenizer as never);
-  const createSplitterSpy = spyOn(sentenceSplitterModule, "createSentenceSplitter").mockReturnValue(splitter as never);
-  const createPretokenizerSpy = spyOn(pretokenizerModule, "createPretokenizer").mockReturnValue(pretokenizer as never);
+  const pretokenizer = createCloseable(
+    "pretokenizer",
+    calls,
+    pretokenizerError,
+  );
+  const createTokenizerSpy = spyOn(core, "createTokenizer").mockReturnValue(
+    tokenizer as never,
+  );
+  const createSplitterSpy = spyOn(
+    sentenceSplitterModule,
+    "createSentenceSplitter",
+  ).mockReturnValue(splitter as never);
+  const createPretokenizerSpy = spyOn(
+    pretokenizerModule,
+    "createPretokenizer",
+  ).mockReturnValue(pretokenizer as never);
 
   try {
     const sudachi = createSudachi({ dictPath: "/tmp/dict" });

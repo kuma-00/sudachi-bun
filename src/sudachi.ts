@@ -1,7 +1,14 @@
 import { createTokenizer, type Tokenizer } from "./core.ts";
-import { createSentenceSplitter, type SentenceSplitter } from "./sentence-splitter.ts";
 import { createPretokenizer, type Pretokenizer } from "./pretokenizer.ts";
-import type { PretokenizerOptions, SentenceSplitterOptions, TokenizerOptions } from "./types.ts";
+import {
+  createSentenceSplitter,
+  type SentenceSplitter,
+} from "./sentence-splitter.ts";
+import type {
+  PretokenizerOptions,
+  SentenceSplitterOptions,
+  TokenizerOptions,
+} from "./types.ts";
 
 export interface CreateSudachiOptions extends TokenizerOptions {
   splitter?: SentenceSplitterOptions;
@@ -21,7 +28,11 @@ class SudachiInstance implements Sudachi {
   readonly splitter: SentenceSplitter;
   readonly pretokenizer: Pretokenizer;
 
-  constructor(tokenizer: Tokenizer, splitter: SentenceSplitter, pretokenizer: Pretokenizer) {
+  constructor(
+    tokenizer: Tokenizer,
+    splitter: SentenceSplitter,
+    pretokenizer: Pretokenizer,
+  ) {
     this.tokenizer = tokenizer;
     this.splitter = splitter;
     this.pretokenizer = pretokenizer;

@@ -1,16 +1,27 @@
 import { createTokenizer } from "../core.ts";
 import { createSentenceSplitter } from "../sentence-splitter.ts";
-import { formatSudachiError, type Morpheme, type SentenceSpan, type SurfaceProjection, type TokenizeMode } from "../types.ts";
-import { formatTokenizeOutput, type TokenizeOutputFormat } from "./output.ts";
-
+import {
+  formatSudachiError,
+  type Morpheme,
+  type SentenceSpan,
+  type SurfaceProjection,
+  type TokenizeMode,
+} from "../types.ts";
 import type { TokenizeCliCommand } from "./normalize.ts";
+import { formatTokenizeOutput, type TokenizeOutputFormat } from "./output.ts";
 
 interface CliIO {
   error(message: string): void;
 }
 
 function tokenizeSentenceUnits(
-  tokenizer: { tokenize(params: { text: string; projection: SurfaceProjection; mode?: TokenizeMode }): Morpheme[] },
+  tokenizer: {
+    tokenize(params: {
+      text: string;
+      projection: SurfaceProjection;
+      mode?: TokenizeMode;
+    }): Morpheme[];
+  },
   splitter: { split(text: string): SentenceSpan[] } | null,
   text: string,
   projection: TokenizeCliCommand["projection"],
@@ -28,7 +39,11 @@ function tokenizeSentenceUnits(
 
   const morphemes: Morpheme[] = [];
   for (const unit of units) {
-    const unitMorphemes = tokenizer.tokenize({ text: unit.text, projection, mode });
+    const unitMorphemes = tokenizer.tokenize({
+      text: unit.text,
+      projection,
+      mode,
+    });
     if (unit.start === 0) {
       morphemes.push(...unitMorphemes);
       continue;
@@ -52,7 +67,9 @@ export function runTokenizeCommand(
   io?: Pick<CliIO, "error">,
 ): string {
   const tokenizer = createTokenizer(command);
-  const splitter = command.splitSentences ? createSentenceSplitter(command) : null;
+  const splitter = command.splitSentences
+    ? createSentenceSplitter(command)
+    : null;
 
   try {
     if (command.debug) {
@@ -67,7 +84,9 @@ export function runTokenizeCommand(
       );
 
       try {
-        io?.error(`[debug] lookup=${JSON.stringify(tokenizer.lookup({ surface: command.text, projection: command.projection }))}`);
+        io?.error(
+          `[debug] lookup=${JSON.stringify(tokenizer.lookup({ surface: command.text, projection: command.projection }))}`,
+        );
       } catch (error) {
         io?.error(`[debug] lookup-unavailable=${formatSudachiError(error)}`);
       }

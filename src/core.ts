@@ -1,21 +1,24 @@
-import {
-  type CreatePosMatcherArgs,
-  type InfoSubset,
-  type LookupArgs,
-  type LookupEntry,
-  type Morpheme,
-  type SplitArgs,
-  type SplitIntoArgs,
-  type SurfaceProjection,
-  type TokenizeArgs,
-  type TokenizeMode,
-  type TokenizerOptions,
-} from "./types.ts";
 import { MorphemeStateTracker } from "./core/morpheme-state.ts";
-import { compilePosMatcher, lookupEntries, splitMorpheme, splitMorphemes, tokenizeMorphemes } from "./core/operations.ts";
+import {
+  compilePosMatcher,
+  lookupEntries,
+  splitMorpheme,
+  splitMorphemes,
+  tokenizeMorphemes,
+} from "./core/operations.ts";
 import { TokenizerSessionManager } from "./core/session.ts";
+import type {
+  CreatePosMatcherArgs,
+  LookupArgs,
+  LookupEntry,
+  Morpheme,
+  SplitArgs,
+  SplitIntoArgs,
+  TokenizeArgs,
+  TokenizerOptions,
+} from "./types.ts";
 
-export { Pretokenizer, createPretokenizer } from "./pretokenizer.ts";
+export { createPretokenizer, Pretokenizer } from "./pretokenizer.ts";
 
 export class PosMatcher {
   #posIds: Set<number>;
@@ -36,7 +39,9 @@ export class PosMatcher {
   }
 
   filter<T extends { posId?: number }>(items: readonly T[]): T[] {
-    return items.filter((item) => typeof item.posId === "number" && this.#posIds.has(item.posId));
+    return items.filter(
+      (item) => typeof item.posId === "number" && this.#posIds.has(item.posId),
+    );
   }
 }
 
@@ -81,7 +86,11 @@ export class Tokenizer {
     this.close();
   }
 
-  #context(): { owner: object; session: TokenizerSessionManager; state: MorphemeStateTracker } {
+  #context(): {
+    owner: object;
+    session: TokenizerSessionManager;
+    state: MorphemeStateTracker;
+  } {
     return {
       owner: this,
       session: this.#session,
@@ -91,5 +100,8 @@ export class Tokenizer {
 }
 
 export function createTokenizer(options: TokenizerOptions): Tokenizer {
-  return new Tokenizer(new TokenizerSessionManager(options), new MorphemeStateTracker());
+  return new Tokenizer(
+    new TokenizerSessionManager(options),
+    new MorphemeStateTracker(),
+  );
 }

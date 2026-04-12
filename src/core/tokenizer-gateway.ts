@@ -1,8 +1,11 @@
-import { type Pointer } from "bun:ffi";
+import type { Pointer } from "bun:ffi";
 
-import { readLookupEntryArray, readMorphemeArray, readPosMatcherIdArray } from "../ffi.ts";
+import {
+  readLookupEntryArray,
+  readMorphemeArray,
+  readPosMatcherIdArray,
+} from "../ffi.ts";
 import { createNativeSudachiError } from "../native/error/mapper.ts";
-import { readOwnedNativeResult } from "../native-session.ts";
 import type {
   LookupResultLayout,
   MorphemeResultLayout,
@@ -10,12 +13,13 @@ import type {
   NativeSudachiLibrary,
   PosMatcherResultLayout,
 } from "../native/types.ts";
+import { readOwnedNativeResult } from "../native-session.ts";
 import {
-  SudachiError,
   type InfoSubset,
   type LookupEntry,
   type Morpheme,
   type PosMatcherPatterns,
+  SudachiError,
   type SurfaceProjection,
   type TokenizeMode,
 } from "../types.ts";
@@ -52,8 +56,17 @@ interface TokenizerGatewayDeps {
 }
 
 export interface TokenizerGateway {
-  tokenize(text: string, projection: SurfaceProjection, mode: TokenizeMode, options?: InfoSubset): Morpheme[];
-  lookup(surface: string, projection: SurfaceProjection, options?: InfoSubset): LookupEntry[];
+  tokenize(
+    text: string,
+    projection: SurfaceProjection,
+    mode: TokenizeMode,
+    options?: InfoSubset,
+  ): Morpheme[];
+  lookup(
+    surface: string,
+    projection: SurfaceProjection,
+    options?: InfoSubset,
+  ): LookupEntry[];
   compilePosMatcher(patterns: PosMatcherPatterns): number[];
   splitMorpheme(
     sourceText: string,
@@ -62,10 +75,17 @@ export interface TokenizerGateway {
     sourceIndex: number,
     splitMode: TokenizeMode,
   ): Morpheme[];
-  splitMorphemes(sourceText: string, sourceMode: TokenizeMode, projection: SurfaceProjection, splitMode: TokenizeMode): Morpheme[];
+  splitMorphemes(
+    sourceText: string,
+    sourceMode: TokenizeMode,
+    projection: SurfaceProjection,
+    splitMode: TokenizeMode,
+  ): Morpheme[];
 }
 
-function normalizePosPattern(pattern: readonly (string | null | undefined)[]): (string | null)[] {
+function normalizePosPattern(
+  pattern: readonly (string | null | undefined)[],
+): (string | null)[] {
   if (pattern.length > 6) {
     throw new SudachiError("POS matcher patterns must have at most 6 items.", {
       code: "INVALID_ARGUMENT",
@@ -80,9 +100,12 @@ function normalizePosPattern(pattern: readonly (string | null | undefined)[]): (
     }
 
     if (typeof value !== "string") {
-      throw new SudachiError("POS matcher patterns must contain only strings or null.", {
-        code: "INVALID_ARGUMENT",
-      });
+      throw new SudachiError(
+        "POS matcher patterns must contain only strings or null.",
+        {
+          code: "INVALID_ARGUMENT",
+        },
+      );
     }
 
     normalized[index] = value;
@@ -96,7 +119,9 @@ function normalizePosPatterns(patterns: PosMatcherPatterns): string {
   return JSON.stringify(normalized);
 }
 
-export function createTokenizerGateway(deps: TokenizerGatewayDeps): TokenizerGateway {
+export function createTokenizerGateway(
+  deps: TokenizerGatewayDeps,
+): TokenizerGateway {
   return {
     tokenize(text, projection, mode, options) {
       const { library, handle, layout } = deps.getOpenSession();
@@ -104,7 +129,13 @@ export function createTokenizerGateway(deps: TokenizerGatewayDeps): TokenizerGat
       const subsetBits = resolveInfoSubsetBits(options);
       const status =
         subsetBits === null
-          ? library.symbols.sudachi_tokenize(handle, text, MODE_TO_NATIVE[mode], PROJECTION_TO_NATIVE[projection], resultOut)
+          ? library.symbols.sudachi_tokenize(
+              handle,
+              text,
+              MODE_TO_NATIVE[mode],
+              PROJECTION_TO_NATIVE[projection],
+              resultOut,
+            )
           : library.symbols.sudachi_tokenize_subset(
               handle,
               text,
@@ -133,7 +164,12 @@ export function createTokenizerGateway(deps: TokenizerGatewayDeps): TokenizerGat
       const subsetBits = resolveInfoSubsetBits(options);
       const status =
         subsetBits === null
-          ? library.symbols.sudachi_lookup(handle, surface, PROJECTION_TO_NATIVE[projection], resultOut)
+          ? library.symbols.sudachi_lookup(
+              handle,
+              surface,
+              PROJECTION_TO_NATIVE[projection],
+              resultOut,
+            )
           : library.symbols.sudachi_lookup_subset(
               handle,
               surface,
@@ -158,15 +194,24 @@ export function createTokenizerGateway(deps: TokenizerGatewayDeps): TokenizerGat
       const { library, handle } = deps.getOpenSession();
       const layout = deps.getPosMatcherLayout();
       const resultOut = new BigUint64Array(1);
-      const status = library.symbols.sudachi_compile_pos_matcher(handle, normalizePosPatterns(patterns), resultOut);
+      const status = library.symbols.sudachi_compile_pos_matcher(
+        handle,
+        normalizePosPatterns(patterns),
+        resultOut,
+      );
       if (status !== 0) {
-        throw createNativeSudachiError(library, status, "POS matcher compilation failed.");
+        throw createNativeSudachiError(
+          library,
+          status,
+          "POS matcher compilation failed.",
+        );
       }
 
       return readOwnedNativeResult(
         resultOut,
         "POS matcher returned a null result pointer.",
-        (resultPtr) => library.symbols.sudachi_free_pos_matcher_result(resultPtr),
+        (resultPtr) =>
+          library.symbols.sudachi_free_pos_matcher_result(resultPtr),
         (resultPtr) => readPosMatcherIdArray(resultPtr, layout),
       );
     },
@@ -185,7 +230,11 @@ export function createTokenizerGateway(deps: TokenizerGatewayDeps): TokenizerGat
       );
 
       if (status !== 0) {
-        throw createNativeSudachiError(library, status, "Morpheme split failed.");
+        throw createNativeSudachiError(
+          library,
+          status,
+          "Morpheme split failed.",
+        );
       }
 
       return readOwnedNativeResult(
@@ -209,7 +258,11 @@ export function createTokenizerGateway(deps: TokenizerGatewayDeps): TokenizerGat
       );
 
       if (status !== 0) {
-        throw createNativeSudachiError(library, status, "Morpheme list split failed.");
+        throw createNativeSudachiError(
+          library,
+          status,
+          "Morpheme list split failed.",
+        );
       }
 
       return readOwnedNativeResult(

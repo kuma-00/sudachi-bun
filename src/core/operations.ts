@@ -1,14 +1,14 @@
 import {
-  SudachiError,
   type InfoSubset,
   type LookupEntry,
   type Morpheme,
   type PosMatcherPatterns,
+  SudachiError,
   type SurfaceProjection,
   type TokenizeMode,
 } from "../types.ts";
-import { type MorphemeStateTracker } from "./morpheme-state.ts";
-import { type TokenizerGateway, type TokenizerSessionManager } from "./session.ts";
+import type { MorphemeStateTracker } from "./morpheme-state.ts";
+import type { TokenizerGateway, TokenizerSessionManager } from "./session.ts";
 
 const MORPHEME_PROJECTIONS = new WeakMap<Morpheme, SurfaceProjection>();
 
@@ -22,13 +22,19 @@ function getGateway(context: TokenizerExecutionContext): TokenizerGateway {
   return context.session.getGateway();
 }
 
-function rememberMorphemeProjection(morphemes: readonly Morpheme[], projection: SurfaceProjection): void {
+function rememberMorphemeProjection(
+  morphemes: readonly Morpheme[],
+  projection: SurfaceProjection,
+): void {
   for (const morpheme of morphemes) {
     MORPHEME_PROJECTIONS.set(morpheme, projection);
   }
 }
 
-function morphemeProjection(morpheme: Morpheme, fallback: SurfaceProjection): SurfaceProjection {
+function morphemeProjection(
+  morpheme: Morpheme,
+  fallback: SurfaceProjection,
+): SurfaceProjection {
   return MORPHEME_PROJECTIONS.get(morpheme) ?? fallback;
 }
 
@@ -43,17 +49,25 @@ function splitSourceIndex(
   }
 
   const sourceProjection = morphemeProjection(morpheme, projection);
-  const list = tokenize(context, morphemeState.listState.text, sourceProjection, morphemeState.listState.mode);
+  const list = tokenize(
+    context,
+    morphemeState.listState.text,
+    sourceProjection,
+    morphemeState.listState.mode,
+  );
   for (const [index, candidate] of list.entries()) {
     if (morphemeMatches(candidate, morpheme)) {
       return index;
     }
   }
 
-  throw new SudachiError("Failed to resolve the morpheme index from the source text.", {
-    code: "INTERNAL",
-    nativeStatus: 255,
-  });
+  throw new SudachiError(
+    "Failed to resolve the morpheme index from the source text.",
+    {
+      code: "INTERNAL",
+      nativeStatus: 255,
+    },
+  );
 }
 
 function morphemeMatches(left: Morpheme, right: Morpheme): boolean {
@@ -72,7 +86,10 @@ function morphemeMatches(left: Morpheme, right: Morpheme): boolean {
   );
 }
 
-function sameSynonymGroupIds(left: readonly number[], right: readonly number[]): boolean {
+function sameSynonymGroupIds(
+  left: readonly number[],
+  right: readonly number[],
+): boolean {
   if (left.length !== right.length) {
     return false;
   }
@@ -93,8 +110,19 @@ function tokenize(
   mode: TokenizeMode,
   options: InfoSubset | undefined = undefined,
 ): Morpheme[] {
-  const morphemes = getGateway(context).tokenize(text, projection, mode, options);
-  const attached = context.state.attach(context.owner, morphemes, text, mode, "owned");
+  const morphemes = getGateway(context).tokenize(
+    text,
+    projection,
+    mode,
+    options,
+  );
+  const attached = context.state.attach(
+    context.owner,
+    morphemes,
+    text,
+    mode,
+    "owned",
+  );
   rememberMorphemeProjection(attached, projection);
   return attached;
 }
@@ -118,7 +146,10 @@ export function lookupEntries(
   return getGateway(context).lookup(surface, projection, options);
 }
 
-export function compilePosMatcher(context: TokenizerExecutionContext, patterns: PosMatcherPatterns): number[] {
+export function compilePosMatcher(
+  context: TokenizerExecutionContext,
+  patterns: PosMatcherPatterns,
+): number[] {
   return getGateway(context).compilePosMatcher(patterns);
 }
 
@@ -137,7 +168,13 @@ export function splitMorpheme(
     index,
     mode,
   );
-  const attached = context.state.attach(context.owner, splitResult, morphemeState.listState.text, mode, "split");
+  const attached = context.state.attach(
+    context.owner,
+    splitResult,
+    morphemeState.listState.text,
+    mode,
+    "split",
+  );
   rememberMorphemeProjection(attached, projection);
   return attached;
 }
@@ -154,15 +191,32 @@ export function splitMorphemes(
 
   const listState = context.state.getListState(morphemes);
 
-  if (listState !== undefined && context.state.canUseWholeListSplit(morphemes, listState)) {
+  if (
+    listState !== undefined &&
+    context.state.canUseWholeListSplit(morphemes, listState)
+  ) {
     if (listState.tokenizer !== context.owner) {
-      throw new SudachiError("Morpheme list was not created by this tokenizer.", {
-        code: "INVALID_ARGUMENT",
-      });
+      throw new SudachiError(
+        "Morpheme list was not created by this tokenizer.",
+        {
+          code: "INVALID_ARGUMENT",
+        },
+      );
     }
 
-    const splitResult = getGateway(context).splitMorphemes(listState.text, listState.mode, projection, mode);
-    const attached = context.state.attach(context.owner, splitResult, listState.text, mode, "owned");
+    const splitResult = getGateway(context).splitMorphemes(
+      listState.text,
+      listState.mode,
+      projection,
+      mode,
+    );
+    const attached = context.state.attach(
+      context.owner,
+      splitResult,
+      listState.text,
+      mode,
+      "owned",
+    );
     rememberMorphemeProjection(attached, projection);
     return attached;
   }

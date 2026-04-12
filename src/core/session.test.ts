@@ -1,6 +1,4 @@
 import { expect, spyOn, test } from "bun:test";
-
-import * as native from "../native.ts";
 import type {
   LookupResultLayout,
   MorphemeResultLayout,
@@ -8,6 +6,7 @@ import type {
   NativeSudachiLibrary,
   PosMatcherResultLayout,
 } from "../native/types.ts";
+import * as native from "../native.ts";
 import type { TokenizerOptions } from "../types.ts";
 import { TokenizerSessionManager } from "./session.ts";
 import * as gatewayModule from "./tokenizer-gateway.ts";
@@ -62,7 +61,12 @@ const OPTIONS: TokenizerOptions = {
 function createMockTokenizerLibrary(): NativeSudachiLibrary {
   return {
     symbols: {
-      sudachi_create_tokenizer: (_configPath, _resourceDir, _dictPath, outHandle) => {
+      sudachi_create_tokenizer: (
+        _configPath,
+        _resourceDir,
+        _dictPath,
+        outHandle,
+      ) => {
         (outHandle as BigUint64Array)[0] = 1n;
         return 0;
       },
@@ -100,7 +104,9 @@ function createMockLookupLibrary(): NativeLookupLibrary {
 test("TokenizerSessionManager closes once and exposes closed state", () => {
   const library = createMockTokenizerLibrary();
   const loadSpy = spyOn(native, "loadNativeLibrary").mockReturnValue(library);
-  const layoutSpy = spyOn(native, "readMorphemeResultLayout").mockReturnValue(MORPHEME_LAYOUT);
+  const layoutSpy = spyOn(native, "readMorphemeResultLayout").mockReturnValue(
+    MORPHEME_LAYOUT,
+  );
   const freeSpy = spyOn(library.symbols, "sudachi_free_tokenizer");
   const closeSpy = spyOn(library, "close");
 
@@ -127,8 +133,13 @@ test("TokenizerSessionManager lazy-loads lookup library and reuses it", () => {
   const lookupLibrary = createMockLookupLibrary();
   spyOn(native, "loadNativeLibrary").mockReturnValue(library);
   spyOn(native, "readMorphemeResultLayout").mockReturnValue(MORPHEME_LAYOUT);
-  const loadLookupSpy = spyOn(native, "loadLookupLibrary").mockReturnValue(lookupLibrary);
-  const readLookupLayoutSpy = spyOn(native, "readLookupResultLayout").mockReturnValue(LOOKUP_LAYOUT);
+  const loadLookupSpy = spyOn(native, "loadLookupLibrary").mockReturnValue(
+    lookupLibrary,
+  );
+  const readLookupLayoutSpy = spyOn(
+    native,
+    "readLookupResultLayout",
+  ).mockReturnValue(LOOKUP_LAYOUT);
   const lookupCloseSpy = spyOn(lookupLibrary, "close");
 
   const session = new TokenizerSessionManager(OPTIONS);
@@ -154,7 +165,9 @@ test("TokenizerSessionManager memoizes gateway instance", () => {
   const library = createMockTokenizerLibrary();
   spyOn(native, "loadNativeLibrary").mockReturnValue(library);
   spyOn(native, "readMorphemeResultLayout").mockReturnValue(MORPHEME_LAYOUT);
-  spyOn(native, "readPosMatcherResultLayout").mockReturnValue(POS_MATCHER_LAYOUT);
+  spyOn(native, "readPosMatcherResultLayout").mockReturnValue(
+    POS_MATCHER_LAYOUT,
+  );
 
   const gateway = {
     tokenize: () => [],
@@ -163,7 +176,10 @@ test("TokenizerSessionManager memoizes gateway instance", () => {
     splitMorpheme: () => [],
     splitMorphemes: () => [],
   };
-  const gatewayFactorySpy = spyOn(gatewayModule, "createTokenizerGateway").mockReturnValue(gateway);
+  const gatewayFactorySpy = spyOn(
+    gatewayModule,
+    "createTokenizerGateway",
+  ).mockReturnValue(gateway);
 
   const session = new TokenizerSessionManager(OPTIONS);
   const first = session.getGateway();

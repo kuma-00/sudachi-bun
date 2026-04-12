@@ -1,11 +1,16 @@
-import type { NativeSentenceSplitterLibrary, SentenceSpanResultLayout } from "../types.ts";
+import type {
+  NativeSentenceSplitterLibrary,
+  SentenceSpanResultLayout,
+} from "../types.ts";
 import { readResultLayout, validateArrayLayout } from "./core.ts";
 
 const SENTENCE_SPAN_RESULT_LAYOUT_FIELD_COUNT = 7;
 
 export const SENTENCE_SPAN_RESULT_LAYOUT_VERSION = 1;
 
-function validateSentenceSpanResultLayout(layout: SentenceSpanResultLayout): void {
+function validateSentenceSpanResultLayout(
+  layout: SentenceSpanResultLayout,
+): void {
   validateArrayLayout(
     layout.layoutVersion,
     SENTENCE_SPAN_RESULT_LAYOUT_VERSION,

@@ -1,24 +1,29 @@
-import { type Pointer } from "bun:ffi";
-
+import type { Pointer } from "bun:ffi";
+import { resolveInfoSubsetBits } from "./core/info-subset.ts";
 import { readPretokenizedArray } from "./ffi.ts";
-import { openNativeHandleSession, readOwnedNativeResult } from "./native-session.ts";
 import { createNativeSudachiError } from "./native/error/mapper.ts";
+import type {
+  NativePretokenizerLibrary,
+  PretokenizedResultLayout,
+} from "./native/types.ts";
 import {
   loadPretokenizerLibrary,
   readPretokenizedResultLayout,
 } from "./native.ts";
-import type { NativePretokenizerLibrary, PretokenizedResultLayout } from "./native/types.ts";
-import { resolveInfoSubsetBits } from "./core/info-subset.ts";
+import {
+  openNativeHandleSession,
+  readOwnedNativeResult,
+} from "./native-session.ts";
 import { createUtf8ByteOffsetIndexMap } from "./shared/utf8-offset.ts";
 import {
+  type InfoSubset,
+  type PretokenizedResult,
+  type PretokenizedToken,
+  type PretokenizeOptions,
+  type PretokenizerOptions,
   parseSurfaceProjection,
   parseTokenizeMode,
   SudachiError,
-  type InfoSubset,
-  type PretokenizeOptions,
-  type PretokenizedResult,
-  type PretokenizedToken,
-  type PretokenizerOptions,
   type SurfaceProjection,
   type TokenizeMode,
 } from "./types.ts";
@@ -44,18 +49,25 @@ function invalidPretokenizedResult(message: string): never {
   });
 }
 
-function createByteOffsetIndexMap(text: string, offsets: readonly number[]): Map<number, number> {
+function createByteOffsetIndexMap(
+  text: string,
+  offsets: readonly number[],
+): Map<number, number> {
   return createUtf8ByteOffsetIndexMap(text, offsets, {
     throwInvalid: (message) => invalidPretokenizedResult(message),
     messages: {
-      outOfRange: (offset) => `Pretokenizer returned an out-of-range byte offset: ${offset}.`,
+      outOfRange: (offset) =>
+        `Pretokenizer returned an out-of-range byte offset: ${offset}.`,
       notBoundary: (offset) =>
         `Pretokenizer returned a byte offset that does not align to a UTF-8 boundary: ${offset}.`,
     },
   });
 }
 
-function normalizePretokenizedTokens(text: string, tokens: readonly PretokenizedToken[]): PretokenizedToken[] {
+function normalizePretokenizedTokens(
+  text: string,
+  tokens: readonly PretokenizedToken[],
+): PretokenizedToken[] {
   if (tokens.length === 0) {
     return [];
   }
@@ -111,12 +123,16 @@ function normalizeRuntimeOptions(
 ): PretokenizerRuntimeOptions {
   return {
     mode: parseTokenizeMode(options?.mode ?? defaults.mode),
-    projection: parseSurfaceProjection(options?.projection ?? defaults.projection),
+    projection: parseSurfaceProjection(
+      options?.projection ?? defaults.projection,
+    ),
     subset: options?.subset ?? defaults.subset,
   };
 }
 
-function openNativePretokenizer(options: PretokenizerOptions): NativePretokenizerSession {
+function openNativePretokenizer(
+  options: PretokenizerOptions,
+): NativePretokenizerSession {
   const library = loadPretokenizerLibrary(options);
   return openNativeHandleSession(
     library,
@@ -129,7 +145,11 @@ function openNativePretokenizer(options: PretokenizerOptions): NativePretokenize
         handleOut,
       ),
     (loadedLibrary, status) =>
-      createNativeSudachiError(loadedLibrary, status, "Failed to create the pretokenizer."),
+      createNativeSudachiError(
+        loadedLibrary,
+        status,
+        "Failed to create the pretokenizer.",
+      ),
     "Pretokenizer handle was null after initialization.",
   );
 }
@@ -145,7 +165,11 @@ function setNativePretokenizerDebug(
 
   const status = setDebug(session.handle, debug ? 1 : 0);
   if (status !== 0) {
-    throw createNativeSudachiError(session.library, status, "Failed to configure pretokenizer debug mode.");
+    throw createNativeSudachiError(
+      session.library,
+      status,
+      "Failed to configure pretokenizer debug mode.",
+    );
   }
 }
 
@@ -155,7 +179,10 @@ export class Pretokenizer {
   #handle: Pointer | null;
   #defaults: PretokenizerRuntimeOptions;
 
-  constructor(session: NativePretokenizerSession, defaults: PretokenizeOptions = {}) {
+  constructor(
+    session: NativePretokenizerSession,
+    defaults: PretokenizeOptions = {},
+  ) {
     this.#library = session.library;
     this.#layout = session.layout;
     this.#handle = session.handle;
@@ -167,7 +194,9 @@ export class Pretokenizer {
   }
 
   get closed(): boolean {
-    return this.#library === null || this.#handle === null || this.#layout === null;
+    return (
+      this.#library === null || this.#handle === null || this.#layout === null
+    );
   }
 
   pretokenize(text: string, options?: PretokenizeOptions): PretokenizedResult {
@@ -206,14 +235,23 @@ export class Pretokenizer {
           );
 
     if (status !== 0) {
-      throw createNativeSudachiError(library, status, "Pretokenization failed.");
+      throw createNativeSudachiError(
+        library,
+        status,
+        "Pretokenization failed.",
+      );
     }
 
     return readOwnedNativeResult(
       resultOut,
       "Pretokenizer returned a null result pointer.",
-      (resultPtr) => library.symbols.sudachi_free_pretokenized_result(resultPtr),
-      (resultPtr) => normalizePretokenizedTokens(text, readPretokenizedArray(resultPtr, layout)),
+      (resultPtr) =>
+        library.symbols.sudachi_free_pretokenized_result(resultPtr),
+      (resultPtr) =>
+        normalizePretokenizedTokens(
+          text,
+          readPretokenizedArray(resultPtr, layout),
+        ),
     );
   }
 

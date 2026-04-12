@@ -1,11 +1,16 @@
-import type { NativePretokenizerLibrary, PretokenizedResultLayout } from "../types.ts";
+import type {
+  NativePretokenizerLibrary,
+  PretokenizedResultLayout,
+} from "../types.ts";
 import { readResultLayout, validateArrayLayout } from "./core.ts";
 
 const PRETOKENIZED_RESULT_LAYOUT_FIELD_COUNT = 20;
 
 export const PRETOKENIZED_RESULT_LAYOUT_VERSION = 1;
 
-function validatePretokenizedResultLayout(layout: PretokenizedResultLayout): void {
+function validatePretokenizedResultLayout(
+  layout: PretokenizedResultLayout,
+): void {
   validateArrayLayout(
     layout.layoutVersion,
     PRETOKENIZED_RESULT_LAYOUT_VERSION,
@@ -15,7 +20,9 @@ function validatePretokenizedResultLayout(layout: PretokenizedResultLayout): voi
   );
 }
 
-export function readPretokenizedResultLayout(library: NativePretokenizerLibrary): PretokenizedResultLayout {
+export function readPretokenizedResultLayout(
+  library: NativePretokenizerLibrary,
+): PretokenizedResultLayout {
   return readResultLayout(
     library,
     PRETOKENIZED_RESULT_LAYOUT_FIELD_COUNT,

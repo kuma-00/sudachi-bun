@@ -1,6 +1,10 @@
 import { expect, test } from "bun:test";
 
-import { formatSudachiError, parseTokenizeMode, SudachiError } from "./types.ts";
+import {
+  formatSudachiError,
+  parseTokenizeMode,
+  SudachiError,
+} from "./types.ts";
 
 test("parseTokenizeMode returns the provided mode when valid", () => {
   expect(parseTokenizeMode("B")).toBe("B");
@@ -22,5 +26,7 @@ test("formatSudachiError prefixes the code for SudachiError", () => {
     code: "TOKENIZER_CLOSED",
   });
 
-  expect(formatSudachiError(error)).toBe("[TOKENIZER_CLOSED] Tokenizer closed.");
+  expect(formatSudachiError(error)).toBe(
+    "[TOKENIZER_CLOSED] Tokenizer closed.",
+  );
 });

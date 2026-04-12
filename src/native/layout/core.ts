@@ -24,9 +24,12 @@ export function validateArrayLayout(
   }
 
   if (arrayLayoutKind !== 0 && arrayLayoutKind !== 1) {
-    throw new SudachiError(`Unsupported ${label} array layout kind: ${arrayLayoutKind}.`, {
-      code: "LAYOUT_MISMATCH",
-    });
+    throw new SudachiError(
+      `Unsupported ${label} array layout kind: ${arrayLayoutKind}.`,
+      {
+        code: "LAYOUT_MISMATCH",
+      },
+    );
   }
 }
 

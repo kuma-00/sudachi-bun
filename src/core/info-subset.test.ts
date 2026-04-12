@@ -1,10 +1,10 @@
 import { expect, test } from "bun:test";
 
-import { SudachiError, type InfoSubsetField } from "../types.ts";
+import { type InfoSubsetField, SudachiError } from "../types.ts";
 import {
   ALL_INFO_SUBSET_BITS,
-  INFO_SUBSET_FIELD_BITS,
   INFO_SUBSET_FFI_POS_TEXT_BIT,
+  INFO_SUBSET_FIELD_BITS,
   resolveInfoSubsetBits,
 } from "./info-subset.ts";
 
@@ -25,7 +25,9 @@ test("resolveInfoSubsetBits combines requested field bits", () => {
 test("resolveInfoSubsetBits uses POS text bit for pos field", () => {
   const bits = resolveInfoSubsetBits({ fields: ["pos"] });
   expect(bits).toBe(INFO_SUBSET_FIELD_BITS.pos);
-  expect((bits ?? 0) & INFO_SUBSET_FFI_POS_TEXT_BIT).toBe(INFO_SUBSET_FFI_POS_TEXT_BIT);
+  expect((bits ?? 0) & INFO_SUBSET_FFI_POS_TEXT_BIT).toBe(
+    INFO_SUBSET_FFI_POS_TEXT_BIT,
+  );
 });
 
 test("resolveInfoSubsetBits keeps unsupported field error style", () => {

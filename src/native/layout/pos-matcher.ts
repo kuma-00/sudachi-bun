@@ -15,7 +15,9 @@ function validatePosMatcherResultLayout(layout: PosMatcherResultLayout): void {
   );
 }
 
-export function readPosMatcherResultLayout(library: NativeSudachiLibrary): PosMatcherResultLayout {
+export function readPosMatcherResultLayout(
+  library: NativeSudachiLibrary,
+): PosMatcherResultLayout {
   return readResultLayout(
     library,
     POS_MATCHER_RESULT_LAYOUT_FIELD_COUNT,

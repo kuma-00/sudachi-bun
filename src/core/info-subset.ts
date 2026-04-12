@@ -1,4 +1,8 @@
-import { SudachiError, type InfoSubset, type InfoSubsetField } from "../types.ts";
+import {
+  type InfoSubset,
+  type InfoSubsetField,
+  SudachiError,
+} from "../types.ts";
 
 export const INFO_SUBSET_FFI_POS_TEXT_BIT = 1 << 30;
 
@@ -21,7 +25,9 @@ export const ALL_INFO_SUBSET_BITS =
   INFO_SUBSET_FIELD_BITS.reading |
   INFO_SUBSET_FIELD_BITS.synonymGroupIds;
 
-export function resolveInfoSubsetBits(options: InfoSubset | undefined): number | null {
+export function resolveInfoSubsetBits(
+  options: InfoSubset | undefined,
+): number | null {
   if (options === undefined) {
     return null;
   }

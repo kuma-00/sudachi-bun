@@ -1,14 +1,5 @@
-import { type Pointer } from "bun:ffi";
-
-import { openNativeHandleSession } from "../native-session.ts";
+import type { Pointer } from "bun:ffi";
 import { createNativeSudachiError } from "../native/error/mapper.ts";
-import {
-  loadLookupLibrary,
-  loadNativeLibrary,
-  readLookupResultLayout,
-  readMorphemeResultLayout,
-  readPosMatcherResultLayout,
-} from "../native.ts";
 import type {
   LookupResultLayout,
   MorphemeResultLayout,
@@ -16,11 +7,31 @@ import type {
   NativeSudachiLibrary,
   PosMatcherResultLayout,
 } from "../native/types.ts";
+import {
+  loadLookupLibrary,
+  loadNativeLibrary,
+  readLookupResultLayout,
+  readMorphemeResultLayout,
+  readPosMatcherResultLayout,
+} from "../native.ts";
+import { openNativeHandleSession } from "../native-session.ts";
 import { SudachiError, type TokenizerOptions } from "../types.ts";
-import { createTokenizerGateway, type NativeLookupSession, type NativeTokenizerSession, type TokenizerGateway } from "./tokenizer-gateway.ts";
-export type { NativeLookupSession, NativeTokenizerSession, TokenizerGateway } from "./tokenizer-gateway.ts";
+import {
+  createTokenizerGateway,
+  type NativeLookupSession,
+  type NativeTokenizerSession,
+  type TokenizerGateway,
+} from "./tokenizer-gateway.ts";
 
-function openNativeTokenizer(options: TokenizerOptions): NativeTokenizerSession {
+export type {
+  NativeLookupSession,
+  NativeTokenizerSession,
+  TokenizerGateway,
+} from "./tokenizer-gateway.ts";
+
+function openNativeTokenizer(
+  options: TokenizerOptions,
+): NativeTokenizerSession {
   const library = loadNativeLibrary(options);
   return openNativeHandleSession(
     library,
@@ -32,7 +43,12 @@ function openNativeTokenizer(options: TokenizerOptions): NativeTokenizerSession 
         options.dictPath,
         handleOut,
       ),
-    (loadedLibrary, status) => createNativeSudachiError(loadedLibrary, status, "Failed to create the tokenizer."),
+    (loadedLibrary, status) =>
+      createNativeSudachiError(
+        loadedLibrary,
+        status,
+        "Failed to create the tokenizer.",
+      ),
     "Tokenizer handle was null after initialization.",
   );
 }
@@ -61,7 +77,9 @@ export class TokenizerSessionManager {
   }
 
   get closed(): boolean {
-    return this.#library === null || this.#handle === null || this.#layout === null;
+    return (
+      this.#library === null || this.#handle === null || this.#layout === null
+    );
   }
 
   getOpenSession(): NativeTokenizerSession {

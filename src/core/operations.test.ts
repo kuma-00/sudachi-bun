@@ -1,6 +1,6 @@
 import { expect, spyOn, test } from "bun:test";
 
-import { type Morpheme } from "../types.ts";
+import type { Morpheme } from "../types.ts";
 import { MorphemeStateTracker } from "./morpheme-state.ts";
 import {
   splitMorpheme,
@@ -40,6 +40,14 @@ function createContext(gateway: TokenizerGateway): {
   };
 }
 
+function requireDefined<T>(value: T | undefined, label: string): T {
+  if (value === undefined) {
+    throw new Error(`${label} is undefined`);
+  }
+
+  return value;
+}
+
 test("tokenize attaches state and fallback split keeps remembered source projection", () => {
   const gateway: TokenizerGateway = {
     tokenize: (_text, projection) => {
@@ -65,21 +73,58 @@ test("tokenize attaches state and fallback split keeps remembered source project
   const splitMorphemeSpy = spyOn(gateway, "splitMorpheme");
   const context = createContext(gateway);
 
-  const tokenized = tokenizeMorphemes(context, "東京都", "dictionary_form", "C");
-  const firstSplit = splitMorpheme(context, tokenized[0]!, "reading", "A");
-  const secondSplit = splitMorpheme(context, firstSplit[0]!, "surface", "A");
+  const tokenized = tokenizeMorphemes(
+    context,
+    "東京都",
+    "dictionary_form",
+    "C",
+  );
+  const firstSplit = splitMorpheme(
+    context,
+    requireDefined(tokenized[0], "tokenized[0]"),
+    "reading",
+    "A",
+  );
+  const secondSplit = splitMorpheme(
+    context,
+    requireDefined(firstSplit[0], "firstSplit[0]"),
+    "surface",
+    "A",
+  );
 
   expect(context.state.getListState(tokenized)?.kind).toBe("owned");
   expect(context.state.getListState(firstSplit)?.kind).toBe("split");
   expect(secondSplit.length).toBeGreaterThan(0);
 
   expect(tokenizeSpy).toHaveBeenCalledTimes(2);
-  expect(tokenizeSpy.mock.calls[0]).toEqual(["東京都", "dictionary_form", "C", undefined]);
-  expect(tokenizeSpy.mock.calls[1]).toEqual(["東京都", "reading", "A", undefined]);
+  expect(tokenizeSpy.mock.calls[0]).toEqual([
+    "東京都",
+    "dictionary_form",
+    "C",
+    undefined,
+  ]);
+  expect(tokenizeSpy.mock.calls[1]).toEqual([
+    "東京都",
+    "reading",
+    "A",
+    undefined,
+  ]);
 
   expect(splitMorphemeSpy).toHaveBeenCalledTimes(2);
-  expect(splitMorphemeSpy.mock.calls[0]).toEqual(["東京都", "C", "reading", 0, "A"]);
-  expect(splitMorphemeSpy.mock.calls[1]).toEqual(["東京都", "A", "surface", 0, "A"]);
+  expect(splitMorphemeSpy.mock.calls[0]).toEqual([
+    "東京都",
+    "C",
+    "reading",
+    0,
+    "A",
+  ]);
+  expect(splitMorphemeSpy.mock.calls[1]).toEqual([
+    "東京都",
+    "A",
+    "surface",
+    0,
+    "A",
+  ]);
 });
 
 test("splitMorphemes uses whole-list split for owned lists", () => {
@@ -88,7 +133,10 @@ test("splitMorphemes uses whole-list split for owned lists", () => {
     lookup: () => [],
     compilePosMatcher: () => [],
     splitMorpheme: () => [createMorpheme("東京", 0, 6)],
-    splitMorphemes: () => [createMorpheme("東京", 0, 6), createMorpheme("都", 6, 9)],
+    splitMorphemes: () => [
+      createMorpheme("東京", 0, 6),
+      createMorpheme("都", 6, 9),
+    ],
   };
 
   const splitMorphemeSpy = spyOn(gateway, "splitMorpheme");
@@ -107,7 +155,7 @@ test("splitMorphemes uses whole-list split for owned lists", () => {
 
 test("splitMorphemes falls back to per-morpheme splitting for non-owned lists", () => {
   const gateway: TokenizerGateway = {
-    tokenize: (text, projection) => {
+    tokenize: (_text, projection) => {
       if (projection === "surface") {
         return [createMorpheme("東京都", 0, 9)];
       }
@@ -116,7 +164,13 @@ test("splitMorphemes falls back to per-morpheme splitting for non-owned lists", 
     },
     lookup: () => [],
     compilePosMatcher: () => [],
-    splitMorpheme: (_sourceText, _sourceMode, _projection, sourceIndex, _splitMode) => {
+    splitMorpheme: (
+      _sourceText,
+      _sourceMode,
+      _projection,
+      sourceIndex,
+      _splitMode,
+    ) => {
       if (sourceIndex === 0) {
         return [createMorpheme("東京", 0, 6), createMorpheme("都", 6, 9)];
       }
@@ -132,7 +186,12 @@ test("splitMorphemes falls back to per-morpheme splitting for non-owned lists", 
   const context = createContext(gateway);
 
   const tokenized = tokenizeMorphemes(context, "東京都", "surface", "C");
-  const splitList = splitMorpheme(context, tokenized[0]!, "reading", "A");
+  const splitList = splitMorpheme(
+    context,
+    requireDefined(tokenized[0], "tokenized[0]"),
+    "reading",
+    "A",
+  );
   const splitAgain = splitMorphemes(context, splitList, "normalized", "A");
 
   expect(splitAgain.length).toBeGreaterThan(0);

@@ -1,10 +1,12 @@
 import { afterEach, expect, spyOn, test } from "bun:test";
-
-import { Pretokenizer, createPretokenizer } from "./pretokenizer.ts";
 import * as ffi from "./ffi.ts";
+import type {
+  NativePretokenizerLibrary,
+  PretokenizedResultLayout,
+} from "./native/types.ts";
 import * as native from "./native.ts";
 import * as nativeSession from "./native-session.ts";
-import type { NativePretokenizerLibrary, PretokenizedResultLayout } from "./native/types.ts";
+import { createPretokenizer, Pretokenizer } from "./pretokenizer.ts";
 import type { PretokenizedToken } from "./types.ts";
 
 const FAKE_LAYOUT: PretokenizedResultLayout = {
@@ -67,7 +69,14 @@ function createLibrary(): NativePretokenizerLibrary {
       sudachi_set_pretokenizer_debug: () => 0,
       sudachi_free_pretokenizer: () => {},
       sudachi_pretokenize: () => 0,
-      sudachi_pretokenize_subset: (handle, inputUtf8, mode, projection, subsetBits, outResult) => {
+      sudachi_pretokenize_subset: (
+        _handle,
+        _inputUtf8,
+        _mode,
+        _projection,
+        _subsetBits,
+        outResult,
+      ) => {
         if (!(outResult instanceof BigUint64Array)) {
           throw new Error("pretokenize subset result buffer missing");
         }
@@ -76,9 +85,12 @@ function createLibrary(): NativePretokenizerLibrary {
       },
       sudachi_free_pretokenized_result: () => {},
       sudachi_get_pretokenized_result_layout: () => 0,
-      sudachi_get_last_error: () => "native error" as unknown as import("bun:ffi").CString,
+      sudachi_get_last_error: () =>
+        "native error" as unknown as import("bun:ffi").CString,
       sudachi_status_code_name: (status) =>
-        (status === 10 ? "PRETOKENIZE" : "UNKNOWN") as unknown as import("bun:ffi").CString,
+        (status === 10
+          ? "PRETOKENIZE"
+          : "UNKNOWN") as unknown as import("bun:ffi").CString,
     },
     close: () => {},
   };
@@ -86,10 +98,16 @@ function createLibrary(): NativePretokenizerLibrary {
 
 test("pretokenize forwards projection settings and preserves byte/char offsets", () => {
   const library = createLibrary();
-  const readSpy = trackSpy(spyOn(ffi, "readPretokenizedArray").mockReturnValue([PRETOKENIZED_TOKEN]));
-  const subsetSpy = trackSpy(spyOn(library.symbols, "sudachi_pretokenize_subset"));
+  const readSpy = trackSpy(
+    spyOn(ffi, "readPretokenizedArray").mockReturnValue([PRETOKENIZED_TOKEN]),
+  );
+  const subsetSpy = trackSpy(
+    spyOn(library.symbols, "sudachi_pretokenize_subset"),
+  );
   const tokenizeSpy = trackSpy(spyOn(library.symbols, "sudachi_pretokenize"));
-  const freeResultSpy = trackSpy(spyOn(library.symbols, "sudachi_free_pretokenized_result"));
+  const freeResultSpy = trackSpy(
+    spyOn(library.symbols, "sudachi_free_pretokenized_result"),
+  );
 
   const pretokenizer = new Pretokenizer(
     { library, layout: FAKE_LAYOUT, handle: 1 as never } as never,
@@ -125,13 +143,19 @@ test("pretokenize forwards projection settings and preserves byte/char offsets",
 
 function expectDebugPropagation(debug: boolean): void {
   const library = createLibrary();
-  const loadSpy = trackSpy(spyOn(native, "loadPretokenizerLibrary").mockReturnValue(library));
-  const openSessionSpy = trackSpy(spyOn(nativeSession, "openNativeHandleSession").mockReturnValue({
-    handle: 1 as never,
-    layout: FAKE_LAYOUT,
-    library,
-  }));
-  const debugSetterSpy = trackSpy(spyOn(library.symbols, "sudachi_set_pretokenizer_debug"));
+  const loadSpy = trackSpy(
+    spyOn(native, "loadPretokenizerLibrary").mockReturnValue(library),
+  );
+  const openSessionSpy = trackSpy(
+    spyOn(nativeSession, "openNativeHandleSession").mockReturnValue({
+      handle: 1 as never,
+      layout: FAKE_LAYOUT,
+      library,
+    }),
+  );
+  const debugSetterSpy = trackSpy(
+    spyOn(library.symbols, "sudachi_set_pretokenizer_debug"),
+  );
 
   const pretokenizer = createPretokenizer({
     dictPath: "/tmp/dict",
@@ -156,7 +180,9 @@ test("createPretokenizer forwards debug=false to the native loader", () => {
 
 test("close releases the pretokenizer handle and closes the library", () => {
   const library = createLibrary();
-  const freeTokenizerSpy = trackSpy(spyOn(library.symbols, "sudachi_free_pretokenizer"));
+  const freeTokenizerSpy = trackSpy(
+    spyOn(library.symbols, "sudachi_free_pretokenizer"),
+  );
   const closeSpy = trackSpy(spyOn(library, "close"));
 
   const pretokenizer = new Pretokenizer(
@@ -174,16 +200,27 @@ test("close releases the pretokenizer handle and closes the library", () => {
 
 test("createPretokenizer closes native resources when default parsing throws", () => {
   const library = createLibrary();
-  const freeTokenizerSpy = trackSpy(spyOn(library.symbols, "sudachi_free_pretokenizer"));
+  const freeTokenizerSpy = trackSpy(
+    spyOn(library.symbols, "sudachi_free_pretokenizer"),
+  );
   const closeSpy = trackSpy(spyOn(library, "close"));
-  const loadSpy = trackSpy(spyOn(native, "loadPretokenizerLibrary").mockReturnValue(library));
-  const openSessionSpy = trackSpy(spyOn(nativeSession, "openNativeHandleSession").mockReturnValue({
-    handle: 1 as never,
-    layout: FAKE_LAYOUT,
-    library,
-  }));
+  const loadSpy = trackSpy(
+    spyOn(native, "loadPretokenizerLibrary").mockReturnValue(library),
+  );
+  const openSessionSpy = trackSpy(
+    spyOn(nativeSession, "openNativeHandleSession").mockReturnValue({
+      handle: 1 as never,
+      layout: FAKE_LAYOUT,
+      library,
+    }),
+  );
 
-  expect(() => createPretokenizer({ dictPath: "/tmp/dict", mode: "invalid-mode" as never })).toThrow();
+  expect(() =>
+    createPretokenizer({
+      dictPath: "/tmp/dict",
+      mode: "invalid-mode" as never,
+    }),
+  ).toThrow();
 
   expect(loadSpy).toHaveBeenCalledTimes(1);
   expect(openSessionSpy).toHaveBeenCalledTimes(1);

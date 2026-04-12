@@ -1,14 +1,13 @@
 import { statSync } from "node:fs";
-
-import { resolveInputText } from "./input.ts";
-import type { CliTokenizeCommand } from "./types.ts";
 import {
-  SudachiError,
   parseSurfaceProjection,
+  SudachiError,
   type SurfaceProjection,
   type TokenizeMode,
   type TokenizerOptions,
 } from "../types.ts";
+import { resolveInputText } from "./input.ts";
+import type { CliTokenizeCommand } from "./types.ts";
 
 export interface TokenizeCliCommand extends TokenizerOptions {
   projection: SurfaceProjection;
@@ -44,7 +43,9 @@ function validateResourceDir(value: string | undefined): string | undefined {
   return value;
 }
 
-export function normalizeTokenizeCommand(parsed: CliTokenizeCommand): TokenizeCliCommand {
+export function normalizeTokenizeCommand(
+  parsed: CliTokenizeCommand,
+): TokenizeCliCommand {
   if (parsed.wakati && parsed.all) {
     throw invalidArgumentError("Cannot combine --wakati and --all.");
   }

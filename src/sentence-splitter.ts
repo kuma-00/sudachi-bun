@@ -1,15 +1,25 @@
-import { type Pointer } from "bun:ffi";
+import type { Pointer } from "bun:ffi";
 
 import { readSentenceSpanArray, type SentenceSpanOffsets } from "./ffi.ts";
-import { openNativeHandleSession, readOwnedNativeResult } from "./native-session.ts";
 import { createNativeSudachiError } from "./native/error/mapper.ts";
+import type {
+  NativeSentenceSplitterLibrary,
+  SentenceSpanResultLayout,
+} from "./native/types.ts";
 import {
   loadSentenceSplitterLibrary,
   readSentenceSpanResultLayout,
 } from "./native.ts";
-import type { NativeSentenceSplitterLibrary, SentenceSpanResultLayout } from "./native/types.ts";
+import {
+  openNativeHandleSession,
+  readOwnedNativeResult,
+} from "./native-session.ts";
 import { createUtf8ByteOffsetIndexMap } from "./shared/utf8-offset.ts";
-import { SudachiError, type SentenceSpan, type SentenceSplitterOptions } from "./types.ts";
+import {
+  type SentenceSpan,
+  type SentenceSplitterOptions,
+  SudachiError,
+} from "./types.ts";
 
 function invalidSentenceSpan(message: string): never {
   throw new SudachiError(message, {
@@ -18,7 +28,10 @@ function invalidSentenceSpan(message: string): never {
   });
 }
 
-function materializeSentenceSpans(text: string, offsets: SentenceSpanOffsets[]): SentenceSpan[] {
+function materializeSentenceSpans(
+  text: string,
+  offsets: SentenceSpanOffsets[],
+): SentenceSpan[] {
   if (offsets.length === 0) {
     return [];
   }
@@ -26,7 +39,9 @@ function materializeSentenceSpans(text: string, offsets: SentenceSpanOffsets[]):
   const boundaries: number[] = [];
   for (const { start, end } of offsets) {
     if (start > end) {
-      invalidSentenceSpan(`Sentence splitter returned an inverted span: ${start}..${end}.`);
+      invalidSentenceSpan(
+        `Sentence splitter returned an inverted span: ${start}..${end}.`,
+      );
     }
 
     boundaries.push(start, end);
@@ -45,7 +60,9 @@ function materializeSentenceSpans(text: string, offsets: SentenceSpanOffsets[]):
     const startIndex = indexMap.get(start);
     const endIndex = indexMap.get(end);
     if (startIndex === undefined || endIndex === undefined) {
-      invalidSentenceSpan(`Sentence splitter returned an unreadable span: ${start}..${end}.`);
+      invalidSentenceSpan(
+        `Sentence splitter returned an unreadable span: ${start}..${end}.`,
+      );
     }
 
     return {
@@ -62,7 +79,9 @@ interface NativeSentenceSplitterSession {
   library: NativeSentenceSplitterLibrary;
 }
 
-function openNativeSentenceSplitter(options: SentenceSplitterOptions): NativeSentenceSplitterSession {
+function openNativeSentenceSplitter(
+  options: SentenceSplitterOptions,
+): NativeSentenceSplitterSession {
   const library = loadSentenceSplitterLibrary(options);
   return openNativeHandleSession(
     library,
@@ -75,7 +94,11 @@ function openNativeSentenceSplitter(options: SentenceSplitterOptions): NativeSen
         handleOut,
       ),
     (loadedLibrary, status) =>
-      createNativeSudachiError(loadedLibrary, status, "Failed to create the sentence splitter."),
+      createNativeSudachiError(
+        loadedLibrary,
+        status,
+        "Failed to create the sentence splitter.",
+      ),
     "Sentence splitter handle was null after initialization.",
   );
 }
@@ -92,7 +115,9 @@ export class SentenceSplitter {
   }
 
   get closed(): boolean {
-    return this.#library === null || this.#handle === null || this.#layout === null;
+    return (
+      this.#library === null || this.#handle === null || this.#layout === null
+    );
   }
 
   split(text: string): SentenceSpan[] {
@@ -110,16 +135,28 @@ export class SentenceSplitter {
     }
 
     const resultOut = new BigUint64Array(1);
-    const status = library.symbols.sudachi_split_sentences(handle, text, resultOut);
+    const status = library.symbols.sudachi_split_sentences(
+      handle,
+      text,
+      resultOut,
+    );
     if (status !== 0) {
-      throw createNativeSudachiError(library, status, "Sentence splitting failed.");
+      throw createNativeSudachiError(
+        library,
+        status,
+        "Sentence splitting failed.",
+      );
     }
 
     return readOwnedNativeResult(
       resultOut,
       "Sentence splitter returned a null result pointer.",
       (resultPtr) => library.symbols.sudachi_free_sentence_spans(resultPtr),
-      (resultPtr) => materializeSentenceSpans(text, readSentenceSpanArray(resultPtr, layout)),
+      (resultPtr) =>
+        materializeSentenceSpans(
+          text,
+          readSentenceSpanArray(resultPtr, layout),
+        ),
     );
   }
 
@@ -143,6 +180,8 @@ export class SentenceSplitter {
   }
 }
 
-export function createSentenceSplitter(options: SentenceSplitterOptions): SentenceSplitter {
+export function createSentenceSplitter(
+  options: SentenceSplitterOptions,
+): SentenceSplitter {
   return new SentenceSplitter(openNativeSentenceSplitter(options));
 }

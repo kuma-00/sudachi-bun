@@ -1,9 +1,8 @@
 import { writeFileSync } from "node:fs";
-
-import { renderCliHelp } from "./cli/help.ts";
-import { type TokenizeOutputFormat } from "./cli/output.ts";
-import { normalizeTokenizeCommand } from "./cli/normalize.ts";
 import { runTokenizeCommand } from "./cli/execute.ts";
+import { renderCliHelp } from "./cli/help.ts";
+import { normalizeTokenizeCommand } from "./cli/normalize.ts";
+import type { TokenizeOutputFormat } from "./cli/output.ts";
 import { parseCliArgs } from "./cli/parser.ts";
 import type { CliSubcommand } from "./cli/types.ts";
 import { formatSudachiError, SudachiError } from "./types.ts";
@@ -19,8 +18,12 @@ function invalidArgumentError(message: string): SudachiError {
   });
 }
 
-function unimplementedCommandError(name: Exclude<CliSubcommand, "tokenize">): SudachiError {
-  return invalidArgumentError(`The ${name} command is not implemented yet. TODO delegate to dictionary layer.`);
+function unimplementedCommandError(
+  name: Exclude<CliSubcommand, "tokenize">,
+): SudachiError {
+  return invalidArgumentError(
+    `The ${name} command is not implemented yet. TODO delegate to dictionary layer.`,
+  );
 }
 
 function writeTokenizeOutput(outputPath: string, output: string): void {
@@ -28,7 +31,9 @@ function writeTokenizeOutput(outputPath: string, output: string): void {
     writeFileSync(outputPath, output);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    throw invalidArgumentError(`Failed to write output to ${outputPath}: ${message}`);
+    throw invalidArgumentError(
+      `Failed to write output to ${outputPath}: ${message}`,
+    );
   }
 }
 
@@ -57,7 +62,11 @@ export function runCli(
   try {
     if (parsed.command.kind === "tokenize") {
       const command = normalizeTokenizeCommand(parsed.command);
-      const format: TokenizeOutputFormat = parsed.command.all ? "all" : parsed.command.wakati ? "wakati" : "normal";
+      const format: TokenizeOutputFormat = parsed.command.all
+        ? "all"
+        : parsed.command.wakati
+          ? "wakati"
+          : "normal";
       const output = runTokenizeCommand(command, format, io);
 
       if (parsed.command.outputPath && parsed.command.outputPath !== "-") {

@@ -50,7 +50,8 @@ export type DictionarySetupResult = {
   sourceUrl: string;
 };
 
-const GITHUB_RELEASES_API = "https://api.github.com/repos/WorksApplications/SudachiDict/releases";
+const GITHUB_RELEASES_API =
+  "https://api.github.com/repos/WorksApplications/SudachiDict/releases";
 const DEFAULT_VERSION = "latest";
 const GENERIC_DICT_FILES = ["system.dic", "system.dic.test"] as const;
 const DICT_FILE_BY_TYPE: Record<DictionaryType, string> = {
@@ -88,7 +89,10 @@ function versionFromDirectoryName(name: string): string | null {
   return match?.[1] ?? null;
 }
 
-function compareVersionDescending(left: string | null, right: string | null): number {
+function compareVersionDescending(
+  left: string | null,
+  right: string | null,
+): number {
   if (left === null && right === null) {
     return 0;
   }
@@ -114,8 +118,13 @@ function compareVersionDescending(left: string | null, right: string | null): nu
   }
 }
 
-function inferReleaseTagFromAssetName(assetName: string, type: DictionaryType): string | undefined {
-  const match = new RegExp(`^sudachi-dictionary-(\\d+)-${type}\\.zip$`).exec(assetName);
+function inferReleaseTagFromAssetName(
+  assetName: string,
+  type: DictionaryType,
+): string | undefined {
+  const match = new RegExp(`^sudachi-dictionary-(\\d+)-${type}\\.zip$`).exec(
+    assetName,
+  );
   if (!match?.[1]) {
     return undefined;
   }
@@ -123,16 +132,16 @@ function inferReleaseTagFromAssetName(assetName: string, type: DictionaryType): 
   return `v${match[1]}`;
 }
 
-function findBestInstalledDictionary(
-  options: {
-    type: DictionaryType;
-    requestedVersion: string;
-    resolvedVersion: string;
-    beforeInstall: InstalledDictionary[];
-    afterInstall: InstalledDictionary[];
-  },
-): InstalledDictionary | null {
-  const installed = options.afterInstall.filter((entry) => entry.type === options.type);
+function findBestInstalledDictionary(options: {
+  type: DictionaryType;
+  requestedVersion: string;
+  resolvedVersion: string;
+  beforeInstall: InstalledDictionary[];
+  afterInstall: InstalledDictionary[];
+}): InstalledDictionary | null {
+  const installed = options.afterInstall.filter(
+    (entry) => entry.type === options.type,
+  );
   if (installed.length === 0) {
     return null;
   }
@@ -153,10 +162,14 @@ function findBestInstalledDictionary(
     }
   }
 
-  const beforePaths = new Set(options.beforeInstall.map((entry) => entry.dictPath));
+  const beforePaths = new Set(
+    options.beforeInstall.map((entry) => entry.dictPath),
+  );
   const added = installed.filter((entry) => !beforePaths.has(entry.dictPath));
   if (added.length > 0) {
-    added.sort((left, right) => compareVersionDescending(left.version, right.version));
+    added.sort((left, right) =>
+      compareVersionDescending(left.version, right.version),
+    );
     return added[0] ?? null;
   }
 
@@ -167,19 +180,32 @@ function findBestInstalledDictionary(
     return root;
   }
 
-  installed.sort((left, right) => compareVersionDescending(left.version, right.version));
+  installed.sort((left, right) =>
+    compareVersionDescending(left.version, right.version),
+  );
   return installed[0] ?? null;
 }
 
-export function listInstalledDictionaries(outDir: string): InstalledDictionary[] {
+export function listInstalledDictionaries(
+  outDir: string,
+): InstalledDictionary[] {
   const normalizedOutDir = toAbsolute(normalizeOutDir(outDir));
   const results: InstalledDictionary[] = [];
   const allTypes: DictionaryType[] = ["core", "small", "full"];
 
   const rootCandidates = [
-    { type: "core" as const, file: join(normalizedOutDir, DICT_FILE_BY_TYPE.core) },
-    { type: "small" as const, file: join(normalizedOutDir, DICT_FILE_BY_TYPE.small) },
-    { type: "full" as const, file: join(normalizedOutDir, DICT_FILE_BY_TYPE.full) },
+    {
+      type: "core" as const,
+      file: join(normalizedOutDir, DICT_FILE_BY_TYPE.core),
+    },
+    {
+      type: "small" as const,
+      file: join(normalizedOutDir, DICT_FILE_BY_TYPE.small),
+    },
+    {
+      type: "full" as const,
+      file: join(normalizedOutDir, DICT_FILE_BY_TYPE.full),
+    },
   ];
   for (const candidate of rootCandidates) {
     if (existsSync(candidate.file)) {
@@ -264,8 +290,12 @@ export function listInstalledDictionaries(outDir: string): InstalledDictionary[]
   return results;
 }
 
-export function findInstalledDictionary(options: SetupDictionaryOptions): InstalledDictionary | null {
-  const installed = listInstalledDictionaries(options.outDir).filter((entry) => entry.type === options.type);
+export function findInstalledDictionary(
+  options: SetupDictionaryOptions,
+): InstalledDictionary | null {
+  const installed = listInstalledDictionaries(options.outDir).filter(
+    (entry) => entry.type === options.type,
+  );
   if (installed.length === 0) {
     return null;
   }
@@ -276,7 +306,9 @@ export function findInstalledDictionary(options: SetupDictionaryOptions): Instal
     return exact ?? null;
   }
 
-  installed.sort((left, right) => compareVersionDescending(left.version, right.version));
+  installed.sort((left, right) =>
+    compareVersionDescending(left.version, right.version),
+  );
   return installed[0] ?? null;
 }
 
@@ -288,12 +320,18 @@ export function buildReleaseApiUrl(version: string): string {
   return `${GITHUB_RELEASES_API}/tags/${encodeURIComponent(version)}`;
 }
 
-export function buildExpectedAssetName(type: DictionaryType, releaseTag: string): string {
+export function buildExpectedAssetName(
+  type: DictionaryType,
+  releaseTag: string,
+): string {
   const versionPart = releaseTag.replace(/^v/, "");
   return `sudachi-dictionary-${versionPart}-${type}.zip`;
 }
 
-export function resolveDictionaryAsset(release: ReleaseMetadata, type: DictionaryType): ReleaseAsset {
+export function resolveDictionaryAsset(
+  release: ReleaseMetadata,
+  type: DictionaryType,
+): ReleaseAsset {
   const expectedName = buildExpectedAssetName(type, release.tag_name);
   const match = release.assets.find((asset) => asset.name === expectedName);
   if (match) {
@@ -343,7 +381,8 @@ export async function resolveDictionaryDownload(
   options: SetupDictionaryOptions,
 ): Promise<DictionaryDownload> {
   if (options.url) {
-    const name = options.url.split("/").pop() ?? `sudachi-dictionary-${options.type}.zip`;
+    const name =
+      options.url.split("/").pop() ?? `sudachi-dictionary-${options.type}.zip`;
     return {
       name,
       url: options.url,
@@ -364,10 +403,16 @@ async function ensureDirectory(path: string): Promise<void> {
   await mkdir(path, { recursive: true });
 }
 
-function toAbsoluteIfInsideOutDir(outDir: string, candidate: string): string | null {
+function toAbsoluteIfInsideOutDir(
+  outDir: string,
+  candidate: string,
+): string | null {
   const absoluteOutDir = toAbsolute(outDir);
   const absoluteCandidate = toAbsolute(join(outDir, candidate));
-  if (absoluteCandidate === absoluteOutDir || absoluteCandidate.startsWith(`${absoluteOutDir}${sep}`)) {
+  if (
+    absoluteCandidate === absoluteOutDir ||
+    absoluteCandidate.startsWith(`${absoluteOutDir}${sep}`)
+  ) {
     return absoluteCandidate;
   }
 
@@ -397,9 +442,15 @@ function resolveDictionaryPathsFromArchiveEntries(
   type: DictionaryType,
 ): string[] {
   const typeSpecificName = DICT_FILE_BY_TYPE[type];
-  const preferredNames = new Set([typeSpecificName, "system.dic", "system.dic.test"]);
+  const preferredNames = new Set([
+    typeSpecificName,
+    "system.dic",
+    "system.dic.test",
+  ]);
   const basename = (entry: string): string => entry.split("/").at(-1) ?? entry;
-  const preferredEntries = archiveEntries.filter((entry) => preferredNames.has(basename(entry)));
+  const preferredEntries = archiveEntries.filter((entry) =>
+    preferredNames.has(basename(entry)),
+  );
   const fallbackEntries =
     preferredEntries.length > 0
       ? preferredEntries
@@ -414,7 +465,10 @@ function resolveDictionaryPathsFromArchiveEntries(
   return [...new Set(resolved)];
 }
 
-export async function downloadArchive(url: string, archivePath: string): Promise<void> {
+export async function downloadArchive(
+  url: string,
+  archivePath: string,
+): Promise<void> {
   let response: Response;
   try {
     response = await fetch(url);
@@ -427,14 +481,19 @@ export async function downloadArchive(url: string, archivePath: string): Promise
   }
 
   if (!response.ok) {
-    throw new Error(`Dictionary download failed from ${url} with HTTP ${response.status} ${response.statusText}`);
+    throw new Error(
+      `Dictionary download failed from ${url} with HTTP ${response.status} ${response.statusText}`,
+    );
   }
 
   const body = await response.arrayBuffer();
   await Bun.write(archivePath, body);
 }
 
-export async function unzipArchive(archivePath: string, outDir: string): Promise<void> {
+export async function unzipArchive(
+  archivePath: string,
+  outDir: string,
+): Promise<void> {
   const unzip = Bun.spawn(["unzip", "-o", archivePath, "-d", outDir], {
     stdout: "inherit",
     stderr: "inherit",
@@ -449,14 +508,19 @@ export async function unzipArchive(archivePath: string, outDir: string): Promise
   }
 }
 
-export async function setupDictionary(options: SetupDictionaryOptions): Promise<DictionarySetupResult> {
+export async function setupDictionary(
+  options: SetupDictionaryOptions,
+): Promise<DictionarySetupResult> {
   const outDir = normalizeOutDir(options.outDir);
   const beforeInstall = listInstalledDictionaries(outDir);
   const download = await resolveDictionaryDownload(options);
   const archivePath = `${outDir}/${download.name}`;
   const resolvedVersion = download.releaseTag ?? options.version;
   const fallbackExtractedDir = extractedDirFromVersion(outDir, resolvedVersion);
-  const fallbackDictPath = join(fallbackExtractedDir, DICT_FILE_BY_TYPE[options.type]);
+  const fallbackDictPath = join(
+    fallbackExtractedDir,
+    DICT_FILE_BY_TYPE[options.type],
+  );
 
   await ensureDirectory(outDir);
 
@@ -468,7 +532,11 @@ export async function setupDictionary(options: SetupDictionaryOptions): Promise<
 
   await downloadArchive(download.url, archivePath);
   const archiveEntries = await listArchiveEntries(archivePath);
-  const extractedDictPaths = resolveDictionaryPathsFromArchiveEntries(outDir, archiveEntries, options.type);
+  const extractedDictPaths = resolveDictionaryPathsFromArchiveEntries(
+    outDir,
+    archiveEntries,
+    options.type,
+  );
   if (extractedDictPaths.length === 0) {
     throw new Error(
       `The downloaded archive does not contain a dictionary file for type "${options.type}".\n` +
@@ -487,8 +555,11 @@ export async function setupDictionary(options: SetupDictionaryOptions): Promise<
     beforeInstall,
     afterInstall: listInstalledDictionaries(outDir),
   });
-  const dictPathFromArchive = extractedDictPaths.find((candidatePath) => existsSync(candidatePath));
-  const dictPathCandidate = dictPathFromArchive ?? installed?.dictPath ?? fallbackDictPath;
+  const dictPathFromArchive = extractedDictPaths.find((candidatePath) =>
+    existsSync(candidatePath),
+  );
+  const dictPathCandidate =
+    dictPathFromArchive ?? installed?.dictPath ?? fallbackDictPath;
   if (!existsSync(dictPathCandidate)) {
     throw new Error(
       `Could not locate extracted dictionary file after installation.\n` +
@@ -497,7 +568,9 @@ export async function setupDictionary(options: SetupDictionaryOptions): Promise<
         `archive: ${toAbsolute(archivePath)}`,
     );
   }
-  const extractedDir = dictPathFromArchive ? dirname(dictPathFromArchive) : (installed?.baseDir ?? fallbackExtractedDir);
+  const extractedDir = dictPathFromArchive
+    ? dirname(dictPathFromArchive)
+    : (installed?.baseDir ?? fallbackExtractedDir);
   const dictPath = dictPathCandidate;
 
   console.log(`Dictionary setup complete: ${outDir}`);
@@ -513,7 +586,9 @@ export async function setupDictionary(options: SetupDictionaryOptions): Promise<
   };
 }
 
-export async function ensureDictionary(options: EnsureDictionaryOptions): Promise<DictionarySetupResult> {
+export async function ensureDictionary(
+  options: EnsureDictionaryOptions,
+): Promise<DictionarySetupResult> {
   const outDir = normalizeOutDir(options.outDir);
   if (!options.forceDownload) {
     const installed = findInstalledDictionary({

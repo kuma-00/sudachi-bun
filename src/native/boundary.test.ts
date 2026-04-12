@@ -4,8 +4,10 @@ import * as native from "./index.ts";
 
 function createNativeErrorSymbols(errorText = "native error") {
   return {
-    sudachi_get_last_error: () => errorText as unknown as import("bun:ffi").CString,
-    sudachi_status_code_name: () => "TOKENIZE" as unknown as import("bun:ffi").CString,
+    sudachi_get_last_error: () =>
+      errorText as unknown as import("bun:ffi").CString,
+    sudachi_status_code_name: () =>
+      "TOKENIZE" as unknown as import("bun:ffi").CString,
   };
 }
 
@@ -83,8 +85,12 @@ test("createNative*Library functions are callable without real FFI", () => {
 
   expect(typeof tokenizerLibrary.symbols.sudachi_tokenize).toBe("function");
   expect(typeof lookupLibrary.symbols.sudachi_lookup).toBe("function");
-  expect(typeof pretokenizerLibrary.symbols.sudachi_pretokenize).toBe("function");
-  expect(typeof sentenceSplitterLibrary.symbols.sudachi_split_sentences).toBe("function");
+  expect(typeof pretokenizerLibrary.symbols.sudachi_pretokenize).toBe(
+    "function",
+  );
+  expect(typeof sentenceSplitterLibrary.symbols.sudachi_split_sentences).toBe(
+    "function",
+  );
 
   tokenizerLibrary.close();
   lookupLibrary.close();
@@ -94,7 +100,9 @@ test("createNative*Library functions are callable without real FFI", () => {
 });
 
 test("layout and error helpers are callable from native barrel", () => {
-  expect(() => native.validateArrayLayout(1, 1, 8, 0, "test layout")).not.toThrow();
+  expect(() =>
+    native.validateArrayLayout(1, 1, 8, 0, "test layout"),
+  ).not.toThrow();
 
   const errorLibrary = {
     symbols: {

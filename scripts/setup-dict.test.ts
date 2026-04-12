@@ -1,21 +1,25 @@
 import { afterEach, expect, mock, spyOn, test } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import {
   buildExpectedAssetName,
+  type DictionaryType,
   downloadArchive,
   ensureDictionary,
   resolveDictionaryAsset,
   setupDictionary,
-  type DictionaryType,
   unzipArchive,
 } from "../src/dictionary.ts";
 
-import {
-  parseSetupDictionaryArgs,
-} from "./setup-dict.ts";
+import { parseSetupDictionaryArgs } from "./setup-dict.ts";
 
 afterEach(() => {
   mock.restore();
@@ -50,7 +54,12 @@ function mockUnzipFlow(
 
 test("parseSetupDictionaryArgs supports inline values", () => {
   expect(
-    parseSetupDictionaryArgs(["--type=full", "--version=v20260116", "--out=./cache", "--url=https://example.com/dict.zip"]),
+    parseSetupDictionaryArgs([
+      "--type=full",
+      "--version=v20260116",
+      "--out=./cache",
+      "--url=https://example.com/dict.zip",
+    ]),
   ).toEqual({
     type: "full",
     version: "v20260116",
@@ -60,7 +69,9 @@ test("parseSetupDictionaryArgs supports inline values", () => {
 });
 
 test("buildExpectedAssetName strips the v prefix from release tags", () => {
-  expect(buildExpectedAssetName("core", "v20260116")).toBe("sudachi-dictionary-20260116-core.zip");
+  expect(buildExpectedAssetName("core", "v20260116")).toBe(
+    "sudachi-dictionary-20260116-core.zip",
+  );
 });
 
 test("resolveDictionaryAsset matches the expected asset name", () => {
@@ -68,8 +79,14 @@ test("resolveDictionaryAsset matches the expected asset name", () => {
     {
       tag_name: "v20260116",
       assets: [
-        { name: "sudachi-dictionary-20260116-core.zip", browser_download_url: "https://example.com/core.zip" },
-        { name: "sudachi-dictionary-20260116-full.zip", browser_download_url: "https://example.com/full.zip" },
+        {
+          name: "sudachi-dictionary-20260116-core.zip",
+          browser_download_url: "https://example.com/core.zip",
+        },
+        {
+          name: "sudachi-dictionary-20260116-full.zip",
+          browser_download_url: "https://example.com/full.zip",
+        },
       ],
       html_url: "https://example.com/release",
     },
@@ -84,7 +101,12 @@ test("resolveDictionaryAsset reports available assets when missing", () => {
     resolveDictionaryAsset(
       {
         tag_name: "v20260116",
-        assets: [{ name: "other.zip", browser_download_url: "https://example.com/other.zip" }],
+        assets: [
+          {
+            name: "other.zip",
+            browser_download_url: "https://example.com/other.zip",
+          },
+        ],
       },
       "small" as DictionaryType,
     ),
@@ -100,9 +122,14 @@ test("downloadArchive saves fetched bytes to the specified archive path", async 
     new Response(payload.buffer, { status: 200 }) as never,
   );
 
-  await downloadArchive("https://example.com/sudachi-dictionary.zip", archivePath);
+  await downloadArchive(
+    "https://example.com/sudachi-dictionary.zip",
+    archivePath,
+  );
 
-  expect(fetchSpy).toHaveBeenCalledWith("https://example.com/sudachi-dictionary.zip");
+  expect(fetchSpy).toHaveBeenCalledWith(
+    "https://example.com/sudachi-dictionary.zip",
+  );
   expect(readFileSync(archivePath)).toEqual(Buffer.from(payload));
 });
 
@@ -173,7 +200,9 @@ test("setupDictionary resolves dictPath from extracted files even when --url fil
   const outDir = mkdtempSync(join(tmpdir(), "sudachi-dict-setup-resolve-"));
   const payload = new Uint8Array([0x50, 0x4b, 0x03, 0x04, 0x00]);
 
-  spyOn(globalThis, "fetch").mockResolvedValue(new Response(payload.buffer, { status: 200 }) as never);
+  spyOn(globalThis, "fetch").mockResolvedValue(
+    new Response(payload.buffer, { status: 200 }) as never,
+  );
   mockUnzipFlow(
     ["sudachi-dictionary-20260116/system_core.dic"],
     (outputDir) => {
@@ -192,12 +221,16 @@ test("setupDictionary resolves dictPath from extracted files even when --url fil
   });
 
   expect(result.version).toBe("20260116");
-  expect(result.dictPath).toBe(join(outDir, "sudachi-dictionary-20260116", "system_core.dic"));
+  expect(result.dictPath).toBe(
+    join(outDir, "sudachi-dictionary-20260116", "system_core.dic"),
+  );
   expect(existsSync(result.dictPath)).toBe(true);
 });
 
 test("setupDictionary prefers overwritten root dictionary when no new path is added", async () => {
-  const outDir = mkdtempSync(join(tmpdir(), "sudachi-dict-setup-overwrite-root-"));
+  const outDir = mkdtempSync(
+    join(tmpdir(), "sudachi-dict-setup-overwrite-root-"),
+  );
   const rootDictPath = join(outDir, "system_core.dic");
   const olderVersionDir = join(outDir, "sudachi-dictionary-20270101");
   const olderVersionPath = join(olderVersionDir, "system_core.dic");
@@ -207,7 +240,9 @@ test("setupDictionary prefers overwritten root dictionary when no new path is ad
   writeFileSync(olderVersionPath, "older");
   writeFileSync(rootDictPath, "before");
 
-  spyOn(globalThis, "fetch").mockResolvedValue(new Response(payload.buffer, { status: 200 }) as never);
+  spyOn(globalThis, "fetch").mockResolvedValue(
+    new Response(payload.buffer, { status: 200 }) as never,
+  );
   mockUnzipFlow(["system_core.dic"], () => {
     writeFileSync(rootDictPath, "after");
   });
@@ -272,31 +307,40 @@ test("ensureDictionary reuses an existing dictionary even when --url is explicit
 test("ensureDictionary downloads and extracts when no installed dictionary exists", async () => {
   const outDir = mkdtempSync(join(tmpdir(), "sudachi-dict-ensure-"));
 
-  const fetchSpy = spyOn(globalThis, "fetch").mockImplementation((url: string | URL | Request) => {
-    const endpoint = String(url);
-    if (endpoint.includes("/releases/tags/v20260116")) {
-      return Promise.resolve(
-        new Response(
-          JSON.stringify({
-            tag_name: "v20260116",
-            assets: [
-              {
-                name: "sudachi-dictionary-20260116-core.zip",
-                browser_download_url: "https://example.com/sudachi-dictionary-20260116-core.zip",
-              },
-            ],
+  const fetchSpy = spyOn(globalThis, "fetch").mockImplementation(
+    (url: string | URL | Request) => {
+      const endpoint = String(url);
+      if (endpoint.includes("/releases/tags/v20260116")) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              tag_name: "v20260116",
+              assets: [
+                {
+                  name: "sudachi-dictionary-20260116-core.zip",
+                  browser_download_url:
+                    "https://example.com/sudachi-dictionary-20260116-core.zip",
+                },
+              ],
+            }),
+            { status: 200 },
+          ),
+        ) as Promise<Response>;
+      }
+
+      if (
+        endpoint === "https://example.com/sudachi-dictionary-20260116-core.zip"
+      ) {
+        return Promise.resolve(
+          new Response(new Uint8Array([0x50, 0x4b, 0x03, 0x04]).buffer, {
+            status: 200,
           }),
-          { status: 200 },
-        ),
-      ) as Promise<Response>;
-    }
+        );
+      }
 
-    if (endpoint === "https://example.com/sudachi-dictionary-20260116-core.zip") {
-      return Promise.resolve(new Response(new Uint8Array([0x50, 0x4b, 0x03, 0x04]).buffer, { status: 200 }));
-    }
-
-    throw new Error(`unexpected fetch url: ${endpoint}`);
-  });
+      throw new Error(`unexpected fetch url: ${endpoint}`);
+    },
+  );
 
   const spawnSpy = spyOn(Bun, "spawn").mockImplementation((args: string[]) => {
     if (args[0] === "unzip" && args[1] === "-Z1") {
@@ -337,13 +381,17 @@ test("ensureDictionary downloads and extracts when no installed dictionary exist
 });
 
 test("setupDictionary throws when archive does not contain the expected dictionary file", async () => {
-  const outDir = mkdtempSync(join(tmpdir(), "sudachi-dict-setup-missing-dict-entry-"));
+  const outDir = mkdtempSync(
+    join(tmpdir(), "sudachi-dict-setup-missing-dict-entry-"),
+  );
   const payload = new Uint8Array([0x50, 0x4b, 0x03, 0x04, 0x00]);
   const existingDir = join(outDir, "sudachi-dictionary-20250101");
   mkdirSync(existingDir, { recursive: true });
   writeFileSync(join(existingDir, "system_core.dic"), "old-dummy");
 
-  spyOn(globalThis, "fetch").mockResolvedValue(new Response(payload.buffer, { status: 200 }) as never);
+  spyOn(globalThis, "fetch").mockResolvedValue(
+    new Response(payload.buffer, { status: 200 }) as never,
+  );
   spyOn(Bun, "spawn").mockImplementation((args: string[]) => {
     if (args[0] === "unzip" && args[1] === "-Z1") {
       return {
@@ -376,7 +424,9 @@ test("setupDictionary accepts Rust-style system.dic paths from custom archives",
   const outDir = mkdtempSync(join(tmpdir(), "sudachi-dict-setup-system-dic-"));
   const payload = new Uint8Array([0x50, 0x4b, 0x03, 0x04, 0x00]);
 
-  spyOn(globalThis, "fetch").mockResolvedValue(new Response(payload.buffer, { status: 200 }) as never);
+  spyOn(globalThis, "fetch").mockResolvedValue(
+    new Response(payload.buffer, { status: 200 }) as never,
+  );
   mockUnzipFlow(["sudachi/resources/system.dic"], (outputDir) => {
     const extracted = join(outputDir, "sudachi", "resources");
     mkdirSync(extracted, { recursive: true });
@@ -391,7 +441,9 @@ test("setupDictionary accepts Rust-style system.dic paths from custom archives",
     url: "https://example.com/custom-dict.zip",
   });
 
-  expect(result.dictPath).toBe(join(outDir, "sudachi", "resources", "system.dic"));
+  expect(result.dictPath).toBe(
+    join(outDir, "sudachi", "resources", "system.dic"),
+  );
   expect(existsSync(result.dictPath)).toBe(true);
 });
 

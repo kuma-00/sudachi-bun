@@ -1,5 +1,5 @@
-import { resolve } from "node:path";
 import { expect, test } from "bun:test";
+import { resolve } from "node:path";
 
 import {
   loadLookupLibrary,
@@ -86,7 +86,10 @@ test("loadPretokenizerLibrary resolves path and passes pretokenizer symbol defs 
     };
   }) as NativePretokenizerLibraryLoader;
 
-  const library = loadPretokenizerLibrary({ libraryPath: inputPath }, openLibrary);
+  const library = loadPretokenizerLibrary(
+    { libraryPath: inputPath },
+    openLibrary,
+  );
 
   expect(receivedPath).toBe(expectedPath);
   expect(receivedDefinitions).toBe(PRETOKENIZER_NATIVE_SYMBOL_DEFS);
@@ -112,7 +115,10 @@ test("loadSentenceSplitterLibrary resolves path and passes sentence splitter sym
     };
   }) as NativeSentenceSplitterLibraryLoader;
 
-  const library = loadSentenceSplitterLibrary({ libraryPath: inputPath }, openLibrary);
+  const library = loadSentenceSplitterLibrary(
+    { libraryPath: inputPath },
+    openLibrary,
+  );
 
   expect(receivedPath).toBe(expectedPath);
   expect(receivedDefinitions).toBe(SENTENCE_SPLITTER_NATIVE_SYMBOL_DEFS);

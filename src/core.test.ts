@@ -1,9 +1,6 @@
 import { expect, spyOn, test } from "bun:test";
-
+import { createTokenizer, PosMatcher, type Tokenizer } from "./core.ts";
 import * as ffi from "./ffi.ts";
-import * as native from "./native.ts";
-import  { PosMatcher, Tokenizer, createTokenizer } from "./core.ts";
-import type { LookupEntry, Morpheme } from "./types.ts";
 import type {
   LookupResultLayout,
   MorphemeResultLayout,
@@ -11,10 +8,17 @@ import type {
   NativeSudachiLibrary,
   PosMatcherResultLayout,
 } from "./native/types.ts";
+import * as native from "./native.ts";
+import type { LookupEntry, Morpheme } from "./types.ts";
 
 const INFO_SUBSET_FFI_POS_TEXT_BIT = 1 << 30;
 const DEFAULT_PROJECTION = "surface";
-const PROJECTION_VALUES = new Set(["surface", "normalized", "dictionary_form", "reading"]);
+const PROJECTION_VALUES = new Set([
+  "surface",
+  "normalized",
+  "dictionary_form",
+  "reading",
+]);
 
 const MORPHEME_LAYOUT: MorphemeResultLayout = {
   layoutVersion: 1,
@@ -59,7 +63,12 @@ const POS_MATCHER_LAYOUT: PosMatcherResultLayout = {
   resultSize: 2,
 };
 
-function createMorpheme(surface: string, begin: number, end: number, posId = 0): Morpheme {
+function createMorpheme(
+  surface: string,
+  begin: number,
+  end: number,
+  posId = 0,
+): Morpheme {
   return {
     surface,
     normalized: surface,
@@ -76,7 +85,13 @@ function createMorpheme(surface: string, begin: number, end: number, posId = 0):
   };
 }
 
-function createSubsetMorpheme(surface: string, begin: number, end: number, posId = 0, pos = ""): Morpheme {
+function createSubsetMorpheme(
+  surface: string,
+  begin: number,
+  end: number,
+  posId = 0,
+  pos = "",
+): Morpheme {
   return {
     surface,
     normalized: "",
@@ -93,7 +108,13 @@ function createSubsetMorpheme(surface: string, begin: number, end: number, posId
   };
 }
 
-function createLookupEntry(surface: string, wordId: string, dictionaryId: number, isOov: boolean, posId = 0): LookupEntry {
+function createLookupEntry(
+  surface: string,
+  wordId: string,
+  dictionaryId: number,
+  isOov: boolean,
+  posId = 0,
+): LookupEntry {
   return {
     surface,
     pos: "名詞,普通名詞,一般,*,*,*",
@@ -102,6 +123,14 @@ function createLookupEntry(surface: string, wordId: string, dictionaryId: number
     dictionaryId,
     isOov,
   };
+}
+
+function requireDefined<T>(value: T | undefined, label: string): T {
+  if (value === undefined) {
+    throw new Error(`${label} is undefined`);
+  }
+
+  return value;
 }
 
 function createSubsetLookupEntry(
@@ -122,17 +151,30 @@ function createSubsetLookupEntry(
   };
 }
 
-function projectionArg(args: readonly unknown[], index: number): string | undefined {
+function projectionArg(
+  args: readonly unknown[],
+  index: number,
+): string | undefined {
   const value = args[index];
-  return typeof value === "string" && PROJECTION_VALUES.has(value) ? value : undefined;
+  return typeof value === "string" && PROJECTION_VALUES.has(value)
+    ? value
+    : undefined;
 }
 
-function surfaceArg(args: readonly unknown[], index: number): string | undefined {
+function surfaceArg(
+  args: readonly unknown[],
+  index: number,
+): string | undefined {
   const value = args[index];
-  return typeof value === "string" && !PROJECTION_VALUES.has(value) ? value : undefined;
+  return typeof value === "string" && !PROJECTION_VALUES.has(value)
+    ? value
+    : undefined;
 }
 
-function resultBufferArg(args: readonly unknown[], index: number): BigUint64Array | undefined {
+function resultBufferArg(
+  args: readonly unknown[],
+  index: number,
+): BigUint64Array | undefined {
   const value = args[index];
   return value instanceof BigUint64Array ? value : undefined;
 }
@@ -140,7 +182,12 @@ function resultBufferArg(args: readonly unknown[], index: number): BigUint64Arra
 function createMockLibrary(): NativeSudachiLibrary {
   return {
     symbols: {
-      sudachi_create_tokenizer: (_configPath, _resourceDir, _dictPath, outHandle) => {
+      sudachi_create_tokenizer: (
+        _configPath,
+        _resourceDir,
+        _dictPath,
+        outHandle,
+      ) => {
         (outHandle as BigUint64Array)[0] = 1n;
         return 0;
       },
@@ -170,12 +217,18 @@ function createMockLibrary(): NativeSudachiLibrary {
           return 0;
         }
 
-        if (mode === 2 && subsetBits === ((1 << 2) | INFO_SUBSET_FFI_POS_TEXT_BIT)) {
+        if (
+          mode === 2 &&
+          subsetBits === ((1 << 2) | INFO_SUBSET_FFI_POS_TEXT_BIT)
+        ) {
           outResult[0] = 43n;
           return 0;
         }
 
-        if (mode === 2 && subsetBits === ((1 << 0) | (1 << 2) | INFO_SUBSET_FFI_POS_TEXT_BIT)) {
+        if (
+          mode === 2 &&
+          subsetBits === ((1 << 0) | (1 << 2) | INFO_SUBSET_FFI_POS_TEXT_BIT)
+        ) {
           outResult[0] = 44n;
           return 0;
         }
@@ -264,12 +317,15 @@ function createMockLookupLibrary(): NativeLookupLibrary {
         if (!outResult) {
           throw new Error("lookup subset result buffer missing");
         }
-        if (surface === "東京" && subsetBits === (1 << 0)) {
+        if (surface === "東京" && subsetBits === 1 << 0) {
           outResult[0] = 52n;
           return 0;
         }
 
-        if (surface === "東京" && subsetBits === ((1 << 2) | INFO_SUBSET_FFI_POS_TEXT_BIT)) {
+        if (
+          surface === "東京" &&
+          subsetBits === ((1 << 2) | INFO_SUBSET_FFI_POS_TEXT_BIT)
+        ) {
           outResult[0] = 54n;
           return 0;
         }
@@ -293,72 +349,115 @@ function withTokenizer(
     tokenizer: Tokenizer;
     readSpy: ReturnType<typeof spyOn<typeof ffi, "readMorphemeArray">>;
     readLookupSpy: ReturnType<typeof spyOn<typeof ffi, "readLookupEntryArray">>;
-    readPosMatcherSpy: ReturnType<typeof spyOn<typeof ffi, "readPosMatcherIdArray">>;
+    readPosMatcherSpy: ReturnType<
+      typeof spyOn<typeof ffi, "readPosMatcherIdArray">
+    >;
     loadSpy: ReturnType<typeof spyOn<typeof native, "loadNativeLibrary">>;
     lookupLoadSpy: ReturnType<typeof spyOn<typeof native, "loadLookupLibrary">>;
-    layoutSpy: ReturnType<typeof spyOn<typeof native, "readMorphemeResultLayout">>;
-    lookupLayoutSpy: ReturnType<typeof spyOn<typeof native, "readLookupResultLayout">>;
-    posMatcherLayoutSpy: ReturnType<typeof spyOn<typeof native, "readPosMatcherResultLayout">>;
+    layoutSpy: ReturnType<
+      typeof spyOn<typeof native, "readMorphemeResultLayout">
+    >;
+    lookupLayoutSpy: ReturnType<
+      typeof spyOn<typeof native, "readLookupResultLayout">
+    >;
+    posMatcherLayoutSpy: ReturnType<
+      typeof spyOn<typeof native, "readPosMatcherResultLayout">
+    >;
   }) => void,
 ): void {
   const library = createMockLibrary();
   const lookupLibrary = createMockLookupLibrary();
   const loadSpy = spyOn(native, "loadNativeLibrary").mockReturnValue(library);
-  const lookupLoadSpy = spyOn(native, "loadLookupLibrary").mockReturnValue(lookupLibrary);
-  const layoutSpy = spyOn(native, "readMorphemeResultLayout").mockReturnValue(MORPHEME_LAYOUT);
-  const lookupLayoutSpy = spyOn(native, "readLookupResultLayout").mockReturnValue(LOOKUP_LAYOUT);
-  const posMatcherLayoutSpy = spyOn(native, "readPosMatcherResultLayout").mockReturnValue(POS_MATCHER_LAYOUT);
-  const readSpy = spyOn(ffi, "readMorphemeArray").mockImplementation((resultPtr) => {
-    switch (Number(resultPtr)) {
-      case 2:
-        return [createMorpheme("東京都", 0, 9), createMorpheme("に", 9, 12)];
-      case 30:
-        return [createMorpheme("東京", 0, 6), createMorpheme("都", 6, 9)];
-      case 31:
-        return [createMorpheme("に", 9, 12)];
-      case 32:
-        return [createMorpheme("東京", 0, 6)];
-      case 33:
-        return [createMorpheme("都", 6, 9)];
-      case 40:
-        return [createMorpheme("東京", 0, 6), createMorpheme("都", 6, 9), createMorpheme("に", 9, 12)];
-      case 41:
-        return [
-          createSubsetMorpheme("東京", 0, 6, 7),
-          createSubsetMorpheme("都", 6, 9, 8),
-          createSubsetMorpheme("に", 9, 12, 9),
-        ];
-      case 42:
-        return [createSubsetMorpheme("東京", 0, 6, 11)];
-      case 43:
-        return [createSubsetMorpheme("東京", 0, 6, 12, "名詞,普通名詞,一般,*,*,*")];
-      case 44:
-        return [
-          createSubsetMorpheme("東京", 0, 6, 13, "名詞,普通名詞,一般,*,*,*"),
-          createSubsetMorpheme("都", 6, 9, 14, "名詞,普通名詞,一般,*,*,*"),
-          createSubsetMorpheme("に", 9, 12, 15, "助詞,格助詞,*,*,*,*"),
-        ];
-      default:
-        return [];
-    }
-  });
-  const readLookupSpy = spyOn(ffi, "readLookupEntryArray").mockImplementation((resultPtr) => {
-    switch (Number(resultPtr)) {
-      case 50:
-        return [createLookupEntry("東京", "(0, 5)", 0, false), createLookupEntry("東京", "(0, 6)", 0, false)];
-      case 51:
-        return [createLookupEntry("に", "(0, 1)", 0, false)];
-      case 52:
-        return [createSubsetLookupEntry("東京", "(0, 5)", 0, false)];
-      case 54:
-        return [createSubsetLookupEntry("東京", "(0, 5)", 0, false, 4, "名詞,普通名詞,一般,*,*,*")];
-      case 53:
-        return [createSubsetLookupEntry("に", "(0, 1)", 0, false, 4)];
-      default:
-        return [];
-    }
-  });
-  const readPosMatcherSpy = spyOn(ffi, "readPosMatcherIdArray").mockImplementation((resultPtr) => {
+  const lookupLoadSpy = spyOn(native, "loadLookupLibrary").mockReturnValue(
+    lookupLibrary,
+  );
+  const layoutSpy = spyOn(native, "readMorphemeResultLayout").mockReturnValue(
+    MORPHEME_LAYOUT,
+  );
+  const lookupLayoutSpy = spyOn(
+    native,
+    "readLookupResultLayout",
+  ).mockReturnValue(LOOKUP_LAYOUT);
+  const posMatcherLayoutSpy = spyOn(
+    native,
+    "readPosMatcherResultLayout",
+  ).mockReturnValue(POS_MATCHER_LAYOUT);
+  const readSpy = spyOn(ffi, "readMorphemeArray").mockImplementation(
+    (resultPtr) => {
+      switch (Number(resultPtr)) {
+        case 2:
+          return [createMorpheme("東京都", 0, 9), createMorpheme("に", 9, 12)];
+        case 30:
+          return [createMorpheme("東京", 0, 6), createMorpheme("都", 6, 9)];
+        case 31:
+          return [createMorpheme("に", 9, 12)];
+        case 32:
+          return [createMorpheme("東京", 0, 6)];
+        case 33:
+          return [createMorpheme("都", 6, 9)];
+        case 40:
+          return [
+            createMorpheme("東京", 0, 6),
+            createMorpheme("都", 6, 9),
+            createMorpheme("に", 9, 12),
+          ];
+        case 41:
+          return [
+            createSubsetMorpheme("東京", 0, 6, 7),
+            createSubsetMorpheme("都", 6, 9, 8),
+            createSubsetMorpheme("に", 9, 12, 9),
+          ];
+        case 42:
+          return [createSubsetMorpheme("東京", 0, 6, 11)];
+        case 43:
+          return [
+            createSubsetMorpheme("東京", 0, 6, 12, "名詞,普通名詞,一般,*,*,*"),
+          ];
+        case 44:
+          return [
+            createSubsetMorpheme("東京", 0, 6, 13, "名詞,普通名詞,一般,*,*,*"),
+            createSubsetMorpheme("都", 6, 9, 14, "名詞,普通名詞,一般,*,*,*"),
+            createSubsetMorpheme("に", 9, 12, 15, "助詞,格助詞,*,*,*,*"),
+          ];
+        default:
+          return [];
+      }
+    },
+  );
+  const readLookupSpy = spyOn(ffi, "readLookupEntryArray").mockImplementation(
+    (resultPtr) => {
+      switch (Number(resultPtr)) {
+        case 50:
+          return [
+            createLookupEntry("東京", "(0, 5)", 0, false),
+            createLookupEntry("東京", "(0, 6)", 0, false),
+          ];
+        case 51:
+          return [createLookupEntry("に", "(0, 1)", 0, false)];
+        case 52:
+          return [createSubsetLookupEntry("東京", "(0, 5)", 0, false)];
+        case 54:
+          return [
+            createSubsetLookupEntry(
+              "東京",
+              "(0, 5)",
+              0,
+              false,
+              4,
+              "名詞,普通名詞,一般,*,*,*",
+            ),
+          ];
+        case 53:
+          return [createSubsetLookupEntry("に", "(0, 1)", 0, false, 4)];
+        default:
+          return [];
+      }
+    },
+  );
+  const readPosMatcherSpy = spyOn(
+    ffi,
+    "readPosMatcherIdArray",
+  ).mockImplementation((resultPtr) => {
     switch (Number(resultPtr)) {
       case 60:
         return [1, 3];
@@ -398,16 +497,26 @@ function withTokenizer(
 test("lookup uses the dedicated native lookup symbol and decoder", () => {
   withTokenizer(({ lookupLibrary, tokenizer, readLookupSpy }) => {
     const lookupSpy = spyOn(lookupLibrary.symbols, "sudachi_lookup");
-    const subsetLookupSpy = spyOn(lookupLibrary.symbols, "sudachi_lookup_subset");
+    const subsetLookupSpy = spyOn(
+      lookupLibrary.symbols,
+      "sudachi_lookup_subset",
+    );
     const freeSpy = spyOn(lookupLibrary.symbols, "sudachi_free_lookup_result");
 
     try {
-      expect(tokenizer.lookup({ surface: "東京", projection: DEFAULT_PROJECTION })).toEqual([
+      expect(
+        tokenizer.lookup({ surface: "東京", projection: DEFAULT_PROJECTION }),
+      ).toEqual([
         createLookupEntry("東京", "(0, 5)", 0, false),
         createLookupEntry("東京", "(0, 6)", 0, false),
       ]);
       expect(lookupSpy).toHaveBeenCalledTimes(1);
-      expect(lookupSpy).toHaveBeenCalledWith(1 as never, "東京", 0, expect.any(BigUint64Array));
+      expect(lookupSpy).toHaveBeenCalledWith(
+        1 as never,
+        "東京",
+        0,
+        expect.any(BigUint64Array),
+      );
       expect(subsetLookupSpy).not.toHaveBeenCalled();
       expect(readLookupSpy).toHaveBeenCalledTimes(1);
       expect(freeSpy).toHaveBeenCalledTimes(1);
@@ -427,12 +536,21 @@ test("tokenize forwards the required projection to the native symbol", () => {
     const freeSpy = spyOn(library.symbols, "sudachi_free_result");
 
     try {
-      expect(tokenizer.tokenize({ text: "東京都に", projection: DEFAULT_PROJECTION, mode: "C" })).toEqual([
-        createMorpheme("東京都", 0, 9),
-        createMorpheme("に", 9, 12),
-      ]);
+      expect(
+        tokenizer.tokenize({
+          text: "東京都に",
+          projection: DEFAULT_PROJECTION,
+          mode: "C",
+        }),
+      ).toEqual([createMorpheme("東京都", 0, 9), createMorpheme("に", 9, 12)]);
       expect(tokenizeSpy).toHaveBeenCalledTimes(1);
-      expect(tokenizeSpy).toHaveBeenCalledWith(1 as never, "東京都に", 2, 0, expect.any(BigUint64Array));
+      expect(tokenizeSpy).toHaveBeenCalledWith(
+        1 as never,
+        "東京都に",
+        2,
+        0,
+        expect.any(BigUint64Array),
+      );
       expect(subsetTokenizeSpy).not.toHaveBeenCalled();
       expect(readSpy).toHaveBeenCalledTimes(1);
       expect(freeSpy).toHaveBeenCalledTimes(1);
@@ -524,13 +642,20 @@ test("tokenize with pos uses the subset native symbol and returns the POS string
 test("lookup with fields uses the subset native symbol and returns defaulted omitted fields", () => {
   withTokenizer(({ lookupLibrary, tokenizer, readLookupSpy }) => {
     const lookupSpy = spyOn(lookupLibrary.symbols, "sudachi_lookup");
-    const subsetLookupSpy = spyOn(lookupLibrary.symbols, "sudachi_lookup_subset");
+    const subsetLookupSpy = spyOn(
+      lookupLibrary.symbols,
+      "sudachi_lookup_subset",
+    );
     const freeSpy = spyOn(lookupLibrary.symbols, "sudachi_free_lookup_result");
 
     try {
-      expect(tokenizer.lookup({ surface: "東京", projection: DEFAULT_PROJECTION, subset: { fields: ["surface"] } })).toEqual([
-        createSubsetLookupEntry("東京", "(0, 5)", 0, false),
-      ]);
+      expect(
+        tokenizer.lookup({
+          surface: "東京",
+          projection: DEFAULT_PROJECTION,
+          subset: { fields: ["surface"] },
+        }),
+      ).toEqual([createSubsetLookupEntry("東京", "(0, 5)", 0, false)]);
       expect(lookupSpy).not.toHaveBeenCalled();
       expect(subsetLookupSpy).toHaveBeenCalledTimes(1);
       expect(subsetLookupSpy).toHaveBeenCalledWith(
@@ -554,11 +679,18 @@ test("lookup with fields uses the subset native symbol and returns defaulted omi
 test("lookup with pos uses the subset native symbol and returns the POS string", () => {
   withTokenizer(({ lookupLibrary, tokenizer, readLookupSpy }) => {
     const lookupSpy = spyOn(lookupLibrary.symbols, "sudachi_lookup");
-    const subsetLookupSpy = spyOn(lookupLibrary.symbols, "sudachi_lookup_subset");
+    const subsetLookupSpy = spyOn(
+      lookupLibrary.symbols,
+      "sudachi_lookup_subset",
+    );
     const freeSpy = spyOn(lookupLibrary.symbols, "sudachi_free_lookup_result");
 
     try {
-      const result = tokenizer.lookup({ surface: "東京", projection: DEFAULT_PROJECTION, subset: { fields: ["pos"] } });
+      const result = tokenizer.lookup({
+        surface: "東京",
+        projection: DEFAULT_PROJECTION,
+        subset: { fields: ["pos"] },
+      });
       expect(result).toHaveLength(1);
       expect(result[0]?.pos).toBe("名詞,普通名詞,一般,*,*,*");
       expect(lookupSpy).not.toHaveBeenCalled();
@@ -587,12 +719,17 @@ test("createPosMatcher compiles native POS matcher ids and filters morphemes and
     const freeSpy = spyOn(library.symbols, "sudachi_free_pos_matcher_result");
 
     try {
-      const matcher = tokenizer.createPosMatcher({ patterns: [["名詞"], [null, null, null, null, null, "終止形-一般"]] });
+      const matcher = tokenizer.createPosMatcher({
+        patterns: [["名詞"], [null, null, null, null, null, "終止形-一般"]],
+      });
       expect(matcher).toBeInstanceOf(PosMatcher);
       expect(compileSpy).toHaveBeenCalledTimes(1);
       expect(compileSpy).toHaveBeenCalledWith(
         1 as never,
-        JSON.stringify([["名詞", null, null, null, null, null], [null, null, null, null, null, "終止形-一般"]]),
+        JSON.stringify([
+          ["名詞", null, null, null, null, null],
+          [null, null, null, null, null, "終止形-一般"],
+        ]),
         expect.any(BigUint64Array),
       );
       expect(readPosMatcherSpy).toHaveBeenCalledTimes(1);
@@ -605,16 +742,26 @@ test("createPosMatcher compiles native POS matcher ids and filters morphemes and
       ];
       expect(matcher.matches(1)).toBe(true);
       expect(matcher.matches(2)).toBe(false);
-      expect(matcher.filter(morphemes)).toEqual([morphemes[0]!, morphemes[2]!]);
+      expect(matcher.filter(morphemes)).toEqual([
+        requireDefined(morphemes[0], "morphemes[0]"),
+        requireDefined(morphemes[2], "morphemes[2]"),
+      ]);
 
       const lookupEntries = [
         createLookupEntry("東京", "(0, 5)", 0, false, 1),
         createLookupEntry("都", "(0, 6)", 0, false, 2),
         createLookupEntry("に", "(0, 1)", 0, false, 3),
       ];
-      expect(matcher.matches(lookupEntries[0]!)).toBe(true);
-      expect(matcher.matches(lookupEntries[1]!)).toBe(false);
-      expect(matcher.filter(lookupEntries)).toEqual([lookupEntries[0]!, lookupEntries[2]!]);
+      expect(
+        matcher.matches(requireDefined(lookupEntries[0], "lookupEntries[0]")),
+      ).toBe(true);
+      expect(
+        matcher.matches(requireDefined(lookupEntries[1], "lookupEntries[1]")),
+      ).toBe(false);
+      expect(matcher.filter(lookupEntries)).toEqual([
+        requireDefined(lookupEntries[0], "lookupEntries[0]"),
+        requireDefined(lookupEntries[2], "lookupEntries[2]"),
+      ]);
     } finally {
       freeSpy.mockRestore();
       compileSpy.mockRestore();
@@ -627,9 +774,11 @@ test("createPosMatcher rejects patterns longer than six entries before calling n
     const compileSpy = spyOn(library.symbols, "sudachi_compile_pos_matcher");
 
     try {
-      expect(() => tokenizer.createPosMatcher({ patterns: [["a", "b", "c", "d", "e", "f", "g"]] })).toThrow(
-        "POS matcher patterns must have at most 6 items.",
-      );
+      expect(() =>
+        tokenizer.createPosMatcher({
+          patterns: [["a", "b", "c", "d", "e", "f", "g"]],
+        }),
+      ).toThrow("POS matcher patterns must have at most 6 items.");
       expect(compileSpy).not.toHaveBeenCalled();
     } finally {
       compileSpy.mockRestore();
@@ -639,17 +788,23 @@ test("createPosMatcher rejects patterns longer than six entries before calling n
 
 test("lookup loads the lookup library lazily and reuses its layout", () => {
   withTokenizer(({ tokenizer, lookupLoadSpy, lookupLayoutSpy }) => {
-    tokenizer.tokenize({ text: "東京都に", projection: DEFAULT_PROJECTION, mode: "C" });
+    tokenizer.tokenize({
+      text: "東京都に",
+      projection: DEFAULT_PROJECTION,
+      mode: "C",
+    });
     expect(lookupLoadSpy).not.toHaveBeenCalled();
     expect(lookupLayoutSpy).not.toHaveBeenCalled();
 
-    expect(tokenizer.lookup({ surface: "東京", projection: DEFAULT_PROJECTION })).toEqual([
+    expect(
+      tokenizer.lookup({ surface: "東京", projection: DEFAULT_PROJECTION }),
+    ).toEqual([
       createLookupEntry("東京", "(0, 5)", 0, false),
       createLookupEntry("東京", "(0, 6)", 0, false),
     ]);
-    expect(tokenizer.lookup({ surface: "に", projection: DEFAULT_PROJECTION })).toEqual([
-      createLookupEntry("に", "(0, 1)", 0, false),
-    ]);
+    expect(
+      tokenizer.lookup({ surface: "に", projection: DEFAULT_PROJECTION }),
+    ).toEqual([createLookupEntry("に", "(0, 1)", 0, false)]);
     expect(lookupLoadSpy).toHaveBeenCalledTimes(1);
     expect(lookupLayoutSpy).toHaveBeenCalledTimes(1);
   });
@@ -659,13 +814,20 @@ test("split uses the native morpheme resplit symbol and reuses the decoder", () 
   withTokenizer(({ library, tokenizer, readSpy }) => {
     const splitSpy = spyOn(library.symbols, "sudachi_split_morpheme");
     const freeSpy = spyOn(library.symbols, "sudachi_free_result");
-    const morphemes = tokenizer.tokenize({ text: "東京都に", projection: DEFAULT_PROJECTION, mode: "C" });
+    const morphemes = tokenizer.tokenize({
+      text: "東京都に",
+      projection: DEFAULT_PROJECTION,
+      mode: "C",
+    });
 
     try {
-      expect(tokenizer.split({ morpheme: morphemes[0]!, projection: DEFAULT_PROJECTION, mode: "A" })).toEqual([
-        createMorpheme("東京", 0, 6),
-        createMorpheme("都", 6, 9),
-      ]);
+      expect(
+        tokenizer.split({
+          morpheme: requireDefined(morphemes[0], "morphemes[0]"),
+          projection: DEFAULT_PROJECTION,
+          mode: "A",
+        }),
+      ).toEqual([createMorpheme("東京", 0, 6), createMorpheme("都", 6, 9)]);
       expect(splitSpy).toHaveBeenCalledTimes(1);
       expect(splitSpy).toHaveBeenCalledWith(
         1 as never,
@@ -688,10 +850,20 @@ test("splitInto uses the native whole-list split symbol for owned lists", () => 
   withTokenizer(({ library, tokenizer }) => {
     const listSplitSpy = spyOn(library.symbols, "sudachi_split_morphemes");
     const singleSplitSpy = spyOn(library.symbols, "sudachi_split_morpheme");
-    const morphemes = tokenizer.tokenize({ text: "東京都に", projection: DEFAULT_PROJECTION, mode: "C" });
+    const morphemes = tokenizer.tokenize({
+      text: "東京都に",
+      projection: DEFAULT_PROJECTION,
+      mode: "C",
+    });
 
     try {
-      expect(tokenizer.splitInto({ morphemes, projection: DEFAULT_PROJECTION, mode: "A" })).toEqual([
+      expect(
+        tokenizer.splitInto({
+          morphemes,
+          projection: DEFAULT_PROJECTION,
+          mode: "A",
+        }),
+      ).toEqual([
         createMorpheme("東京", 0, 6),
         createMorpheme("都", 6, 9),
         createMorpheme("に", 9, 12),
@@ -717,14 +889,25 @@ test("splitInto on a split result stays on the per-morpheme path", () => {
   withTokenizer(({ library, tokenizer }) => {
     const listSplitSpy = spyOn(library.symbols, "sudachi_split_morphemes");
     const singleSplitSpy = spyOn(library.symbols, "sudachi_split_morpheme");
-    const morphemes = tokenizer.tokenize({ text: "東京都に", projection: DEFAULT_PROJECTION, mode: "C" });
-    const splitResult = tokenizer.split({ morpheme: morphemes[0]!, projection: DEFAULT_PROJECTION, mode: "A" });
+    const morphemes = tokenizer.tokenize({
+      text: "東京都に",
+      projection: DEFAULT_PROJECTION,
+      mode: "C",
+    });
+    const splitResult = tokenizer.split({
+      morpheme: requireDefined(morphemes[0], "morphemes[0]"),
+      projection: DEFAULT_PROJECTION,
+      mode: "A",
+    });
 
     try {
-      expect(tokenizer.splitInto({ morphemes: splitResult, projection: DEFAULT_PROJECTION, mode: "A" })).toEqual([
-        createMorpheme("東京", 0, 6),
-        createMorpheme("都", 6, 9),
-      ]);
+      expect(
+        tokenizer.splitInto({
+          morphemes: splitResult,
+          projection: DEFAULT_PROJECTION,
+          mode: "A",
+        }),
+      ).toEqual([createMorpheme("東京", 0, 6), createMorpheme("都", 6, 9)]);
       expect(listSplitSpy).not.toHaveBeenCalled();
       expect(singleSplitSpy).toHaveBeenCalledTimes(3);
       expect(singleSplitSpy).toHaveBeenNthCalledWith(
@@ -768,14 +951,21 @@ test("splitInto falls back when a tokenize result array was mutated", () => {
   withTokenizer(({ library, tokenizer }) => {
     const listSplitSpy = spyOn(library.symbols, "sudachi_split_morphemes");
     const singleSplitSpy = spyOn(library.symbols, "sudachi_split_morpheme");
-    const morphemes = tokenizer.tokenize({ text: "東京都に", projection: DEFAULT_PROJECTION, mode: "C" });
+    const morphemes = tokenizer.tokenize({
+      text: "東京都に",
+      projection: DEFAULT_PROJECTION,
+      mode: "C",
+    });
     morphemes.pop();
 
     try {
-      expect(tokenizer.splitInto({ morphemes, projection: DEFAULT_PROJECTION, mode: "A" })).toEqual([
-        createMorpheme("東京", 0, 6),
-        createMorpheme("都", 6, 9),
-      ]);
+      expect(
+        tokenizer.splitInto({
+          morphemes,
+          projection: DEFAULT_PROJECTION,
+          mode: "A",
+        }),
+      ).toEqual([createMorpheme("東京", 0, 6), createMorpheme("都", 6, 9)]);
       expect(listSplitSpy).not.toHaveBeenCalled();
       expect(singleSplitSpy).toHaveBeenCalledTimes(1);
       expect(singleSplitSpy).toHaveBeenCalledWith(
@@ -798,11 +988,21 @@ test("splitInto falls back to per-morpheme splits for copied lists", () => {
   withTokenizer(({ library, tokenizer }) => {
     const listSplitSpy = spyOn(library.symbols, "sudachi_split_morphemes");
     const singleSplitSpy = spyOn(library.symbols, "sudachi_split_morpheme");
-    const morphemes = tokenizer.tokenize({ text: "東京都に", projection: DEFAULT_PROJECTION, mode: "C" });
+    const morphemes = tokenizer.tokenize({
+      text: "東京都に",
+      projection: DEFAULT_PROJECTION,
+      mode: "C",
+    });
     const copied = [...morphemes];
 
     try {
-      expect(tokenizer.splitInto({ morphemes: copied, projection: DEFAULT_PROJECTION, mode: "A" })).toEqual([
+      expect(
+        tokenizer.splitInto({
+          morphemes: copied,
+          projection: DEFAULT_PROJECTION,
+          mode: "A",
+        }),
+      ).toEqual([
         createMorpheme("東京", 0, 6),
         createMorpheme("都", 6, 9),
         createMorpheme("に", 9, 12),
@@ -840,11 +1040,21 @@ test("splitInto fallback resolves copied morphemes even when projection changes"
   withTokenizer(({ library, tokenizer }) => {
     const listSplitSpy = spyOn(library.symbols, "sudachi_split_morphemes");
     const singleSplitSpy = spyOn(library.symbols, "sudachi_split_morpheme");
-    const morphemes = tokenizer.tokenize({ text: "東京都に", projection: DEFAULT_PROJECTION, mode: "C" });
+    const morphemes = tokenizer.tokenize({
+      text: "東京都に",
+      projection: DEFAULT_PROJECTION,
+      mode: "C",
+    });
     const copied = [...morphemes];
 
     try {
-      expect(tokenizer.splitInto({ morphemes: copied, projection: "reading", mode: "A" })).toEqual([
+      expect(
+        tokenizer.splitInto({
+          morphemes: copied,
+          projection: "reading",
+          mode: "A",
+        }),
+      ).toEqual([
         createMorpheme("東京", 0, 6),
         createMorpheme("都", 6, 9),
         createMorpheme("に", 9, 12),
@@ -880,21 +1090,32 @@ test("splitInto fallback resolves copied morphemes even when projection changes"
 
 test("split rejects morphemes that were not created by the tokenizer", () => {
   withTokenizer(({ tokenizer }) => {
-    expect(() => tokenizer.split({ morpheme: createMorpheme("東京都", 0, 9), projection: DEFAULT_PROJECTION, mode: "A" })).toThrow(
-      "Morpheme was not created by this tokenizer.",
-    );
+    expect(() =>
+      tokenizer.split({
+        morpheme: createMorpheme("東京都", 0, 9),
+        projection: DEFAULT_PROJECTION,
+        mode: "A",
+      }),
+    ).toThrow("Morpheme was not created by this tokenizer.");
   });
 });
 
 test("createTokenizer closes the native library when initialization fails", () => {
   const library = createMockLibrary();
   const loadSpy = spyOn(native, "loadNativeLibrary").mockReturnValue(library);
-  const layoutSpy = spyOn(native, "readMorphemeResultLayout").mockReturnValue(MORPHEME_LAYOUT);
-  const createSpy = spyOn(library.symbols, "sudachi_create_tokenizer").mockReturnValue(7);
+  const layoutSpy = spyOn(native, "readMorphemeResultLayout").mockReturnValue(
+    MORPHEME_LAYOUT,
+  );
+  const createSpy = spyOn(
+    library.symbols,
+    "sudachi_create_tokenizer",
+  ).mockReturnValue(7);
   const closeSpy = spyOn(library, "close");
 
   try {
-    expect(() => createTokenizer({ dictPath: "/tmp/dict" })).toThrow("native error");
+    expect(() => createTokenizer({ dictPath: "/tmp/dict" })).toThrow(
+      "native error",
+    );
     expect(closeSpy).toHaveBeenCalledTimes(1);
     expect(createSpy).toHaveBeenCalledTimes(1);
   } finally {

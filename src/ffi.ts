@@ -1,14 +1,18 @@
-import { CString, read, type Pointer } from "bun:ffi";
-
-import type { LookupEntry, Morpheme, PretokenizedToken, SudachiErrorCode } from "./types.ts";
-import { SudachiError } from "./types.ts";
+import { CString, type Pointer, read } from "bun:ffi";
 import type {
   LookupResultLayout,
   MorphemeResultLayout,
-  PretokenizedResultLayout,
   PosMatcherResultLayout,
+  PretokenizedResultLayout,
   SentenceSpanResultLayout,
 } from "./native/types.ts";
+import type {
+  LookupEntry,
+  Morpheme,
+  PretokenizedToken,
+  SudachiErrorCode,
+} from "./types.ts";
+import { SudachiError } from "./types.ts";
 
 export interface SentenceSpanOffsets {
   start: number;
@@ -23,7 +27,11 @@ function addOffset(ptrValue: Pointer, offset: number): Pointer {
   return ((ptrValue as number) + offset) as Pointer;
 }
 
-function fail(message: string, code: SudachiErrorCode, nativeStatus?: number): never {
+function fail(
+  message: string,
+  code: SudachiErrorCode,
+  nativeStatus?: number,
+): never {
   throw new SudachiError(message, {
     code,
     nativeStatus,
@@ -51,10 +59,18 @@ function readUnsigned16Field(base: Pointer, offset: number): number {
   return read.u16(base, offset);
 }
 
-function readUsizeField(base: Pointer, offset: number, fieldName: string): number {
+function readUsizeField(
+  base: Pointer,
+  offset: number,
+  fieldName: string,
+): number {
   const raw = read.u64(base, offset);
   if (raw > BigInt(Number.MAX_SAFE_INTEGER)) {
-    fail(`${fieldName} exceeded the safe integer range: ${raw.toString()}`, "INTERNAL", 255);
+    fail(
+      `${fieldName} exceeded the safe integer range: ${raw.toString()}`,
+      "INTERNAL",
+      255,
+    );
   }
 
   return Number(raw);
@@ -84,13 +100,18 @@ function readArrayEntries(
   const length = readUsizeField(arrayPtr, arrayLenOffset, `${label} length`);
   const pointerSize = arrayLenOffset - arrayItemsOffset;
   if (arrayLayoutKind === 1 && pointerSize === 0) {
-    fail(`Invalid ${label} pointer layout: pointer size was zero.`, "LAYOUT_MISMATCH");
+    fail(
+      `Invalid ${label} pointer layout: pointer size was zero.`,
+      "LAYOUT_MISMATCH",
+    );
   }
 
   const entries = new Array<{ entryBase: Pointer; index: number }>(length);
   for (let index = 0; index < length; index += 1) {
     const entryBase =
-      arrayLayoutKind === 1 ? toPointer(read.ptr(itemsPtr, index * pointerSize)) : addOffset(itemsPtr, index * resultSize);
+      arrayLayoutKind === 1
+        ? toPointer(read.ptr(itemsPtr, index * pointerSize))
+        : addOffset(itemsPtr, index * resultSize);
     entries[index] = { entryBase, index };
   }
 
@@ -102,9 +123,16 @@ interface SynonymGroupIdLayout {
   synonymGroupIdsLenOffset: number;
 }
 
-function readSynonymGroupIds(base: Pointer, layout: SynonymGroupIdLayout): number[] {
+function readSynonymGroupIds(
+  base: Pointer,
+  layout: SynonymGroupIdLayout,
+): number[] {
   const rawPtr = toPointer(read.ptr(base, layout.synonymGroupIdsOffset));
-  const length = readUsizeField(base, layout.synonymGroupIdsLenOffset, "synonymGroupIdsLen");
+  const length = readUsizeField(
+    base,
+    layout.synonymGroupIdsLenOffset,
+    "synonymGroupIdsLen",
+  );
   if ((rawPtr as number) === 0 || length === 0) {
     return [];
   }
@@ -116,7 +144,10 @@ function readSynonymGroupIds(base: Pointer, layout: SynonymGroupIdLayout): numbe
   return ids;
 }
 
-function readMorpheme(itemPtr: Pointer, layout: MorphemeResultLayout): Morpheme {
+function readMorpheme(
+  itemPtr: Pointer,
+  layout: MorphemeResultLayout,
+): Morpheme {
   return {
     surface: readCStringField(itemPtr, layout.surfaceOffset),
     normalized: readCStringField(itemPtr, layout.normalizedOffset),
@@ -133,7 +164,10 @@ function readMorpheme(itemPtr: Pointer, layout: MorphemeResultLayout): Morpheme 
   };
 }
 
-export function readMorphemeArray(arrayPtr: Pointer, layout: MorphemeResultLayout): Morpheme[] {
+export function readMorphemeArray(
+  arrayPtr: Pointer,
+  layout: MorphemeResultLayout,
+): Morpheme[] {
   const entries = readArrayEntries(
     arrayPtr,
     layout.arrayItemsOffset,
@@ -151,7 +185,10 @@ export function readMorphemeArray(arrayPtr: Pointer, layout: MorphemeResultLayou
   return results;
 }
 
-function readLookupEntry(itemPtr: Pointer, layout: LookupResultLayout): LookupEntry {
+function readLookupEntry(
+  itemPtr: Pointer,
+  layout: LookupResultLayout,
+): LookupEntry {
   return {
     surface: readCStringField(itemPtr, layout.surfaceOffset),
     pos: readCStringField(itemPtr, layout.posOffset),
@@ -162,7 +199,10 @@ function readLookupEntry(itemPtr: Pointer, layout: LookupResultLayout): LookupEn
   };
 }
 
-export function readLookupEntryArray(arrayPtr: Pointer, layout: LookupResultLayout): LookupEntry[] {
+export function readLookupEntryArray(
+  arrayPtr: Pointer,
+  layout: LookupResultLayout,
+): LookupEntry[] {
   const entries = readArrayEntries(
     arrayPtr,
     layout.arrayItemsOffset,
@@ -180,7 +220,10 @@ export function readLookupEntryArray(arrayPtr: Pointer, layout: LookupResultLayo
   return results;
 }
 
-function readPretokenizedToken(itemPtr: Pointer, layout: PretokenizedResultLayout): PretokenizedToken {
+function readPretokenizedToken(
+  itemPtr: Pointer,
+  layout: PretokenizedResultLayout,
+): PretokenizedToken {
   return {
     surface: readCStringField(itemPtr, layout.surfaceOffset),
     normalized: readCStringField(itemPtr, layout.normalizedOffset),
@@ -199,7 +242,10 @@ function readPretokenizedToken(itemPtr: Pointer, layout: PretokenizedResultLayou
   };
 }
 
-export function readPretokenizedArray(arrayPtr: Pointer, layout: PretokenizedResultLayout): PretokenizedToken[] {
+export function readPretokenizedArray(
+  arrayPtr: Pointer,
+  layout: PretokenizedResultLayout,
+): PretokenizedToken[] {
   const entries = readArrayEntries(
     arrayPtr,
     layout.arrayItemsOffset,
@@ -217,7 +263,10 @@ export function readPretokenizedArray(arrayPtr: Pointer, layout: PretokenizedRes
   return results;
 }
 
-export function readPosMatcherIdArray(arrayPtr: Pointer, layout: PosMatcherResultLayout): number[] {
+export function readPosMatcherIdArray(
+  arrayPtr: Pointer,
+  layout: PosMatcherResultLayout,
+): number[] {
   const entries = readArrayEntries(
     arrayPtr,
     layout.arrayItemsOffset,
@@ -235,7 +284,10 @@ export function readPosMatcherIdArray(arrayPtr: Pointer, layout: PosMatcherResul
   return results;
 }
 
-export function readSentenceSpanArray(arrayPtr: Pointer, layout: SentenceSpanResultLayout): SentenceSpanOffsets[] {
+export function readSentenceSpanArray(
+  arrayPtr: Pointer,
+  layout: SentenceSpanResultLayout,
+): SentenceSpanOffsets[] {
   const entries = readArrayEntries(
     arrayPtr,
     layout.arrayItemsOffset,

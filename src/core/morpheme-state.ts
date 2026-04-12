@@ -16,12 +16,23 @@ export interface MorphemeState {
   index: number;
 }
 
-const MORPHEME_LIST_STATE = new WeakMap<readonly Morpheme[], MorphemeListState>();
+const MORPHEME_LIST_STATE = new WeakMap<
+  readonly Morpheme[],
+  MorphemeListState
+>();
 const MORPHEME_STATE = new WeakMap<Morpheme, MorphemeState>();
 
 export class MorphemeStateTracker {
-  attach(tokenizer: object, morphemes: Morpheme[], text: string, mode: TokenizeMode, kind: MorphemeListStateKind): Morpheme[] {
-    const signatures = morphemes.map((morpheme) => this.#morphemeSignature(morpheme));
+  attach(
+    tokenizer: object,
+    morphemes: Morpheme[],
+    text: string,
+    mode: TokenizeMode,
+    kind: MorphemeListStateKind,
+  ): Morpheme[] {
+    const signatures = morphemes.map((morpheme) =>
+      this.#morphemeSignature(morpheme),
+    );
     const listState: MorphemeListState = {
       tokenizer,
       text,
@@ -48,7 +59,10 @@ export class MorphemeStateTracker {
 
   getMorphemeState(tokenizer: object, morpheme: Morpheme): MorphemeState {
     const morphemeState = MORPHEME_STATE.get(morpheme);
-    if (morphemeState === undefined || morphemeState.listState.tokenizer !== tokenizer) {
+    if (
+      morphemeState === undefined ||
+      morphemeState.listState.tokenizer !== tokenizer
+    ) {
       throw new SudachiError("Morpheme was not created by this tokenizer.", {
         code: "INVALID_ARGUMENT",
       });
@@ -57,7 +71,10 @@ export class MorphemeStateTracker {
     return morphemeState;
   }
 
-  canUseWholeListSplit(morphemes: readonly Morpheme[], listState: MorphemeListState): boolean {
+  canUseWholeListSplit(
+    morphemes: readonly Morpheme[],
+    listState: MorphemeListState,
+  ): boolean {
     if (listState.kind !== "owned") {
       return false;
     }
@@ -67,7 +84,13 @@ export class MorphemeStateTracker {
     }
 
     for (let index = 0; index < morphemes.length; index += 1) {
-      if (this.#morphemeSignature(morphemes[index]!) !== listState.signatures[index]) {
+      const morpheme = morphemes[index];
+      const expectedSignature = listState.signatures[index];
+      if (morpheme === undefined || expectedSignature === undefined) {
+        return false;
+      }
+
+      if (this.#morphemeSignature(morpheme) !== expectedSignature) {
         return false;
       }
     }

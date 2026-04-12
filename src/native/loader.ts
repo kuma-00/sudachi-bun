@@ -1,4 +1,4 @@
-import { dlopen, type CString, type Pointer } from "bun:ffi";
+import { type CString, dlopen, type Pointer } from "bun:ffi";
 
 import type { NativeLibraryLoadOptions } from "../types.ts";
 import { loadNativeLibraryPath } from "./path-resolver.ts";
@@ -66,9 +66,15 @@ interface NativeSymbols extends CommonNativeSymbols {
     outResult: NodeJS.TypedArray | Pointer | null,
   ) => number;
   sudachi_free_result: (result: Pointer | NodeJS.TypedArray | null) => void;
-  sudachi_free_pos_matcher_result: (result: Pointer | NodeJS.TypedArray | null) => void;
-  sudachi_get_morpheme_result_layout: (outLayout: NodeJS.TypedArray | Pointer | null) => number;
-  sudachi_get_pos_matcher_result_layout: (outLayout: NodeJS.TypedArray | Pointer | null) => number;
+  sudachi_free_pos_matcher_result: (
+    result: Pointer | NodeJS.TypedArray | null,
+  ) => void;
+  sudachi_get_morpheme_result_layout: (
+    outLayout: NodeJS.TypedArray | Pointer | null,
+  ) => number;
+  sudachi_get_pos_matcher_result_layout: (
+    outLayout: NodeJS.TypedArray | Pointer | null,
+  ) => number;
 }
 
 interface NativeSentenceSplitterSymbols extends CommonNativeSymbols {
@@ -78,14 +84,20 @@ interface NativeSentenceSplitterSymbols extends CommonNativeSymbols {
     dictPath: NativeCStringArg,
     outHandle: NodeJS.TypedArray | Pointer | null,
   ) => number;
-  sudachi_free_sentence_splitter: (handle: Pointer | NodeJS.TypedArray | null) => void;
+  sudachi_free_sentence_splitter: (
+    handle: Pointer | NodeJS.TypedArray | null,
+  ) => void;
   sudachi_split_sentences: (
     handle: Pointer | NodeJS.TypedArray | null,
     inputUtf8: NativeCStringArg,
     outResult: NodeJS.TypedArray | Pointer | null,
   ) => number;
-  sudachi_free_sentence_spans: (result: Pointer | NodeJS.TypedArray | null) => void;
-  sudachi_get_sentence_span_layout: (outLayout: NodeJS.TypedArray | Pointer | null) => number;
+  sudachi_free_sentence_spans: (
+    result: Pointer | NodeJS.TypedArray | null,
+  ) => void;
+  sudachi_get_sentence_span_layout: (
+    outLayout: NodeJS.TypedArray | Pointer | null,
+  ) => number;
 }
 
 interface NativeLookupSymbols extends CommonNativeSymbols {
@@ -102,8 +114,12 @@ interface NativeLookupSymbols extends CommonNativeSymbols {
     subsetBits: number,
     outResult: NodeJS.TypedArray | Pointer | null,
   ) => number;
-  sudachi_free_lookup_result: (result: Pointer | NodeJS.TypedArray | null) => void;
-  sudachi_get_lookup_result_layout: (outLayout: NodeJS.TypedArray | Pointer | null) => number;
+  sudachi_free_lookup_result: (
+    result: Pointer | NodeJS.TypedArray | null,
+  ) => void;
+  sudachi_get_lookup_result_layout: (
+    outLayout: NodeJS.TypedArray | Pointer | null,
+  ) => number;
 }
 
 interface NativePretokenizerSymbols extends CommonNativeSymbols {
@@ -117,7 +133,9 @@ interface NativePretokenizerSymbols extends CommonNativeSymbols {
     handle: Pointer | NodeJS.TypedArray | null,
     debug: number,
   ) => number;
-  sudachi_free_pretokenizer: (handle: Pointer | NodeJS.TypedArray | null) => void;
+  sudachi_free_pretokenizer: (
+    handle: Pointer | NodeJS.TypedArray | null,
+  ) => void;
   sudachi_pretokenize: (
     handle: Pointer | NodeJS.TypedArray | null,
     inputUtf8: NativeCStringArg,
@@ -133,8 +151,12 @@ interface NativePretokenizerSymbols extends CommonNativeSymbols {
     subsetBits: number,
     outResult: NodeJS.TypedArray | Pointer | null,
   ) => number;
-  sudachi_free_pretokenized_result: (result: Pointer | NodeJS.TypedArray | null) => void;
-  sudachi_get_pretokenized_result_layout: (outLayout: NodeJS.TypedArray | Pointer | null) => number;
+  sudachi_free_pretokenized_result: (
+    result: Pointer | NodeJS.TypedArray | null,
+  ) => void;
+  sudachi_get_pretokenized_result_layout: (
+    outLayout: NodeJS.TypedArray | Pointer | null,
+  ) => number;
 }
 
 export type NativeLibraryLoader = (
@@ -186,7 +208,10 @@ function toCStringPointer(value: string | null): Uint8Array | null {
 
 function loadLibrary<TSymbols, TLibrary, TSymbolDefinitions>(
   options: NativeLibraryLoadOptions,
-  openLibrary: (libraryPath: string, symbolDefinitions: TSymbolDefinitions) => LoadedLibrary<TSymbols>,
+  openLibrary: (
+    libraryPath: string,
+    symbolDefinitions: TSymbolDefinitions,
+  ) => LoadedLibrary<TSymbols>,
   symbolDefinitions: TSymbolDefinitions,
   createLibrary: (symbols: TSymbols, close: () => void) => TLibrary,
 ): TLibrary {
@@ -195,12 +220,20 @@ function loadLibrary<TSymbols, TLibrary, TSymbolDefinitions>(
   return createLibrary(loaded.symbols, () => loaded.close());
 }
 
-export function createNativeSudachiLibrary(symbols: NativeSymbols, close: () => void): NativeSudachiLibrary {
+export function createNativeSudachiLibrary(
+  symbols: NativeSymbols,
+  close: () => void,
+): NativeSudachiLibrary {
   const toNativeCString = (value: string | null): NativeCStringArg => value;
 
   return {
     symbols: {
-      sudachi_create_tokenizer: (configPath, resourceDir, dictPath, outHandle) =>
+      sudachi_create_tokenizer: (
+        configPath,
+        resourceDir,
+        dictPath,
+        outHandle,
+      ) =>
         symbols.sudachi_create_tokenizer(
           toNativeCString(configPath),
           toNativeCString(resourceDir),
@@ -216,7 +249,14 @@ export function createNativeSudachiLibrary(symbols: NativeSymbols, close: () => 
           projection,
           outResult,
         ),
-      sudachi_tokenize_subset: (handle, inputUtf8, mode, projection, subsetBits, outResult) =>
+      sudachi_tokenize_subset: (
+        handle,
+        inputUtf8,
+        mode,
+        projection,
+        subsetBits,
+        outResult,
+      ) =>
         symbols.sudachi_tokenize_subset(
           handle,
           toNativeCString(inputUtf8),
@@ -225,7 +265,15 @@ export function createNativeSudachiLibrary(symbols: NativeSymbols, close: () => 
           subsetBits,
           outResult,
         ),
-      sudachi_split_morpheme: (handle, inputUtf8, sourceMode, projection, morphemeIndex, splitMode, outResult) =>
+      sudachi_split_morpheme: (
+        handle,
+        inputUtf8,
+        sourceMode,
+        projection,
+        morphemeIndex,
+        splitMode,
+        outResult,
+      ) =>
         symbols.sudachi_split_morpheme(
           handle,
           toNativeCString(inputUtf8),
@@ -235,7 +283,14 @@ export function createNativeSudachiLibrary(symbols: NativeSymbols, close: () => 
           splitMode,
           outResult,
         ),
-      sudachi_split_morphemes: (handle, inputUtf8, sourceMode, projection, splitMode, outResult) =>
+      sudachi_split_morphemes: (
+        handle,
+        inputUtf8,
+        sourceMode,
+        projection,
+        splitMode,
+        outResult,
+      ) =>
         symbols.sudachi_split_morphemes(
           handle,
           toNativeCString(inputUtf8),
@@ -252,8 +307,10 @@ export function createNativeSudachiLibrary(symbols: NativeSymbols, close: () => 
         ),
       sudachi_free_result: symbols.sudachi_free_result,
       sudachi_free_pos_matcher_result: symbols.sudachi_free_pos_matcher_result,
-      sudachi_get_morpheme_result_layout: symbols.sudachi_get_morpheme_result_layout,
-      sudachi_get_pos_matcher_result_layout: symbols.sudachi_get_pos_matcher_result_layout,
+      sudachi_get_morpheme_result_layout:
+        symbols.sudachi_get_morpheme_result_layout,
+      sudachi_get_pos_matcher_result_layout:
+        symbols.sudachi_get_pos_matcher_result_layout,
       sudachi_get_last_error: symbols.sudachi_get_last_error,
       sudachi_status_code_name: symbols.sudachi_status_code_name,
     },
@@ -261,7 +318,10 @@ export function createNativeSudachiLibrary(symbols: NativeSymbols, close: () => 
   };
 }
 
-export function createNativeLookupLibrary(symbols: NativeLookupSymbols, close: () => void): NativeLookupLibrary {
+export function createNativeLookupLibrary(
+  symbols: NativeLookupSymbols,
+  close: () => void,
+): NativeLookupLibrary {
   const toNativeCString = (value: string): NativeCStringArg => value;
 
   return {
@@ -273,7 +333,13 @@ export function createNativeLookupLibrary(symbols: NativeLookupSymbols, close: (
           projection,
           outResult,
         ),
-      sudachi_lookup_subset: (handle, surface, projection, subsetBits, outResult) =>
+      sudachi_lookup_subset: (
+        handle,
+        surface,
+        projection,
+        subsetBits,
+        outResult,
+      ) =>
         symbols.sudachi_lookup_subset(
           handle,
           toNativeCString(surface),
@@ -282,7 +348,8 @@ export function createNativeLookupLibrary(symbols: NativeLookupSymbols, close: (
           outResult,
         ),
       sudachi_free_lookup_result: symbols.sudachi_free_lookup_result,
-      sudachi_get_lookup_result_layout: symbols.sudachi_get_lookup_result_layout,
+      sudachi_get_lookup_result_layout:
+        symbols.sudachi_get_lookup_result_layout,
       sudachi_get_last_error: symbols.sudachi_get_last_error,
       sudachi_status_code_name: symbols.sudachi_status_code_name,
     },
@@ -298,7 +365,12 @@ export function createNativePretokenizerLibrary(
 
   return {
     symbols: {
-      sudachi_create_pretokenizer: (configPath, resourceDir, dictPath, outHandle) =>
+      sudachi_create_pretokenizer: (
+        configPath,
+        resourceDir,
+        dictPath,
+        outHandle,
+      ) =>
         symbols.sudachi_create_pretokenizer(
           toNativeCString(configPath),
           toNativeCString(resourceDir),
@@ -315,7 +387,14 @@ export function createNativePretokenizerLibrary(
           projection,
           outResult,
         ),
-      sudachi_pretokenize_subset: (handle, inputUtf8, mode, projection, subsetBits, outResult) =>
+      sudachi_pretokenize_subset: (
+        handle,
+        inputUtf8,
+        mode,
+        projection,
+        subsetBits,
+        outResult,
+      ) =>
         symbols.sudachi_pretokenize_subset(
           handle,
           toNativeCString(inputUtf8),
@@ -324,8 +403,10 @@ export function createNativePretokenizerLibrary(
           subsetBits,
           outResult,
         ),
-      sudachi_free_pretokenized_result: symbols.sudachi_free_pretokenized_result,
-      sudachi_get_pretokenized_result_layout: symbols.sudachi_get_pretokenized_result_layout,
+      sudachi_free_pretokenized_result:
+        symbols.sudachi_free_pretokenized_result,
+      sudachi_get_pretokenized_result_layout:
+        symbols.sudachi_get_pretokenized_result_layout,
       sudachi_get_last_error: symbols.sudachi_get_last_error,
       sudachi_status_code_name: symbols.sudachi_status_code_name,
     },
@@ -341,7 +422,12 @@ export function createNativeSentenceSplitterLibrary(
 
   return {
     symbols: {
-      sudachi_create_sentence_splitter: (configPath, resourceDir, dictPath, outHandle) =>
+      sudachi_create_sentence_splitter: (
+        configPath,
+        resourceDir,
+        dictPath,
+        outHandle,
+      ) =>
         symbols.sudachi_create_sentence_splitter(
           toNativeCString(configPath),
           toNativeCString(resourceDir),
@@ -356,7 +442,8 @@ export function createNativeSentenceSplitterLibrary(
           outResult,
         ),
       sudachi_free_sentence_spans: symbols.sudachi_free_sentence_spans,
-      sudachi_get_sentence_span_layout: symbols.sudachi_get_sentence_span_layout,
+      sudachi_get_sentence_span_layout:
+        symbols.sudachi_get_sentence_span_layout,
       sudachi_get_last_error: symbols.sudachi_get_last_error,
       sudachi_status_code_name: symbols.sudachi_status_code_name,
     },
@@ -368,14 +455,24 @@ export function loadNativeLibrary(
   options: NativeLibraryLoadOptions = {},
   openLibrary: NativeLibraryLoader = dlopen as unknown as NativeLibraryLoader,
 ): NativeSudachiLibrary {
-  return loadLibrary(options, openLibrary, TOKENIZER_NATIVE_SYMBOL_DEFS, createNativeSudachiLibraryWithCStringEncoding);
+  return loadLibrary(
+    options,
+    openLibrary,
+    TOKENIZER_NATIVE_SYMBOL_DEFS,
+    createNativeSudachiLibraryWithCStringEncoding,
+  );
 }
 
 export function loadLookupLibrary(
   options: NativeLibraryLoadOptions = {},
   openLibrary: NativeLookupLibraryLoader = dlopen as unknown as NativeLookupLibraryLoader,
 ): NativeLookupLibrary {
-  return loadLibrary(options, openLibrary, LOOKUP_NATIVE_SYMBOL_DEFS, createNativeLookupLibraryWithCStringEncoding);
+  return loadLibrary(
+    options,
+    openLibrary,
+    LOOKUP_NATIVE_SYMBOL_DEFS,
+    createNativeLookupLibraryWithCStringEncoding,
+  );
 }
 
 export function loadPretokenizerLibrary(
@@ -409,7 +506,12 @@ function createNativeSudachiLibraryWithCStringEncoding(
   return {
     symbols: {
       ...createNativeSudachiLibrary(symbols, close).symbols,
-      sudachi_create_tokenizer: (configPath, resourceDir, dictPath, outHandle) =>
+      sudachi_create_tokenizer: (
+        configPath,
+        resourceDir,
+        dictPath,
+        outHandle,
+      ) =>
         symbols.sudachi_create_tokenizer(
           toCStringPointer(configPath),
           toCStringPointer(resourceDir),
@@ -417,8 +519,21 @@ function createNativeSudachiLibraryWithCStringEncoding(
           outHandle,
         ),
       sudachi_tokenize: (handle, inputUtf8, mode, projection, outResult) =>
-        symbols.sudachi_tokenize(handle, toCStringPointer(inputUtf8), mode, projection, outResult),
-      sudachi_tokenize_subset: (handle, inputUtf8, mode, projection, subsetBits, outResult) =>
+        symbols.sudachi_tokenize(
+          handle,
+          toCStringPointer(inputUtf8),
+          mode,
+          projection,
+          outResult,
+        ),
+      sudachi_tokenize_subset: (
+        handle,
+        inputUtf8,
+        mode,
+        projection,
+        subsetBits,
+        outResult,
+      ) =>
         symbols.sudachi_tokenize_subset(
           handle,
           toCStringPointer(inputUtf8),
@@ -427,7 +542,15 @@ function createNativeSudachiLibraryWithCStringEncoding(
           subsetBits,
           outResult,
         ),
-      sudachi_split_morpheme: (handle, inputUtf8, sourceMode, projection, morphemeIndex, splitMode, outResult) =>
+      sudachi_split_morpheme: (
+        handle,
+        inputUtf8,
+        sourceMode,
+        projection,
+        morphemeIndex,
+        splitMode,
+        outResult,
+      ) =>
         symbols.sudachi_split_morpheme(
           handle,
           toCStringPointer(inputUtf8),
@@ -437,7 +560,14 @@ function createNativeSudachiLibraryWithCStringEncoding(
           splitMode,
           outResult,
         ),
-      sudachi_split_morphemes: (handle, inputUtf8, sourceMode, projection, splitMode, outResult) =>
+      sudachi_split_morphemes: (
+        handle,
+        inputUtf8,
+        sourceMode,
+        projection,
+        splitMode,
+        outResult,
+      ) =>
         symbols.sudachi_split_morphemes(
           handle,
           toCStringPointer(inputUtf8),
@@ -447,7 +577,11 @@ function createNativeSudachiLibraryWithCStringEncoding(
           outResult,
         ),
       sudachi_compile_pos_matcher: (handle, patternsJson, outResult) =>
-        symbols.sudachi_compile_pos_matcher(handle, toCStringPointer(patternsJson), outResult),
+        symbols.sudachi_compile_pos_matcher(
+          handle,
+          toCStringPointer(patternsJson),
+          outResult,
+        ),
     },
     close,
   };
@@ -461,9 +595,26 @@ function createNativeLookupLibraryWithCStringEncoding(
     symbols: {
       ...createNativeLookupLibrary(symbols, close).symbols,
       sudachi_lookup: (handle, surface, projection, outResult) =>
-        symbols.sudachi_lookup(handle, toCStringPointer(surface), projection, outResult),
-      sudachi_lookup_subset: (handle, surface, projection, subsetBits, outResult) =>
-        symbols.sudachi_lookup_subset(handle, toCStringPointer(surface), projection, subsetBits, outResult),
+        symbols.sudachi_lookup(
+          handle,
+          toCStringPointer(surface),
+          projection,
+          outResult,
+        ),
+      sudachi_lookup_subset: (
+        handle,
+        surface,
+        projection,
+        subsetBits,
+        outResult,
+      ) =>
+        symbols.sudachi_lookup_subset(
+          handle,
+          toCStringPointer(surface),
+          projection,
+          subsetBits,
+          outResult,
+        ),
     },
     close,
   };
@@ -476,7 +627,12 @@ function createNativePretokenizerLibraryWithCStringEncoding(
   return {
     symbols: {
       ...createNativePretokenizerLibrary(symbols, close).symbols,
-      sudachi_create_pretokenizer: (configPath, resourceDir, dictPath, outHandle) =>
+      sudachi_create_pretokenizer: (
+        configPath,
+        resourceDir,
+        dictPath,
+        outHandle,
+      ) =>
         symbols.sudachi_create_pretokenizer(
           toCStringPointer(configPath),
           toCStringPointer(resourceDir),
@@ -484,8 +640,21 @@ function createNativePretokenizerLibraryWithCStringEncoding(
           outHandle,
         ),
       sudachi_pretokenize: (handle, inputUtf8, mode, projection, outResult) =>
-        symbols.sudachi_pretokenize(handle, toCStringPointer(inputUtf8), mode, projection, outResult),
-      sudachi_pretokenize_subset: (handle, inputUtf8, mode, projection, subsetBits, outResult) =>
+        symbols.sudachi_pretokenize(
+          handle,
+          toCStringPointer(inputUtf8),
+          mode,
+          projection,
+          outResult,
+        ),
+      sudachi_pretokenize_subset: (
+        handle,
+        inputUtf8,
+        mode,
+        projection,
+        subsetBits,
+        outResult,
+      ) =>
         symbols.sudachi_pretokenize_subset(
           handle,
           toCStringPointer(inputUtf8),
@@ -506,7 +675,12 @@ function createNativeSentenceSplitterLibraryWithCStringEncoding(
   return {
     symbols: {
       ...createNativeSentenceSplitterLibrary(symbols, close).symbols,
-      sudachi_create_sentence_splitter: (configPath, resourceDir, dictPath, outHandle) =>
+      sudachi_create_sentence_splitter: (
+        configPath,
+        resourceDir,
+        dictPath,
+        outHandle,
+      ) =>
         symbols.sudachi_create_sentence_splitter(
           toCStringPointer(configPath),
           toCStringPointer(resourceDir),
@@ -514,7 +688,11 @@ function createNativeSentenceSplitterLibraryWithCStringEncoding(
           outHandle,
         ),
       sudachi_split_sentences: (handle, inputUtf8, outResult) =>
-        symbols.sudachi_split_sentences(handle, toCStringPointer(inputUtf8), outResult),
+        symbols.sudachi_split_sentences(
+          handle,
+          toCStringPointer(inputUtf8),
+          outResult,
+        ),
     },
     close,
   };

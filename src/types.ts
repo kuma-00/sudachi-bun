@@ -2,7 +2,12 @@ export const TOKENIZE_MODES = ["A", "B", "C"] as const;
 
 export type TokenizeMode = (typeof TOKENIZE_MODES)[number];
 
-export const SURFACE_PROJECTIONS = ["surface", "normalized", "dictionary_form", "reading"] as const;
+export const SURFACE_PROJECTIONS = [
+  "surface",
+  "normalized",
+  "dictionary_form",
+  "reading",
+] as const;
 
 export type SurfaceProjection = (typeof SURFACE_PROJECTIONS)[number];
 
@@ -89,7 +94,9 @@ export interface PretokenizeOptions {
   subset?: InfoSubset;
 }
 
-export interface PretokenizerOptions extends NativeLibraryLoadOptions, PretokenizeOptions {
+export interface PretokenizerOptions
+  extends NativeLibraryLoadOptions,
+    PretokenizeOptions {
   dictPath: string;
   configPath?: string;
   resourceDir?: string;

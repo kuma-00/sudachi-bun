@@ -1,9 +1,13 @@
 import { expect, test } from "bun:test";
-
+import { SudachiError, type SudachiErrorCode } from "../types.ts";
 import { renderCliHelp } from "./help.ts";
 import { parseArgValue, parseCliArgs } from "./parser.ts";
-import type { CliCommandResult, CliHelpResult, CliHelpTarget, CliParseErrorResult } from "./types.ts";
-import { SudachiError, type SudachiErrorCode } from "../types.ts";
+import type {
+  CliCommandResult,
+  CliHelpResult,
+  CliHelpTarget,
+  CliParseErrorResult,
+} from "./types.ts";
 
 function expectError(
   result: CliParseErrorResult,
@@ -19,12 +23,18 @@ function expectError(
 }
 
 test("parseArgValue reads inline and positional values for known flags", () => {
-  expect(parseArgValue(["--dict-path=/tmp/dict"], "dict-path")).toBe("/tmp/dict");
-  expect(parseArgValue(["--dict-path", "/tmp/dict"], "dict-path")).toBe("/tmp/dict");
+  expect(parseArgValue(["--dict-path=/tmp/dict"], "dict-path")).toBe(
+    "/tmp/dict",
+  );
+  expect(parseArgValue(["--dict-path", "/tmp/dict"], "dict-path")).toBe(
+    "/tmp/dict",
+  );
 });
 
 test("parseArgValue rejects a missing value when the next token is another known flag", () => {
-  expect(() => parseArgValue(["--dict-path", "--mode", "C"], "dict-path")).toThrow(
+  expect(() =>
+    parseArgValue(["--dict-path", "--mode", "C"], "dict-path"),
+  ).toThrow(
     new SudachiError("Missing value for --dict-path", {
       code: "MISSING_ARGUMENT",
     }),
@@ -71,31 +81,67 @@ test("parseCliArgs requires an explicit subcommand", () => {
 test("parseCliArgs rejects a typo-like first positional token as an unknown subcommand", () => {
   const result = parseCliArgs(["buidl"]);
 
-  expectError(result as CliParseErrorResult, "INVALID_ARGUMENT", "Unknown subcommand: buidl", "top-level");
+  expectError(
+    result as CliParseErrorResult,
+    "INVALID_ARGUMENT",
+    "Unknown subcommand: buidl",
+    "top-level",
+  );
 });
 
 test("parseCliArgs rejects unknown flags before a valid subcommand", () => {
   const result = parseCliArgs(["--unknown", "build"]);
 
-  expectError(result as CliParseErrorResult, "INVALID_ARGUMENT", "Unknown flag: --unknown", "top-level");
+  expectError(
+    result as CliParseErrorResult,
+    "INVALID_ARGUMENT",
+    "Unknown flag: --unknown",
+    "top-level",
+  );
 });
 
 test("parseCliArgs rejects the unsupported --resource_dir alias", () => {
-  const result = parseCliArgs(["tokenize", "--resource_dir", "/tmp/resources", "--dict-path", "/tmp/dict"]);
+  const result = parseCliArgs([
+    "tokenize",
+    "--resource_dir",
+    "/tmp/resources",
+    "--dict-path",
+    "/tmp/dict",
+  ]);
 
-  expectError(result as CliParseErrorResult, "INVALID_ARGUMENT", "Unknown flag: --resource_dir", "tokenize");
+  expectError(
+    result as CliParseErrorResult,
+    "INVALID_ARGUMENT",
+    "Unknown flag: --resource_dir",
+    "tokenize",
+  );
 });
 
 test("parseCliArgs reports missing tokenize dict-path with tokenize help", () => {
   const result = parseCliArgs(["tokenize"]);
 
-  expectError(result as CliParseErrorResult, "MISSING_ARGUMENT", "Missing value for --dict-path", "tokenize");
+  expectError(
+    result as CliParseErrorResult,
+    "MISSING_ARGUMENT",
+    "Missing value for --dict-path",
+    "tokenize",
+  );
 });
 
 test("parseCliArgs rejects boolean flags with = syntax", () => {
-  const result = parseCliArgs(["tokenize", "--dict-path", "/tmp/dict", "--debug=true"]);
+  const result = parseCliArgs([
+    "tokenize",
+    "--dict-path",
+    "/tmp/dict",
+    "--debug=true",
+  ]);
 
-  expectError(result as CliParseErrorResult, "INVALID_ARGUMENT", "Invalid boolean flag syntax: --debug=true", "tokenize");
+  expectError(
+    result as CliParseErrorResult,
+    "INVALID_ARGUMENT",
+    "Invalid boolean flag syntax: --debug=true",
+    "tokenize",
+  );
 });
 
 test("parseCliArgs resolves tokenize commands into a discriminated union", () => {
@@ -157,7 +203,12 @@ test("parseCliArgs rejects tokenize-only flags for build/ubuild/dump", () => {
   for (const command of ["build", "ubuild", "dump"] as const) {
     const result = parseCliArgs([command, "--dict-path", "/tmp/dict"]);
 
-    expectError(result as CliParseErrorResult, "INVALID_ARGUMENT", "Unknown flag: --dict-path", command);
+    expectError(
+      result as CliParseErrorResult,
+      "INVALID_ARGUMENT",
+      "Unknown flag: --dict-path",
+      command,
+    );
   }
 });
 
@@ -169,7 +220,9 @@ test("renderCliHelp returns distinct help text for top-level and subcommands", (
   const dump = renderCliHelp("dump");
 
   expect(topLevel).toContain("Commands:");
-  expect(topLevel).toContain("tokenize  Tokenize text with a required projection.");
+  expect(topLevel).toContain(
+    "tokenize  Tokenize text with a required projection.",
+  );
   expect(tokenize).toContain("Usage:");
   expect(tokenize).toContain("--projection <mode>");
   expect(tokenize).toContain("--resource-dir <path>");

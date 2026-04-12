@@ -2,11 +2,14 @@ import { expect, test } from "bun:test";
 
 import {
   POS_MATCHER_RESULT_LAYOUT_VERSION,
-  SENTENCE_SPAN_RESULT_LAYOUT_VERSION,
   readPosMatcherResultLayout,
   readSentenceSpanResultLayout,
+  SENTENCE_SPAN_RESULT_LAYOUT_VERSION,
 } from "../index.ts";
-import type { NativeSentenceSplitterLibrary, NativeSudachiLibrary } from "../types.ts";
+import type {
+  NativeSentenceSplitterLibrary,
+  NativeSudachiLibrary,
+} from "../types.ts";
 
 function createPosMatcherLibrary(
   layoutWriter: (outLayout: BigUint64Array) => number = (outLayout) => {
@@ -29,9 +32,12 @@ function createPosMatcherLibrary(
       sudachi_free_result: () => {},
       sudachi_free_pos_matcher_result: () => {},
       sudachi_get_morpheme_result_layout: () => 0,
-      sudachi_get_pos_matcher_result_layout: (outLayout) => layoutWriter(outLayout as BigUint64Array),
-      sudachi_get_last_error: () => "native error" as unknown as import("bun:ffi").CString,
-      sudachi_status_code_name: () => "UNKNOWN" as unknown as import("bun:ffi").CString,
+      sudachi_get_pos_matcher_result_layout: (outLayout) =>
+        layoutWriter(outLayout as BigUint64Array),
+      sudachi_get_last_error: () =>
+        "native error" as unknown as import("bun:ffi").CString,
+      sudachi_status_code_name: () =>
+        "UNKNOWN" as unknown as import("bun:ffi").CString,
     },
     close: () => {},
   };
@@ -39,7 +45,15 @@ function createPosMatcherLibrary(
 
 function createSentenceSplitterLibrary(
   layoutWriter: (outLayout: BigUint64Array) => number = (outLayout) => {
-    const values = [BigInt(SENTENCE_SPAN_RESULT_LAYOUT_VERSION), 0n, 8n, 16n, 16n, 0n, 8n];
+    const values = [
+      BigInt(SENTENCE_SPAN_RESULT_LAYOUT_VERSION),
+      0n,
+      8n,
+      16n,
+      16n,
+      0n,
+      8n,
+    ];
     values.forEach((value, index) => {
       outLayout[index] = value;
     });
@@ -52,9 +66,12 @@ function createSentenceSplitterLibrary(
       sudachi_free_sentence_splitter: () => {},
       sudachi_split_sentences: () => 0,
       sudachi_free_sentence_spans: () => {},
-      sudachi_get_sentence_span_layout: (outLayout) => layoutWriter(outLayout as BigUint64Array),
-      sudachi_get_last_error: () => "native error" as unknown as import("bun:ffi").CString,
-      sudachi_status_code_name: () => "UNKNOWN" as unknown as import("bun:ffi").CString,
+      sudachi_get_sentence_span_layout: (outLayout) =>
+        layoutWriter(outLayout as BigUint64Array),
+      sudachi_get_last_error: () =>
+        "native error" as unknown as import("bun:ffi").CString,
+      sudachi_status_code_name: () =>
+        "UNKNOWN" as unknown as import("bun:ffi").CString,
     },
     close: () => {},
   };
@@ -82,15 +99,17 @@ test("readPosMatcherResultLayout rejects unsupported versions", () => {
 });
 
 test("readSentenceSpanResultLayout maps fields in order", () => {
-  expect(readSentenceSpanResultLayout(createSentenceSplitterLibrary())).toEqual({
-    layoutVersion: SENTENCE_SPAN_RESULT_LAYOUT_VERSION,
-    arrayLayoutKind: 0,
-    arrayItemsOffset: 8,
-    arrayLenOffset: 16,
-    resultSize: 16,
-    startOffset: 0,
-    endOffset: 8,
-  });
+  expect(readSentenceSpanResultLayout(createSentenceSplitterLibrary())).toEqual(
+    {
+      layoutVersion: SENTENCE_SPAN_RESULT_LAYOUT_VERSION,
+      arrayLayoutKind: 0,
+      arrayItemsOffset: 8,
+      arrayLenOffset: 16,
+      resultSize: 16,
+      startOffset: 0,
+      endOffset: 8,
+    },
+  );
 });
 
 test("readSentenceSpanResultLayout rejects unsupported versions", () => {
