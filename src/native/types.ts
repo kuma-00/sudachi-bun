@@ -87,6 +87,30 @@ export interface NativeSudachiLibrary {
     sudachi_free_tokenizer: (
       handle: Pointer | NodeJS.TypedArray | null,
     ) => void;
+    sudachi_create_stateful_tokenizer_from_tokenizer: (
+      tokenizerHandle: Pointer | NodeJS.TypedArray | null,
+      outHandle: NodeJS.TypedArray | Pointer | null,
+    ) => number;
+    sudachi_free_stateful_tokenizer: (
+      handle: Pointer | NodeJS.TypedArray | null,
+    ) => void;
+    sudachi_stateful_tokenizer_reset: (
+      handle: Pointer | NodeJS.TypedArray | null,
+      inputUtf8: string,
+    ) => number;
+    sudachi_stateful_tokenizer_set_mode: (
+      handle: Pointer | NodeJS.TypedArray | null,
+      mode: number,
+    ) => number;
+    sudachi_stateful_tokenizer_set_subset: (
+      handle: Pointer | NodeJS.TypedArray | null,
+      subsetBits: number,
+    ) => number;
+    sudachi_stateful_tokenizer_do_tokenize: (
+      handle: Pointer | NodeJS.TypedArray | null,
+      projection: number,
+      outResult: NodeJS.TypedArray | Pointer | null,
+    ) => number;
     sudachi_tokenize: (
       handle: Pointer | NodeJS.TypedArray | null,
       inputUtf8: string,

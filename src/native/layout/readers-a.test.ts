@@ -55,6 +55,12 @@ function createMorphemeLibrary(
     symbols: {
       sudachi_create_tokenizer: () => 0,
       sudachi_free_tokenizer: () => {},
+      sudachi_create_stateful_tokenizer_from_tokenizer: () => 0,
+      sudachi_free_stateful_tokenizer: () => {},
+      sudachi_stateful_tokenizer_reset: () => 0,
+      sudachi_stateful_tokenizer_set_mode: () => 0,
+      sudachi_stateful_tokenizer_set_subset: () => 0,
+      sudachi_stateful_tokenizer_do_tokenize: () => 0,
       sudachi_tokenize: () => 0,
       sudachi_tokenize_subset: () => 0,
       sudachi_split_morpheme: () => 0,

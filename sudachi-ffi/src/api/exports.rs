@@ -70,8 +70,21 @@ pub extern "C" fn sudachi_create_pretokenizer_from_tokenizer(
 }
 
 #[unsafe(no_mangle)]
+pub extern "C" fn sudachi_create_stateful_tokenizer_from_tokenizer(
+    tokenizer_handle: *const ops::TokenizerHandle,
+    out_handle: *mut *mut ops::StatefulTokenizerHandle,
+) -> i32 {
+    ops::create_stateful_tokenizer_from_tokenizer_impl(tokenizer_handle, out_handle)
+}
+
+#[unsafe(no_mangle)]
 pub extern "C" fn sudachi_free_pretokenizer(handle: *mut ops::PretokenizerHandle) {
     ops::free_pretokenizer_impl(handle);
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn sudachi_free_stateful_tokenizer(handle: *mut ops::StatefulTokenizerHandle) {
+    ops::free_stateful_tokenizer_impl(handle);
 }
 
 #[unsafe(no_mangle)]
@@ -80,6 +93,39 @@ pub extern "C" fn sudachi_set_pretokenizer_debug(
     enabled: i32,
 ) -> i32 {
     ops::set_pretokenizer_debug_impl(handle, enabled)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn sudachi_stateful_tokenizer_reset(
+    handle: *mut ops::StatefulTokenizerHandle,
+    input_utf8: *const c_char,
+) -> i32 {
+    ops::stateful_tokenizer_reset_impl(handle, input_utf8)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn sudachi_stateful_tokenizer_set_mode(
+    handle: *mut ops::StatefulTokenizerHandle,
+    mode: i32,
+) -> i32 {
+    ops::stateful_tokenizer_set_mode_impl(handle, mode)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn sudachi_stateful_tokenizer_set_subset(
+    handle: *mut ops::StatefulTokenizerHandle,
+    subset_bits: u32,
+) -> i32 {
+    ops::stateful_tokenizer_set_subset_impl(handle, subset_bits)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn sudachi_stateful_tokenizer_do_tokenize(
+    handle: *mut ops::StatefulTokenizerHandle,
+    projection: i32,
+    out_result: *mut *mut MorphemeResultArray,
+) -> i32 {
+    ops::stateful_tokenizer_do_tokenize_impl(handle, projection, out_result)
 }
 
 #[unsafe(no_mangle)]

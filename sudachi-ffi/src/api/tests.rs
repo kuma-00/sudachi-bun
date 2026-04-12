@@ -332,6 +332,22 @@ fn with_test_pretokenizer_from_tokenizer<T>(f: impl FnOnce(*mut PretokenizerHand
     })
 }
 
+fn with_test_stateful_from_tokenizer<T>(
+    f: impl FnOnce(*mut StatefulTokenizerHandle) -> T,
+) -> T {
+    with_test_tokenizer(|tokenizer_handle| {
+        let mut handle = ptr::null_mut();
+        let status =
+            sudachi_create_stateful_tokenizer_from_tokenizer(tokenizer_handle, &mut handle);
+        assert_eq!(status, OK, "{}", last_error_message());
+        assert!(!handle.is_null());
+
+        let output = f(handle);
+        sudachi_free_stateful_tokenizer(handle);
+        output
+    })
+}
+
 struct CapturingDebugSink {
     lines: Arc<Mutex<Vec<String>>>,
 }
@@ -429,6 +445,24 @@ fn create_pretokenizer_from_tokenizer_requires_tokenizer_handle() {
     assert_eq!(status, ERR_NULL_POINTER);
     assert_eq!(status_code_name(status), "NULL_POINTER");
     assert!(out_handle.is_null());
+}
+
+#[test]
+fn create_stateful_tokenizer_from_tokenizer_requires_tokenizer_handle() {
+    let mut out_handle: *mut StatefulTokenizerHandle = ptr::null_mut();
+    let status = sudachi_create_stateful_tokenizer_from_tokenizer(ptr::null(), &mut out_handle);
+
+    assert_eq!(status, ERR_NULL_POINTER);
+    assert_eq!(status_code_name(status), "NULL_POINTER");
+    assert!(out_handle.is_null());
+}
+
+#[test]
+fn stateful_tokenizer_set_mode_requires_non_null_handle() {
+    let status = sudachi_stateful_tokenizer_set_mode(ptr::null_mut(), 0);
+
+    assert_eq!(status, ERR_NULL_POINTER);
+    assert_eq!(status_code_name(status), "NULL_POINTER");
 }
 
 #[test]
@@ -1271,5 +1305,57 @@ fn split_morphemes_requires_valid_mode() {
         assert_eq!(status_code_name(status), "INVALID_MODE");
         assert!(out_result.is_null());
         assert_eq!(last_error_message(), "mode must be 0 (A), 1 (B), or 2 (C)");
+    });
+}
+
+#[test]
+fn stateful_tokenizer_reuses_handle_and_respects_mode_changes() {
+    with_test_stateful_from_tokenizer(|handle| {
+        let text = CString::new("東京都に").unwrap();
+        let mut out_c = ptr::null_mut();
+        let status = sudachi_stateful_tokenizer_reset(handle, text.as_ptr());
+        assert_eq!(status, OK, "{}", last_error_message());
+
+        let status =
+            sudachi_stateful_tokenizer_do_tokenize(handle, Projection::Surface as i32, &mut out_c);
+        assert_eq!(status, OK, "{}", last_error_message());
+        let c_values = collect_surfaces_and_offsets(out_c);
+        sudachi_free_result(out_c);
+
+        let status = sudachi_stateful_tokenizer_set_mode(handle, 0);
+        assert_eq!(status, OK, "{}", last_error_message());
+        let mut out_a = ptr::null_mut();
+        let status =
+            sudachi_stateful_tokenizer_do_tokenize(handle, Projection::Surface as i32, &mut out_a);
+        assert_eq!(status, OK, "{}", last_error_message());
+        let a_values = collect_surfaces_and_offsets(out_a);
+        sudachi_free_result(out_a);
+
+        assert!(!c_values.is_empty());
+        assert!(!a_values.is_empty());
+        assert!(a_values.len() >= c_values.len());
+    });
+}
+
+#[test]
+fn stateful_tokenizer_subset_controls_output_fields() {
+    with_test_stateful_from_tokenizer(|handle| {
+        let text = CString::new("東京都").unwrap();
+        let mut out_result = ptr::null_mut();
+        let status = sudachi_stateful_tokenizer_set_subset(handle, 1 << 0);
+        assert_eq!(status, OK, "{}", last_error_message());
+        let status = sudachi_stateful_tokenizer_reset(handle, text.as_ptr());
+        assert_eq!(status, OK, "{}", last_error_message());
+        let status = sudachi_stateful_tokenizer_do_tokenize(
+            handle,
+            Projection::Surface as i32,
+            &mut out_result,
+        );
+        assert_eq!(status, OK, "{}", last_error_message());
+        let values = collect_morpheme_result(out_result);
+        sudachi_free_result(out_result);
+
+        assert!(!values.is_empty());
+        assert!(values.iter().all(|item| item.normalized.is_null()));
     });
 }

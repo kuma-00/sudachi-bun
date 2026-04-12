@@ -113,6 +113,16 @@ export interface TokenizeArgs {
   subset?: InfoSubset;
 }
 
+export interface StatefulTokenizerOptions {
+  text?: string;
+  mode?: TokenizeMode;
+  subset?: InfoSubset;
+}
+
+export interface StatefulTokenizeArgs {
+  projection: SurfaceProjection;
+}
+
 export interface LookupArgs {
   surface: string;
   projection: SurfaceProjection;

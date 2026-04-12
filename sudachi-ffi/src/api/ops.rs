@@ -36,6 +36,14 @@ pub struct TokenizerHandle {
 }
 
 #[repr(C)]
+pub struct StatefulTokenizerHandle {
+    pub(crate) dictionary: Arc<JapaneseDictionary>,
+    pub(crate) tokenizer: StatefulTokenizer<Arc<JapaneseDictionary>>,
+    pub(crate) include_pos_text: bool,
+    pub(crate) input_text: String,
+}
+
+#[repr(C)]
 pub struct SentenceSplitterHandle {
     pub(crate) dictionary: Arc<JapaneseDictionary>,
 }
@@ -756,7 +764,30 @@ pub(crate) fn create_pretokenizer_from_tokenizer_impl(
     })
 }
 
+pub(crate) fn create_stateful_tokenizer_from_tokenizer_impl(
+    tokenizer_handle: *const TokenizerHandle,
+    out_handle: *mut *mut StatefulTokenizerHandle,
+) -> i32 {
+    run_ffi(|| {
+        let tokenizer = require_non_null(tokenizer_handle, "tokenizer handle was null")?;
+        let tokenizer = unsafe { tokenizer.as_ref() };
+        let dictionary = Arc::clone(&tokenizer.dictionary);
+        let handle = Box::new(StatefulTokenizerHandle {
+            tokenizer: StatefulTokenizer::create(Arc::clone(&dictionary), false, Mode::C),
+            dictionary,
+            include_pos_text: true,
+            input_text: String::new(),
+        });
+
+        write_box_ptr(out_handle, handle, "out_handle pointer was null")
+    })
+}
+
 pub(crate) fn free_pretokenizer_impl(handle: *mut PretokenizerHandle) {
+    free_handle(handle);
+}
+
+pub(crate) fn free_stateful_tokenizer_impl(handle: *mut StatefulTokenizerHandle) {
     free_handle(handle);
 }
 
@@ -771,6 +802,77 @@ pub(crate) fn set_pretokenizer_debug_impl(
             .debug_enabled
             .store(enabled != 0, Ordering::Relaxed);
         Ok(())
+    })
+}
+
+pub(crate) fn stateful_tokenizer_reset_impl(
+    handle: *mut StatefulTokenizerHandle,
+    input_utf8: *const c_char,
+) -> i32 {
+    run_ffi(|| {
+        let mut handle = require_non_null(handle, "stateful tokenizer handle was null")?;
+        let handle = unsafe { handle.as_mut() };
+        let input = if input_utf8.is_null() {
+            None
+        } else {
+            Some(cstr_to_string(input_utf8)?)
+        };
+        handle.input_text = input.unwrap_or_default();
+        let buffer = handle.tokenizer.reset();
+        buffer.push_str(&handle.input_text);
+        Ok(())
+    })
+}
+
+pub(crate) fn stateful_tokenizer_set_mode_impl(
+    handle: *mut StatefulTokenizerHandle,
+    mode: i32,
+) -> i32 {
+    run_ffi(|| {
+        let mut handle = require_non_null(handle, "stateful tokenizer handle was null")?;
+        let handle = unsafe { handle.as_mut() };
+        handle.tokenizer.set_mode(mode_from_raw(mode)?);
+        Ok(())
+    })
+}
+
+pub(crate) fn stateful_tokenizer_set_subset_impl(
+    handle: *mut StatefulTokenizerHandle,
+    subset_bits: u32,
+) -> i32 {
+    run_ffi(|| {
+        let mut handle = require_non_null(handle, "stateful tokenizer handle was null")?;
+        let handle = unsafe { handle.as_mut() };
+        let selection = parsed_info_subset_from_bits(subset_bits)?;
+        handle.tokenizer.set_subset(selection.subset);
+        handle.include_pos_text = selection.include_pos_text;
+        Ok(())
+    })
+}
+
+pub(crate) fn stateful_tokenizer_do_tokenize_impl(
+    handle: *mut StatefulTokenizerHandle,
+    projection: i32,
+    out_result: *mut *mut MorphemeResultArray,
+) -> i32 {
+    run_ffi(|| {
+        let mut handle = require_non_null(handle, "stateful tokenizer handle was null")?;
+        let handle = unsafe { handle.as_mut() };
+        let projection = projection_from_raw(projection)?;
+        handle.tokenizer.reset().push_str(&handle.input_text);
+        handle.tokenizer.do_tokenize().map_err(|err| {
+            error(
+                ERR_TOKENIZE,
+                format!("stateful tokenization failed: {err}"),
+            )
+        })?;
+        let mut morpheme_list = MorphemeList::empty(Arc::clone(&handle.dictionary));
+        morpheme_list
+            .collect_results(&mut handle.tokenizer)
+            .map_err(|err| error(ERR_TOKENIZE, format!("failed to collect stateful results: {err}")))?;
+        let array = morpheme_list_to_array(&morpheme_list, handle.include_pos_text, projection)?;
+
+        write_box_ptr(out_result, array, "out_result pointer was null")
     })
 }
 

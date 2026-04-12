@@ -28,6 +28,30 @@ interface NativeSymbols extends CommonNativeSymbols {
     outHandle: NodeJS.TypedArray | Pointer | null,
   ) => number;
   sudachi_free_tokenizer: (handle: Pointer | NodeJS.TypedArray | null) => void;
+  sudachi_create_stateful_tokenizer_from_tokenizer: (
+    tokenizerHandle: Pointer | NodeJS.TypedArray | null,
+    outHandle: NodeJS.TypedArray | Pointer | null,
+  ) => number;
+  sudachi_free_stateful_tokenizer: (
+    handle: Pointer | NodeJS.TypedArray | null,
+  ) => void;
+  sudachi_stateful_tokenizer_reset: (
+    handle: Pointer | NodeJS.TypedArray | null,
+    inputUtf8: NativeCStringArg,
+  ) => number;
+  sudachi_stateful_tokenizer_set_mode: (
+    handle: Pointer | NodeJS.TypedArray | null,
+    mode: number,
+  ) => number;
+  sudachi_stateful_tokenizer_set_subset: (
+    handle: Pointer | NodeJS.TypedArray | null,
+    subsetBits: number,
+  ) => number;
+  sudachi_stateful_tokenizer_do_tokenize: (
+    handle: Pointer | NodeJS.TypedArray | null,
+    projection: number,
+    outResult: NodeJS.TypedArray | Pointer | null,
+  ) => number;
   sudachi_tokenize: (
     handle: Pointer | NodeJS.TypedArray | null,
     inputUtf8: NativeCStringArg,
@@ -241,6 +265,26 @@ export function createNativeSudachiLibrary(
           outHandle,
         ),
       sudachi_free_tokenizer: symbols.sudachi_free_tokenizer,
+      sudachi_create_stateful_tokenizer_from_tokenizer: (
+        tokenizerHandle,
+        outHandle,
+      ) =>
+        symbols.sudachi_create_stateful_tokenizer_from_tokenizer(
+          tokenizerHandle,
+          outHandle,
+        ),
+      sudachi_free_stateful_tokenizer: symbols.sudachi_free_stateful_tokenizer,
+      sudachi_stateful_tokenizer_reset: (handle, inputUtf8) =>
+        symbols.sudachi_stateful_tokenizer_reset(
+          handle,
+          toNativeCString(inputUtf8),
+        ),
+      sudachi_stateful_tokenizer_set_mode:
+        symbols.sudachi_stateful_tokenizer_set_mode,
+      sudachi_stateful_tokenizer_set_subset:
+        symbols.sudachi_stateful_tokenizer_set_subset,
+      sudachi_stateful_tokenizer_do_tokenize:
+        symbols.sudachi_stateful_tokenizer_do_tokenize,
       sudachi_tokenize: (handle, inputUtf8, mode, projection, outResult) =>
         symbols.sudachi_tokenize(
           handle,
@@ -517,6 +561,11 @@ function createNativeSudachiLibraryWithCStringEncoding(
           toCStringPointer(resourceDir),
           toCStringPointer(dictPath),
           outHandle,
+        ),
+      sudachi_stateful_tokenizer_reset: (handle, inputUtf8) =>
+        symbols.sudachi_stateful_tokenizer_reset(
+          handle,
+          toCStringPointer(inputUtf8),
         ),
       sudachi_tokenize: (handle, inputUtf8, mode, projection, outResult) =>
         symbols.sudachi_tokenize(

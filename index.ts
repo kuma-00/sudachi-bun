@@ -54,6 +54,8 @@ export type {
   PretokenizerOptions,
   SentenceSpan,
   SentenceSplitterOptions,
+  StatefulTokenizeArgs,
+  StatefulTokenizerOptions,
   SudachiErrorCode,
   SurfaceProjection,
   TokenizeMode,

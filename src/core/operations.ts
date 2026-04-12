@@ -31,6 +31,13 @@ function rememberMorphemeProjection(
   }
 }
 
+export function rememberTokenProjection(
+  morphemes: readonly Morpheme[],
+  projection: SurfaceProjection,
+): void {
+  rememberMorphemeProjection(morphemes, projection);
+}
+
 function morphemeProjection(
   morpheme: Morpheme,
   fallback: SurfaceProjection,

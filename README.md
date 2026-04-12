@@ -205,6 +205,22 @@ try {
 
 `split()` / `splitInto()` は、同じ `tokenizer` が生成した morpheme のみ受け付けます。`tokenize({ text, projection, mode })` との差分として、再分割は既存解析結果を起点にするため、元トークン境界に従って細分化されます。
 
+Task-03 相当の stateful API も利用できます。
+
+- `tokenizer.createStatefulTokenizer({ text?, mode?, subset? })`: 状態付きトークナイザを生成する
+- `stateful.reset(text?)`: 入力テキストを差し替える（省略時は空文字）
+- `stateful.setMode(mode)`: 解析モードを更新する
+- `stateful.setSubset(subset)`: 取得する形態素情報 subset を更新する
+- `stateful.doTokenize({ projection })` / `stateful.tokenize({ projection })`: 現在状態で解析実行する
+
+```ts
+const stateful = tokenizer.createStatefulTokenizer({ mode: "C" });
+stateful.reset("東京都に");
+const cTokens = stateful.doTokenize({ projection: "surface" });
+stateful.setMode("A");
+const aTokens = stateful.tokenize({ projection: "surface" });
+```
+
 Task-07 相当の lookup API も利用できます。
 
 - `tokenizer.lookup({ surface, projection })`: 入力 surface に一致する辞書候補を `LookupEntry[]` として返す

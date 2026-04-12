@@ -10,6 +10,7 @@ import type {
 } from "./native/types.ts";
 import * as native from "./native.ts";
 import type { LookupEntry, Morpheme } from "./types.ts";
+import { SudachiError } from "./types.ts";
 
 const INFO_SUBSET_FFI_POS_TEXT_BIT = 1 << 30;
 const DEFAULT_PROJECTION = "surface";
@@ -180,6 +181,9 @@ function resultBufferArg(
 }
 
 function createMockLibrary(): NativeSudachiLibrary {
+  let statefulMode = 2;
+  let statefulSubsetBits = -1;
+
   return {
     symbols: {
       sudachi_create_tokenizer: (
@@ -192,6 +196,46 @@ function createMockLibrary(): NativeSudachiLibrary {
         return 0;
       },
       sudachi_free_tokenizer: () => {},
+      sudachi_create_stateful_tokenizer_from_tokenizer: (
+        _tokenizerHandle,
+        outHandle,
+      ) => {
+        statefulMode = 2;
+        statefulSubsetBits = -1;
+        (outHandle as BigUint64Array)[0] = 101n;
+        return 0;
+      },
+      sudachi_free_stateful_tokenizer: () => {},
+      sudachi_stateful_tokenizer_reset: () => 0,
+      sudachi_stateful_tokenizer_set_mode: (_handle, mode) => {
+        statefulMode = mode;
+        return 0;
+      },
+      sudachi_stateful_tokenizer_set_subset: (_handle, subsetBits) => {
+        statefulSubsetBits = subsetBits;
+        return 0;
+      },
+      sudachi_stateful_tokenizer_do_tokenize: (
+        _handle,
+        _projection,
+        outResult,
+      ) => {
+        if (statefulMode === 0) {
+          (outResult as BigUint64Array)[0] = 40n;
+          return 0;
+        }
+
+        if (
+          statefulMode === 2 &&
+          statefulSubsetBits === ((1 << 0) | (1 << 2))
+        ) {
+          (outResult as BigUint64Array)[0] = 41n;
+          return 0;
+        }
+
+        (outResult as BigUint64Array)[0] = 2n;
+        return 0;
+      },
       sudachi_tokenize: (...args) => {
         const projection = projectionArg(args, 3);
         void projection;
@@ -1097,6 +1141,183 @@ test("split rejects morphemes that were not created by the tokenizer", () => {
         mode: "A",
       }),
     ).toThrow("Morpheme was not created by this tokenizer.");
+  });
+});
+
+test("stateful tokenizer tokenizes with persisted mode and subset", () => {
+  withTokenizer(({ library, tokenizer }) => {
+    const createSpy = spyOn(
+      library.symbols,
+      "sudachi_create_stateful_tokenizer_from_tokenizer",
+    );
+    const resetSpy = spyOn(library.symbols, "sudachi_stateful_tokenizer_reset");
+    const setModeSpy = spyOn(
+      library.symbols,
+      "sudachi_stateful_tokenizer_set_mode",
+    );
+    const setSubsetSpy = spyOn(
+      library.symbols,
+      "sudachi_stateful_tokenizer_set_subset",
+    );
+    const doTokenizeSpy = spyOn(
+      library.symbols,
+      "sudachi_stateful_tokenizer_do_tokenize",
+    );
+    const tokenizeSpy = spyOn(library.symbols, "sudachi_tokenize");
+    const subsetTokenizeSpy = spyOn(library.symbols, "sudachi_tokenize_subset");
+
+    try {
+      const stateful = tokenizer
+        .createStatefulTokenizer()
+        .reset("東京都に")
+        .setMode("A");
+      expect(stateful.doTokenize({ projection: DEFAULT_PROJECTION })).toEqual([
+        createMorpheme("東京", 0, 6),
+        createMorpheme("都", 6, 9),
+        createMorpheme("に", 9, 12),
+      ]);
+      expect(createSpy).toHaveBeenCalledTimes(1);
+      expect(createSpy.mock.calls[0]?.[0]).toBe(1);
+      expect(createSpy.mock.calls[0]?.[1]).toBeInstanceOf(BigUint64Array);
+      expect(resetSpy).toHaveBeenNthCalledWith(1, 101 as never, "");
+      expect(resetSpy).toHaveBeenNthCalledWith(2, 101 as never, "東京都に");
+      expect(setModeSpy).toHaveBeenCalledWith(101 as never, 0);
+
+      stateful.setMode("C").setSubset({ fields: ["surface", "posId"] });
+      expect(stateful.tokenize({ projection: DEFAULT_PROJECTION })).toEqual([
+        createSubsetMorpheme("東京", 0, 6, 7),
+        createSubsetMorpheme("都", 6, 9, 8),
+        createSubsetMorpheme("に", 9, 12, 9),
+      ]);
+      expect(setModeSpy).toHaveBeenLastCalledWith(101 as never, 2);
+      expect(setSubsetSpy).toHaveBeenCalledWith(
+        101 as never,
+        (1 << 0) | (1 << 2),
+      );
+      expect(doTokenizeSpy).toHaveBeenCalledTimes(2);
+      expect(tokenizeSpy).not.toHaveBeenCalled();
+      expect(subsetTokenizeSpy).not.toHaveBeenCalled();
+    } finally {
+      subsetTokenizeSpy.mockRestore();
+      tokenizeSpy.mockRestore();
+      doTokenizeSpy.mockRestore();
+      setSubsetSpy.mockRestore();
+      setModeSpy.mockRestore();
+      resetSpy.mockRestore();
+      createSpy.mockRestore();
+    }
+  });
+});
+
+test("stateful tokenizer closes native stateful handle only", () => {
+  withTokenizer(({ library, tokenizer }) => {
+    const freeStatefulSpy = spyOn(
+      library.symbols,
+      "sudachi_free_stateful_tokenizer",
+    );
+    const freeTokenizerSpy = spyOn(library.symbols, "sudachi_free_tokenizer");
+
+    try {
+      const stateful = tokenizer.createStatefulTokenizer({ text: "東京都に" });
+      stateful.close();
+      expect(freeStatefulSpy).toHaveBeenCalledTimes(1);
+      expect(freeStatefulSpy).toHaveBeenCalledWith(101 as never);
+      expect(freeTokenizerSpy).not.toHaveBeenCalled();
+    } finally {
+      freeTokenizerSpy.mockRestore();
+      freeStatefulSpy.mockRestore();
+    }
+  });
+});
+
+test("tokenizer close releases tracked stateful tokenizers", () => {
+  withTokenizer(({ library, tokenizer }) => {
+    const freeStatefulSpy = spyOn(
+      library.symbols,
+      "sudachi_free_stateful_tokenizer",
+    );
+    const freeTokenizerSpy = spyOn(library.symbols, "sudachi_free_tokenizer");
+
+    try {
+      const stateful = tokenizer.createStatefulTokenizer({ text: "東京都に" });
+      tokenizer.close();
+
+      expect(freeStatefulSpy).toHaveBeenCalledTimes(1);
+      expect(freeStatefulSpy).toHaveBeenCalledWith(101 as never);
+      expect(freeTokenizerSpy).toHaveBeenCalledTimes(1);
+
+      expect(() =>
+        stateful.doTokenize({ projection: DEFAULT_PROJECTION }),
+      ).toThrow("StatefulTokenizer has been closed.");
+
+      stateful.close();
+      expect(freeStatefulSpy).toHaveBeenCalledTimes(1);
+    } finally {
+      freeTokenizerSpy.mockRestore();
+      freeStatefulSpy.mockRestore();
+    }
+  });
+});
+
+test("stateful tokenizer matches one-shot tokenize output", () => {
+  withTokenizer(({ tokenizer }) => {
+    const stateful = tokenizer.createStatefulTokenizer({
+      text: "東京都に",
+      mode: "C",
+    });
+    expect(stateful.doTokenize({ projection: DEFAULT_PROJECTION })).toEqual(
+      tokenizer.tokenize({
+        text: "東京都に",
+        projection: DEFAULT_PROJECTION,
+        mode: "C",
+      }),
+    );
+  });
+});
+
+test("closing stateful tokenizer does not close tokenizer", () => {
+  withTokenizer(({ tokenizer }) => {
+    const stateful = tokenizer.createStatefulTokenizer({ text: "東京都に" });
+    stateful.close();
+    expect(() =>
+      stateful.doTokenize({ projection: DEFAULT_PROJECTION }),
+    ).toThrow("StatefulTokenizer has been closed.");
+    expect(
+      tokenizer.tokenize({
+        text: "東京都に",
+        projection: DEFAULT_PROJECTION,
+        mode: "C",
+      }),
+    ).toEqual([createMorpheme("東京都", 0, 9), createMorpheme("に", 9, 12)]);
+  });
+});
+
+test("stateful tokenizer throws INTERNAL when native create returns null handle", () => {
+  withTokenizer(({ library, tokenizer }) => {
+    const createSpy = spyOn(
+      library.symbols,
+      "sudachi_create_stateful_tokenizer_from_tokenizer",
+    ).mockImplementation((_tokenizerHandle, outHandle) => {
+      (outHandle as BigUint64Array)[0] = 0n;
+      return 0;
+    });
+
+    try {
+      let captured: unknown;
+      try {
+        tokenizer.createStatefulTokenizer();
+      } catch (error) {
+        captured = error;
+      }
+
+      expect(captured).toBeInstanceOf(SudachiError);
+      const sudachiError = captured as SudachiError;
+      expect(sudachiError.code).toBe("INTERNAL");
+      expect(sudachiError.nativeStatus).toBe(255);
+      expect(sudachiError.message).toContain("null native handle");
+    } finally {
+      createSpy.mockRestore();
+    }
   });
 });
 

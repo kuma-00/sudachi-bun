@@ -10,6 +10,30 @@ export const TOKENIZER_NATIVE_SYMBOL_DEFS = {
     args: ["ptr"],
     returns: "void",
   },
+  sudachi_create_stateful_tokenizer_from_tokenizer: {
+    args: ["ptr", "ptr"],
+    returns: "i32",
+  },
+  sudachi_free_stateful_tokenizer: {
+    args: ["ptr"],
+    returns: "void",
+  },
+  sudachi_stateful_tokenizer_reset: {
+    args: ["ptr", "cstring"],
+    returns: "i32",
+  },
+  sudachi_stateful_tokenizer_set_mode: {
+    args: ["ptr", "i32"],
+    returns: "i32",
+  },
+  sudachi_stateful_tokenizer_set_subset: {
+    args: ["ptr", "u32"],
+    returns: "i32",
+  },
+  sudachi_stateful_tokenizer_do_tokenize: {
+    args: ["ptr", "i32", "ptr"],
+    returns: "i32",
+  },
   sudachi_tokenize: {
     args: ["ptr", "cstring", "i32", "i32", "ptr"],
     returns: "i32",
