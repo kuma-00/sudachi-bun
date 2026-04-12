@@ -1,8 +1,8 @@
 import { type Pointer } from "bun:ffi";
 
 import { openNativeHandleSession } from "../native-session.ts";
+import { createNativeSudachiError } from "../native/error/mapper.ts";
 import {
-  createNativeSudachiError,
   loadLookupLibrary,
   loadNativeLibrary,
   readLookupResultLayout,

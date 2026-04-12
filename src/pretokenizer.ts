@@ -2,8 +2,8 @@ import { type Pointer } from "bun:ffi";
 
 import { readPretokenizedArray } from "./ffi.ts";
 import { openNativeHandleSession, readOwnedNativeResult } from "./native-session.ts";
+import { createNativeSudachiError } from "./native/error/mapper.ts";
 import {
-  createNativeSudachiError,
   loadPretokenizerLibrary,
   readPretokenizedResultLayout,
 } from "./native.ts";

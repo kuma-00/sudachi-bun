@@ -1,6 +1,6 @@
 import { SudachiError } from "../../types.ts";
 
-import { createNativeSudachiError } from "../errors.ts";
+import { createNativeSudachiError } from "../error/mapper.ts";
 import type { NativeErrorLibrary } from "../types.ts";
 
 export function validateArrayLayout(

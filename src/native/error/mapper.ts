@@ -1,7 +1,9 @@
-import type { NativeSudachiErrorCode } from "../types.ts";
-import { SudachiError } from "../types.ts";
+import type { NativeSudachiErrorCode } from "../../types.ts";
+import { SudachiError } from "../../types.ts";
 
-import type { NativeErrorLibrary } from "./types.ts";
+import type { NativeErrorLibrary } from "../types.ts";
+
+import { normalizeNativeStatusCodeName } from "./code-map.ts";
 
 export function readNativeError(library: NativeErrorLibrary): string {
   try {
@@ -17,25 +19,7 @@ export function readNativeStatusCodeName(
 ): NativeSudachiErrorCode {
   try {
     const code = String(library.symbols.sudachi_status_code_name(status) ?? "UNKNOWN");
-    switch (code) {
-      case "OK":
-      case "NULL_POINTER":
-      case "INVALID_UTF8":
-      case "INVALID_MODE":
-      case "INVALID_INDEX":
-      case "CONFIG":
-      case "TOKENIZE":
-      case "SPLIT":
-      case "LOOKUP":
-      case "PRETOKENIZE":
-      case "PRETOKENIZER":
-      case "MORPHEME_SPLIT":
-      case "SENTENCE_SPLIT":
-      case "INTERNAL":
-        return code;
-      default:
-        return "UNKNOWN";
-    }
+    return normalizeNativeStatusCodeName(code);
   } catch {
     return "UNKNOWN";
   }

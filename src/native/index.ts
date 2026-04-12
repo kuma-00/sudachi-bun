@@ -1,5 +1,5 @@
 export * from "./types.ts";
-export * from "./errors.ts";
+export * from "./error/index.ts";
 export * from "./layout/index.ts";
 export * from "./loader.ts";
 export * from "./path-resolver.ts";

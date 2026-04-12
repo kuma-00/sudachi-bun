@@ -7,10 +7,10 @@ import {
   PRETOKENIZED_RESULT_LAYOUT_VERSION,
   readLookupResultLayout,
   readMorphemeResultLayout,
-  readNativeStatusCodeName,
   readPosMatcherResultLayout,
   readPretokenizedResultLayout,
 } from "./native.ts";
+import { readNativeStatusCodeName } from "./native/error/mapper.ts";
 import type { NativeLookupLibrary, NativePretokenizerLibrary, NativeSudachiLibrary } from "./native/types.ts";
 
 function createLibrary(
