@@ -3,6 +3,7 @@ import { expect, test } from "bun:test";
 const pkg = await import("../index.ts");
 
 test("package root exports the new API entrypoint", () => {
+  expect("createSudachi" in pkg).toBe(true);
   expect(typeof pkg.main).toBe("function");
   expect(typeof pkg.runCli).toBe("function");
   expect(typeof pkg.createSudachi).toBe("function");
