@@ -1,9 +1,9 @@
 import type { MorphemeResultLayout, NativeSudachiLibrary } from "../types.ts";
 import { readResultLayout, validateArrayLayout } from "./core.ts";
 
-const MORPHEME_RESULT_LAYOUT_FIELD_COUNT = 18;
+const MORPHEME_RESULT_LAYOUT_FIELD_COUNT = 20;
 
-export const MORPHEME_RESULT_LAYOUT_VERSION = 1;
+export const MORPHEME_RESULT_LAYOUT_VERSION = 2;
 
 function validateMorphemeResultLayout(layout: MorphemeResultLayout): void {
   validateArrayLayout(
@@ -37,12 +37,14 @@ export function readMorphemeResultLayout(
         posOffset: values[9] ?? 0,
         beginOffset: values[10] ?? 0,
         endOffset: values[11] ?? 0,
-        wordIdOffset: values[12] ?? 0,
-        posIdOffset: values[13] ?? 0,
-        dictionaryIdOffset: values[14] ?? 0,
-        isOovOffset: values[15] ?? 0,
-        synonymGroupIdsOffset: values[16] ?? 0,
-        synonymGroupIdsLenOffset: values[17] ?? 0,
+        beginCharOffset: values[12] ?? 0,
+        endCharOffset: values[13] ?? 0,
+        wordIdOffset: values[14] ?? 0,
+        posIdOffset: values[15] ?? 0,
+        dictionaryIdOffset: values[16] ?? 0,
+        isOovOffset: values[17] ?? 0,
+        synonymGroupIdsOffset: values[18] ?? 0,
+        synonymGroupIdsLenOffset: values[19] ?? 0,
       }) satisfies MorphemeResultLayout,
     validateMorphemeResultLayout,
   );

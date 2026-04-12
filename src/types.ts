@@ -53,6 +53,8 @@ export interface Morpheme {
   pos: string;
   begin: number;
   end: number;
+  beginChar: number;
+  endChar: number;
   wordId: string;
   posId: number;
   dictionaryId: number;

@@ -2,6 +2,7 @@ use super::*;
 use crate::error::{ERR_INVALID_INDEX, ERR_NULL_POINTER, ERR_PRETOKENIZE, OK, status_code_name};
 use crate::result::{
     LookupResultArray, LookupResultLayout, MorphemeResult, MorphemeResultArray,
+    MorphemeResultLayout,
     PosMatcherResultArray, PretokenizedResultArray, PretokenizedResultLayout, SentenceSpanLayout,
 };
 use std::env;
@@ -175,6 +176,24 @@ fn collect_surfaces_and_offsets(result: *mut MorphemeResultArray) -> Vec<(String
     }
 }
 
+fn collect_surfaces_and_offsets_with_chars(
+    result: *mut MorphemeResultArray,
+) -> Vec<(String, usize, usize, usize, usize)> {
+    assert!(!result.is_null());
+
+    unsafe {
+        let array = &*result;
+        let items = std::slice::from_raw_parts(array.items, array.len);
+        items
+            .iter()
+            .map(|item| {
+                let surface = CStr::from_ptr(item.surface).to_str().unwrap().to_owned();
+                (surface, item.begin, item.end, item.begin_char, item.end_char)
+            })
+            .collect()
+    }
+}
+
 fn collect_morpheme_texts(
     result: *mut MorphemeResultArray,
 ) -> Vec<(String, String, String, String)> {
@@ -219,6 +238,8 @@ fn collect_morpheme_result(result: *mut MorphemeResultArray) -> Vec<MorphemeResu
                 pos: item.pos,
                 begin: item.begin,
                 end: item.end,
+                begin_char: item.begin_char,
+                end_char: item.end_char,
                 word_id: item.word_id,
                 pos_id: item.pos_id,
                 dictionary_id: item.dictionary_id,
@@ -627,6 +648,23 @@ fn get_pretokenized_result_layout_requires_output_pointer() {
 }
 
 #[test]
+fn get_morpheme_result_layout_returns_stable_offsets() {
+    let mut layout = MaybeUninit::<MorphemeResultLayout>::uninit();
+    let status = sudachi_get_morpheme_result_layout(layout.as_mut_ptr());
+
+    assert_eq!(status, OK);
+    let layout = unsafe { layout.assume_init() };
+    assert_eq!(
+        layout.layout_version,
+        crate::result::MORPHEME_RESULT_LAYOUT_VERSION
+    );
+    assert!(layout.result_size > 0);
+    assert!(layout.begin_offset > 0);
+    assert!(layout.begin_char_offset > 0);
+    assert!(layout.end_char_offset > 0);
+}
+
+#[test]
 fn get_pretokenized_result_layout_returns_stable_offsets() {
     let mut layout = MaybeUninit::<PretokenizedResultLayout>::uninit();
     let status = sudachi_get_pretokenized_result_layout(layout.as_mut_ptr());
@@ -812,6 +850,32 @@ fn tokenize_projection_changes_surface_field() {
         assert_eq!(dictionary_values[0].0, surface_values[0].2);
         assert_eq!(normalized_values[0].0, surface_values[0].1);
         assert_eq!(reading_values[0].0, surface_values[0].3);
+    });
+}
+
+#[test]
+fn tokenize_subset_uses_utf16_char_offsets_for_surrogate_pairs() {
+    with_test_tokenizer(|handle| {
+        let text = CString::new("a😀b").unwrap();
+        let text_str = text.to_str().unwrap();
+        let mut out_result = ptr::null_mut();
+        let status = sudachi_tokenize_subset(
+            handle,
+            text.as_ptr(),
+            2,
+            Projection::Surface as i32,
+            InfoSubset::all().bits(),
+            &mut out_result,
+        );
+        assert_eq!(status, OK, "{}", last_error_message());
+        let values = collect_surfaces_and_offsets_with_chars(out_result);
+        sudachi_free_result(out_result);
+
+        assert!(!values.is_empty());
+        for (_, begin_byte, end_byte, begin_char, end_char) in values {
+            assert_eq!(begin_char, utf16_index_for_byte_offset(text_str, begin_byte));
+            assert_eq!(end_char, utf16_index_for_byte_offset(text_str, end_byte));
+        }
     });
 }
 
@@ -1309,6 +1373,33 @@ fn split_morphemes_requires_valid_mode() {
 }
 
 #[test]
+fn split_morphemes_uses_utf16_char_offsets_for_surrogate_pairs() {
+    with_test_tokenizer(|handle| {
+        let text = CString::new("京都😀東京都").unwrap();
+        let text_str = text.to_str().unwrap();
+        let mut out_result = ptr::null_mut();
+        let status = sudachi_split_morphemes(
+            handle,
+            text.as_ptr(),
+            2,
+            Projection::Surface as i32,
+            0,
+            &mut out_result,
+        );
+
+        assert_eq!(status, OK, "{}", last_error_message());
+        let values = collect_surfaces_and_offsets_with_chars(out_result);
+        sudachi_free_result(out_result);
+
+        assert!(!values.is_empty());
+        for (_, begin_byte, end_byte, begin_char, end_char) in values {
+            assert_eq!(begin_char, utf16_index_for_byte_offset(text_str, begin_byte));
+            assert_eq!(end_char, utf16_index_for_byte_offset(text_str, end_byte));
+        }
+    });
+}
+
+#[test]
 fn stateful_tokenizer_reuses_handle_and_respects_mode_changes() {
     with_test_stateful_from_tokenizer(|handle| {
         let text = CString::new("東京都に").unwrap();
@@ -1357,5 +1448,27 @@ fn stateful_tokenizer_subset_controls_output_fields() {
 
         assert!(!values.is_empty());
         assert!(values.iter().all(|item| item.normalized.is_null()));
+    });
+}
+
+#[test]
+fn stateful_tokenizer_uses_utf16_char_offsets_for_surrogate_pairs() {
+    with_test_stateful_from_tokenizer(|handle| {
+        let text = CString::new("a😀b").unwrap();
+        let text_str = text.to_str().unwrap();
+        let mut out_result = ptr::null_mut();
+        let status = sudachi_stateful_tokenizer_reset(handle, text.as_ptr());
+        assert_eq!(status, OK, "{}", last_error_message());
+        let status =
+            sudachi_stateful_tokenizer_do_tokenize(handle, Projection::Surface as i32, &mut out_result);
+        assert_eq!(status, OK, "{}", last_error_message());
+        let values = collect_surfaces_and_offsets_with_chars(out_result);
+        sudachi_free_result(out_result);
+
+        assert!(!values.is_empty());
+        for (_, begin_byte, end_byte, begin_char, end_char) in values {
+            assert_eq!(begin_char, utf16_index_for_byte_offset(text_str, begin_byte));
+            assert_eq!(end_char, utf16_index_for_byte_offset(text_str, end_byte));
+        }
     });
 }

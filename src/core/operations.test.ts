@@ -18,6 +18,8 @@ function createMorpheme(surface: string, begin: number, end: number): Morpheme {
     pos: "名詞,普通名詞,一般,*,*,*",
     begin,
     end,
+    beginChar: begin,
+    endChar: end,
     wordId: `${surface}-${begin}`,
     posId: 0,
     dictionaryId: 0,

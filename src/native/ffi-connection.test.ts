@@ -178,7 +178,7 @@ nativeTest(
 
     try {
       const morphemeLayout = readMorphemeResultLayout(tokenizerLibrary);
-      expect(morphemeLayout.layoutVersion).toBe(1);
+      expect(morphemeLayout.layoutVersion).toBe(2);
       expect(morphemeLayout.resultSize).toBeGreaterThan(0);
       expect([0, 1]).toContain(morphemeLayout.arrayLayoutKind);
 

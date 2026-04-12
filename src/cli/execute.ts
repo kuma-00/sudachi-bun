@@ -1,9 +1,11 @@
 import { createTokenizer } from "../core.ts";
 import { createSentenceSplitter } from "../sentence-splitter.ts";
+import { createUtf8ByteOffsetIndexMap } from "../shared/utf8-offset.ts";
 import {
   formatSudachiError,
   type Morpheme,
   type SentenceSpan,
+  SudachiError,
   type SurfaceProjection,
   type TokenizeMode,
 } from "../types.ts";
@@ -12,6 +14,13 @@ import { formatTokenizeOutput, type TokenizeOutputFormat } from "./output.ts";
 
 interface CliIO {
   error(message: string): void;
+}
+
+function invalidSentenceSplitResult(message: string): never {
+  throw new SudachiError(message, {
+    code: "INTERNAL",
+    nativeStatus: 255,
+  });
 }
 
 function tokenizeSentenceUnits(
@@ -37,23 +46,38 @@ function tokenizeSentenceUnits(
     return tokenizer.tokenize({ text, projection, mode });
   }
 
+  const startOffsets = units.map((unit) => unit.start);
+  const startIndexMap = createUtf8ByteOffsetIndexMap(text, startOffsets, {
+    throwInvalid: (message) => invalidSentenceSplitResult(message),
+    messages: {
+      outOfRange: (offset) =>
+        `Sentence splitter returned an out-of-range byte offset: ${offset}.`,
+      notBoundary: (offset) =>
+        `Sentence splitter returned a byte offset that does not align to a UTF-8 boundary: ${offset}.`,
+    },
+  });
+
   const morphemes: Morpheme[] = [];
   for (const unit of units) {
+    const startChar = startIndexMap.get(unit.start);
+    if (startChar === undefined) {
+      invalidSentenceSplitResult(
+        `Sentence splitter returned an unreadable unit boundary: ${unit.start}.`,
+      );
+    }
+
     const unitMorphemes = tokenizer.tokenize({
       text: unit.text,
       projection,
       mode,
     });
-    if (unit.start === 0) {
-      morphemes.push(...unitMorphemes);
-      continue;
-    }
-
     morphemes.push(
       ...unitMorphemes.map((morpheme) => ({
         ...morpheme,
         begin: morpheme.begin + unit.start,
         end: morpheme.end + unit.start,
+        beginChar: morpheme.beginChar + startChar,
+        endChar: morpheme.endChar + startChar,
       })),
     );
   }

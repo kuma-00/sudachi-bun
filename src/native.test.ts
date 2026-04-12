@@ -23,7 +23,7 @@ function createLibrary(
       0n,
       8n,
       16n,
-      96n,
+      112n,
       0n,
       8n,
       16n,
@@ -33,10 +33,12 @@ function createLibrary(
       48n,
       56n,
       64n,
-      68n,
       72n,
       80n,
+      84n,
       88n,
+      96n,
+      104n,
     ];
 
     values.forEach((value, index) => {
@@ -194,7 +196,7 @@ test("readMorphemeResultLayout maps the Rust layout buffer in order", () => {
     arrayLayoutKind: 0,
     arrayItemsOffset: 8,
     arrayLenOffset: 16,
-    resultSize: 96,
+    resultSize: 112,
     surfaceOffset: 0,
     normalizedOffset: 8,
     dictionaryFormOffset: 16,
@@ -202,12 +204,14 @@ test("readMorphemeResultLayout maps the Rust layout buffer in order", () => {
     posOffset: 32,
     beginOffset: 40,
     endOffset: 48,
-    wordIdOffset: 56,
-    posIdOffset: 64,
-    dictionaryIdOffset: 68,
-    isOovOffset: 72,
-    synonymGroupIdsOffset: 80,
-    synonymGroupIdsLenOffset: 88,
+    beginCharOffset: 56,
+    endCharOffset: 64,
+    wordIdOffset: 72,
+    posIdOffset: 80,
+    dictionaryIdOffset: 84,
+    isOovOffset: 88,
+    synonymGroupIdsOffset: 96,
+    synonymGroupIdsLenOffset: 104,
   });
 });
 
@@ -231,7 +235,7 @@ test("readMorphemeResultLayout rejects unsupported array layout kinds", () => {
           2n,
           8n,
           16n,
-          96n,
+          112n,
           0n,
           8n,
           16n,
@@ -241,10 +245,12 @@ test("readMorphemeResultLayout rejects unsupported array layout kinds", () => {
           48n,
           56n,
           64n,
-          68n,
           72n,
           80n,
+          84n,
           88n,
+          96n,
+          104n,
         ];
         values.forEach((value, index) => {
           outLayout[index] = value;

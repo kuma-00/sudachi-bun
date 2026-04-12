@@ -13,6 +13,8 @@ export interface MorphemeResultLayout {
   posOffset: number;
   beginOffset: number;
   endOffset: number;
+  beginCharOffset: number;
+  endCharOffset: number;
   wordIdOffset: number;
   posIdOffset: number;
   dictionaryIdOffset: number;

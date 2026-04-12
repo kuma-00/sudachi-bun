@@ -81,6 +81,8 @@ function morphemeMatches(left: Morpheme, right: Morpheme): boolean {
   return (
     left.begin === right.begin &&
     left.end === right.end &&
+    left.beginChar === right.beginChar &&
+    left.endChar === right.endChar &&
     left.normalized === right.normalized &&
     left.dictionaryForm === right.dictionaryForm &&
     left.reading === right.reading &&

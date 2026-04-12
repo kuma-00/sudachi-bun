@@ -107,6 +107,8 @@ export class MorphemeStateTracker {
       morpheme.pos,
       morpheme.begin,
       morpheme.end,
+      morpheme.beginChar,
+      morpheme.endChar,
       morpheme.wordId,
       morpheme.posId,
       morpheme.dictionaryId,

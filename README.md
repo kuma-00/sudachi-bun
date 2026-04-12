@@ -273,7 +273,8 @@ const hfPretokenizer = createHuggingFacePretokenizer(sudachi.pretokenizer, {
 - `dictionaryForm`
 - `reading`
 - `pos`
-- `begin`, `end`
+- `begin`, `end`（UTF-8 byte offset）
+- `beginChar`, `endChar`（JavaScript string index）
 - `wordId`, `posId`, `dictionaryId`
 - `isOov`
 - `synonymGroupIds`

@@ -33,6 +33,8 @@ const SAMPLE_MORPHEMES = [
     pos: "名詞",
     begin: 0,
     end: 3,
+    beginChar: 0,
+    endChar: 3,
     wordId: "1",
     posId: 1,
     dictionaryId: 0,
@@ -47,6 +49,8 @@ const SAMPLE_MORPHEMES = [
     pos: "名詞",
     begin: 3,
     end: 5,
+    beginChar: 3,
+    endChar: 5,
     wordId: "2",
     posId: 1,
     dictionaryId: 0,
@@ -64,6 +68,8 @@ const NORMALIZED_SAMPLE_MORPHEMES = [
     pos: "名詞",
     begin: 0,
     end: 3,
+    beginChar: 0,
+    endChar: 3,
     wordId: "1",
     posId: 1,
     dictionaryId: 0,
@@ -78,6 +84,8 @@ const NORMALIZED_SAMPLE_MORPHEMES = [
     pos: "名詞",
     begin: 3,
     end: 5,
+    beginChar: 3,
+    endChar: 5,
     wordId: "2",
     posId: 1,
     dictionaryId: 0,
@@ -301,7 +309,7 @@ test("runCli rejects unknown subcommand typos", async () => {
   expect(logs[0]).toContain("Commands:");
 });
 
-test("runCli handles sentence splitting and byte offsets", async () => {
+test("runCli handles sentence splitting and byte/char offsets", async () => {
   const { io, logs, errors } = createCapturedIo();
   const tokenizeCalls: Array<{
     text: string;
@@ -345,6 +353,8 @@ test("runCli handles sentence splitting and byte offsets", async () => {
               surface: text,
               begin: 0,
               end: Buffer.byteLength(text, "utf8"),
+              beginChar: 0,
+              endChar: text.length,
             },
           ];
         },
@@ -396,10 +406,18 @@ test("runCli handles sentence splitting and byte offsets", async () => {
     const output = JSON.parse(logs[0] ?? "[]") as Array<{
       begin: number;
       end: number;
+      beginChar: number;
+      endChar: number;
     }>;
     expect(output.map(({ begin, end }) => ({ begin, end }))).toEqual([
       { begin: 0, end: 7 },
       { begin: 7, end: 11 },
+    ]);
+    expect(
+      output.map(({ beginChar, endChar }) => ({ beginChar, endChar })),
+    ).toEqual([
+      { beginChar: 0, endChar: 3 },
+      { beginChar: 3, endChar: 5 },
     ]);
   } finally {
     tokenizeSpy.mockRestore();

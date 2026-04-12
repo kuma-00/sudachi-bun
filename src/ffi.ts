@@ -156,6 +156,8 @@ function readMorpheme(
     pos: readCStringField(itemPtr, layout.posOffset),
     begin: readUsizeField(itemPtr, layout.beginOffset, "begin"),
     end: readUsizeField(itemPtr, layout.endOffset, "end"),
+    beginChar: readUsizeField(itemPtr, layout.beginCharOffset, "beginChar"),
+    endChar: readUsizeField(itemPtr, layout.endCharOffset, "endChar"),
     wordId: readCStringField(itemPtr, layout.wordIdOffset),
     posId: readUnsigned16Field(itemPtr, layout.posIdOffset),
     dictionaryId: readNumberField(itemPtr, layout.dictionaryIdOffset),

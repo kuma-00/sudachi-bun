@@ -8,7 +8,7 @@ use super::{
 };
 
 pub const MORPHEME_RESULT_ARRAY_LAYOUT_CONTIGUOUS: u64 = 0;
-pub const MORPHEME_RESULT_LAYOUT_VERSION: u64 = 1;
+pub const MORPHEME_RESULT_LAYOUT_VERSION: u64 = 2;
 pub const LOOKUP_RESULT_ARRAY_LAYOUT_CONTIGUOUS: u64 = 0;
 pub const LOOKUP_RESULT_LAYOUT_VERSION: u64 = 1;
 pub const POS_MATCHER_RESULT_ARRAY_LAYOUT_CONTIGUOUS: u64 = 0;
@@ -33,6 +33,8 @@ impl MorphemeResultLayout {
             pos_offset: offset_of!(MorphemeResult, pos) as u64,
             begin_offset: offset_of!(MorphemeResult, begin) as u64,
             end_offset: offset_of!(MorphemeResult, end) as u64,
+            begin_char_offset: offset_of!(MorphemeResult, begin_char) as u64,
+            end_char_offset: offset_of!(MorphemeResult, end_char) as u64,
             word_id_offset: offset_of!(MorphemeResult, word_id) as u64,
             pos_id_offset: offset_of!(MorphemeResult, pos_id) as u64,
             dictionary_id_offset: offset_of!(MorphemeResult, dictionary_id) as u64,
@@ -40,6 +42,12 @@ impl MorphemeResultLayout {
             synonym_group_ids_offset: offset_of!(MorphemeResult, synonym_group_ids) as u64,
             synonym_group_ids_len_offset: offset_of!(MorphemeResult, synonym_group_ids_len) as u64,
         }
+    }
+}
+
+impl Default for MorphemeResultLayout {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -54,6 +62,12 @@ impl SentenceSpanLayout {
             begin_offset: offset_of!(SentenceSpan, begin) as u64,
             end_offset: offset_of!(SentenceSpan, end) as u64,
         }
+    }
+}
+
+impl Default for SentenceSpanLayout {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -85,6 +99,12 @@ impl PretokenizedResultLayout {
     }
 }
 
+impl Default for PretokenizedResultLayout {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl LookupResultLayout {
     pub const fn new() -> Self {
         Self {
@@ -103,6 +123,12 @@ impl LookupResultLayout {
     }
 }
 
+impl Default for LookupResultLayout {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl PosMatcherResultLayout {
     pub const fn new() -> Self {
         Self {
@@ -112,5 +138,11 @@ impl PosMatcherResultLayout {
             array_len_offset: offset_of!(PosMatcherResultArray, len) as u64,
             result_size: size_of::<u16>() as u64,
         }
+    }
+}
+
+impl Default for PosMatcherResultLayout {
+    fn default() -> Self {
+        Self::new()
     }
 }

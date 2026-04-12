@@ -326,6 +326,7 @@ pub(crate) fn morpheme_to_result(
     subset: InfoSubset,
     include_pos_text: bool,
     projection: Projection,
+    offset_map: &Utf8OffsetMap,
 ) -> Result<MorphemeResult, i32> {
     struct ResultGuard {
         value: MorphemeResult,
@@ -354,19 +355,21 @@ pub(crate) fn morpheme_to_result(
         result.value.surface = clone_string(&projected_surface_text(morpheme, projection))?;
     }
     if subset.contains(InfoSubset::NORMALIZED_FORM) {
-        result.value.normalized = clone_string(&morpheme.normalized_form().to_string())?;
+        result.value.normalized = clone_string(morpheme.normalized_form())?;
     }
     if subset.contains(InfoSubset::DIC_FORM_WORD_ID) {
-        result.value.dictionary_form = clone_string(&morpheme.dictionary_form().to_string())?;
+        result.value.dictionary_form = clone_string(morpheme.dictionary_form())?;
     }
     if subset.contains(InfoSubset::READING_FORM) {
-        result.value.reading = clone_string(&morpheme.reading_form().to_string())?;
+        result.value.reading = clone_string(morpheme.reading_form())?;
     }
     if include_pos_text {
         result.value.pos = clone_string(&morpheme.part_of_speech().join(","))?;
     }
     result.value.begin = morpheme.begin();
     result.value.end = morpheme.end();
+    result.value.begin_char = offset_map.byte_to_char(result.value.begin)?;
+    result.value.end_char = offset_map.byte_to_char(result.value.end)?;
     result.value.word_id = clone_string(&format!("{:?}", morpheme.word_id()))?;
     if subset.contains(InfoSubset::POS_ID) {
         result.value.pos_id = morpheme.part_of_speech_id();
