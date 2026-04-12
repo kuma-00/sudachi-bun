@@ -29,7 +29,10 @@ function mockUnzipFlow(
   archiveEntries: string[],
   onExtract: (outputDir: string) => void,
 ): void {
-  spyOn(Bun, "spawn").mockImplementation((args: string[]) => {
+  spyOn(Bun, "spawn").mockImplementation((input: unknown) => {
+    const args = Array.isArray(input)
+      ? input
+      : ((input as { cmd?: string[] }).cmd ?? []);
     if (args[0] === "unzip" && args[1] === "-Z1") {
       return {
         exited: Promise.resolve(0),
@@ -154,7 +157,10 @@ test("setupDictionary downloads and expands the archive specified by --url", asy
   const fetchSpy = spyOn(globalThis, "fetch").mockResolvedValue(
     new Response(payload.buffer, { status: 200 }) as never,
   );
-  const spawnSpy = spyOn(Bun, "spawn").mockImplementation((args: string[]) => {
+  const spawnSpy = spyOn(Bun, "spawn").mockImplementation((input: unknown) => {
+    const args = Array.isArray(input)
+      ? input
+      : ((input as { cmd?: string[] }).cmd ?? []);
     if (args[0] === "unzip" && args[1] === "-Z1") {
       return {
         exited: Promise.resolve(0),
@@ -307,42 +313,45 @@ test("ensureDictionary reuses an existing dictionary even when --url is explicit
 test("ensureDictionary downloads and extracts when no installed dictionary exists", async () => {
   const outDir = mkdtempSync(join(tmpdir(), "sudachi-dict-ensure-"));
 
-  const fetchSpy = spyOn(globalThis, "fetch").mockImplementation(
-    (url: string | URL | Request) => {
-      const endpoint = String(url);
-      if (endpoint.includes("/releases/tags/v20260116")) {
-        return Promise.resolve(
-          new Response(
-            JSON.stringify({
-              tag_name: "v20260116",
-              assets: [
-                {
-                  name: "sudachi-dictionary-20260116-core.zip",
-                  browser_download_url:
-                    "https://example.com/sudachi-dictionary-20260116-core.zip",
-                },
-              ],
-            }),
-            { status: 200 },
-          ),
-        ) as Promise<Response>;
-      }
-
-      if (
-        endpoint === "https://example.com/sudachi-dictionary-20260116-core.zip"
-      ) {
-        return Promise.resolve(
-          new Response(new Uint8Array([0x50, 0x4b, 0x03, 0x04]).buffer, {
-            status: 200,
+  const fetchSpy = spyOn(globalThis, "fetch").mockImplementation(((
+    url: string | URL | Request,
+  ) => {
+    const endpoint = String(url);
+    if (endpoint.includes("/releases/tags/v20260116")) {
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({
+            tag_name: "v20260116",
+            assets: [
+              {
+                name: "sudachi-dictionary-20260116-core.zip",
+                browser_download_url:
+                  "https://example.com/sudachi-dictionary-20260116-core.zip",
+              },
+            ],
           }),
-        );
-      }
+          { status: 200 },
+        ),
+      ) as Promise<Response>;
+    }
 
-      throw new Error(`unexpected fetch url: ${endpoint}`);
-    },
-  );
+    if (
+      endpoint === "https://example.com/sudachi-dictionary-20260116-core.zip"
+    ) {
+      return Promise.resolve(
+        new Response(new Uint8Array([0x50, 0x4b, 0x03, 0x04]).buffer, {
+          status: 200,
+        }),
+      ) as Promise<Response>;
+    }
 
-  const spawnSpy = spyOn(Bun, "spawn").mockImplementation((args: string[]) => {
+    throw new Error(`unexpected fetch url: ${endpoint}`);
+  }) as typeof fetch);
+
+  const spawnSpy = spyOn(Bun, "spawn").mockImplementation((input: unknown) => {
+    const args = Array.isArray(input)
+      ? input
+      : ((input as { cmd?: string[] }).cmd ?? []);
     if (args[0] === "unzip" && args[1] === "-Z1") {
       return {
         exited: Promise.resolve(0),
@@ -392,7 +401,10 @@ test("setupDictionary throws when archive does not contain the expected dictiona
   spyOn(globalThis, "fetch").mockResolvedValue(
     new Response(payload.buffer, { status: 200 }) as never,
   );
-  spyOn(Bun, "spawn").mockImplementation((args: string[]) => {
+  spyOn(Bun, "spawn").mockImplementation((input: unknown) => {
+    const args = Array.isArray(input)
+      ? input
+      : ((input as { cmd?: string[] }).cmd ?? []);
     if (args[0] === "unzip" && args[1] === "-Z1") {
       return {
         exited: Promise.resolve(0),

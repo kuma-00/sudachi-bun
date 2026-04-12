@@ -316,7 +316,8 @@ test("runCli handles sentence splitting and byte offsets", async () => {
       ];
     },
   };
-  const splitterCloseSpy = spyOn({ close() {} }, "close");
+  const splitterCloseTarget: { close: () => void } = { close() {} };
+  const splitterCloseSpy = spyOn(splitterCloseTarget, "close");
   const fakeSplitter = {
     split: spyOn(splitterTarget, "split"),
     close: splitterCloseSpy,

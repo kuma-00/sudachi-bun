@@ -47,9 +47,9 @@ test("createSudachi returns tokenizer/splitter/pretokenizer and close()", () => 
       pretokenizer: pretokenizerOptions,
     });
 
-    expect(sudachi.tokenizer).toBe(tokenizer);
-    expect(sudachi.splitter).toBe(splitter);
-    expect(sudachi.pretokenizer).toBe(pretokenizer);
+    expect(sudachi.tokenizer as unknown).toBe(tokenizer);
+    expect(sudachi.splitter as unknown).toBe(splitter);
+    expect(sudachi.pretokenizer as unknown).toBe(pretokenizer);
     expect(typeof sudachi.close).toBe("function");
 
     expect(createTokenizerSpy).toHaveBeenCalledWith({
