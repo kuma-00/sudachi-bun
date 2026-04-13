@@ -253,6 +253,19 @@ export interface NativeSentenceSplitterLibrary {
       inputUtf8: string,
       outResult: NodeJS.TypedArray | Pointer | null,
     ) => number;
+    sudachi_get_eos?: (
+      handle: Pointer | NodeJS.TypedArray | null,
+      inputUtf8: string,
+      outEos: NodeJS.TypedArray | Pointer | null,
+      outFound: NodeJS.TypedArray | Pointer | null,
+    ) => number;
+    sudachi_get_eos_with_limit?: (
+      handle: Pointer | NodeJS.TypedArray | null,
+      inputUtf8: string,
+      limit: number,
+      outEos: NodeJS.TypedArray | Pointer | null,
+      outFound: NodeJS.TypedArray | Pointer | null,
+    ) => number;
     sudachi_free_sentence_spans: (
       result: Pointer | NodeJS.TypedArray | null,
     ) => void;

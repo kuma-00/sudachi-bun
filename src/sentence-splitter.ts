@@ -79,6 +79,16 @@ interface NativeSentenceSplitterSession {
   library: NativeSentenceSplitterLibrary;
 }
 
+interface SentenceSplitterState {
+  library: NativeSentenceSplitterLibrary | null;
+  layout: SentenceSpanResultLayout | null;
+  handle: Pointer | null;
+}
+
+interface ExistingSentenceSplitterState {
+  state: SentenceSplitterState;
+}
+
 function openNativeSentenceSplitter(
   options: SentenceSplitterOptions,
 ): NativeSentenceSplitterSession {
@@ -104,31 +114,117 @@ function openNativeSentenceSplitter(
 }
 
 export class SentenceSplitter {
-  #library: NativeSentenceSplitterLibrary | null;
-  #layout: SentenceSpanResultLayout | null;
-  #handle: Pointer | null;
+  #state: SentenceSplitterState;
+  #limit: number | null;
 
-  constructor(session: NativeSentenceSplitterSession) {
-    this.#library = session.library;
-    this.#layout = session.layout;
-    this.#handle = session.handle;
+  constructor(
+    session: NativeSentenceSplitterSession | ExistingSentenceSplitterState,
+    limit: number | null = null,
+  ) {
+    this.#state =
+      "state" in session
+        ? session.state
+        : {
+            library: session.library,
+            layout: session.layout,
+            handle: session.handle,
+          };
+    this.#limit = limit;
   }
 
   get closed(): boolean {
     return (
-      this.#library === null || this.#handle === null || this.#layout === null
+      this.#state.library === null ||
+      this.#state.handle === null ||
+      this.#state.layout === null
     );
   }
 
-  split(text: string): SentenceSpan[] {
-    const library = this.#library;
-    const layout = this.#layout;
-    const handle = this.#handle;
+  withLimit(limit: number): SentenceSplitter {
+    if (!Number.isSafeInteger(limit) || limit <= 0 || limit > 2_147_483_647) {
+      throw new SudachiError("limit must be a positive integer.", {
+        code: "INVALID_ARGUMENT",
+      });
+    }
+
+    return new SentenceSplitter({ state: this.#state }, limit);
+  }
+
+  #requireOpen(): {
+    library: NativeSentenceSplitterLibrary;
+    layout: SentenceSpanResultLayout;
+    handle: Pointer;
+  } {
+    const library = this.#state.library;
+    const layout = this.#state.layout;
+    const handle = this.#state.handle;
     if (library === null || layout === null || handle === null) {
       throw new SudachiError("Sentence splitter has been closed.", {
         code: "SENTENCE_SPLITTER_CLOSED",
       });
     }
+
+    return { library, layout, handle };
+  }
+
+  getEos(text: string): number | null {
+    const { library, handle } = this.#requireOpen();
+
+    if (text.length === 0) {
+      return null;
+    }
+
+    const eosOut = new BigUint64Array(1);
+    const foundOut = new Int32Array(1);
+    const status =
+      this.#limit === null
+        ? library.symbols.sudachi_get_eos?.(handle, text, eosOut, foundOut)
+        : library.symbols.sudachi_get_eos_with_limit?.(
+            handle,
+            text,
+            this.#limit,
+            eosOut,
+            foundOut,
+          );
+    if (status === undefined) {
+      throw new SudachiError("Sentence detector API is not available.", {
+        code: "INTERNAL",
+        nativeStatus: 255,
+      });
+    }
+    if (status !== 0) {
+      throw createNativeSudachiError(
+        library,
+        status,
+        "Sentence boundary detection failed.",
+      );
+    }
+
+    const eosRaw = eosOut[0] ?? 0n;
+    if ((foundOut[0] ?? 0) === 0) {
+      return null;
+    }
+    if (eosRaw > BigInt(Number.MAX_SAFE_INTEGER)) {
+      invalidSentenceSpan(
+        `Sentence splitter returned an out-of-range byte offset: ${eosRaw.toString()}.`,
+      );
+    }
+
+    const eos = Number(eosRaw);
+    createUtf8ByteOffsetIndexMap(text, [eos], {
+      throwInvalid: invalidSentenceSpan,
+      messages: {
+        outOfRange: (offset) =>
+          `Sentence splitter returned an out-of-range byte offset: ${offset}.`,
+        notBoundary: (offset) =>
+          `Sentence splitter returned a byte offset that does not align to a UTF-8 boundary: ${offset}.`,
+      },
+    });
+    return eos;
+  }
+
+  split(text: string): SentenceSpan[] {
+    const { library, layout, handle } = this.#requireOpen();
 
     if (text.length === 0) {
       return [];
@@ -161,18 +257,19 @@ export class SentenceSplitter {
   }
 
   close(): void {
-    if (this.#library === null) {
+    const library = this.#state.library;
+    if (library === null) {
       return;
     }
 
-    if (this.#handle !== null) {
-      this.#library.symbols.sudachi_free_sentence_splitter(this.#handle);
+    if (this.#state.handle !== null) {
+      library.symbols.sudachi_free_sentence_splitter(this.#state.handle);
     }
 
-    this.#handle = null;
-    this.#layout = null;
-    this.#library.close();
-    this.#library = null;
+    this.#state.handle = null;
+    this.#state.layout = null;
+    library.close();
+    this.#state.library = null;
   }
 
   [Symbol.dispose](): void {

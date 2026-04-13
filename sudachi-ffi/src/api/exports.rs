@@ -224,6 +224,27 @@ pub extern "C" fn sudachi_split_sentences(
 }
 
 #[unsafe(no_mangle)]
+pub extern "C" fn sudachi_get_eos(
+    handle: *const ops::SentenceSplitterHandle,
+    input_utf8: *const c_char,
+    out_eos: *mut usize,
+    out_found: *mut i32,
+) -> i32 {
+    ops::get_eos_impl(handle, input_utf8, out_eos, out_found)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn sudachi_get_eos_with_limit(
+    handle: *const ops::SentenceSplitterHandle,
+    input_utf8: *const c_char,
+    limit: i32,
+    out_eos: *mut usize,
+    out_found: *mut i32,
+) -> i32 {
+    ops::get_eos_with_limit_impl(handle, input_utf8, limit, out_eos, out_found)
+}
+
+#[unsafe(no_mangle)]
 pub extern "C" fn sudachi_pretokenize(
     handle: *const ops::PretokenizerHandle,
     input_utf8: *const c_char,

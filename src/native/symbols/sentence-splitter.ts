@@ -14,6 +14,14 @@ export const SENTENCE_SPLITTER_NATIVE_SYMBOL_DEFS = {
     args: ["ptr", "cstring", "ptr"],
     returns: "i32",
   },
+  sudachi_get_eos: {
+    args: ["ptr", "cstring", "ptr", "ptr"],
+    returns: "i32",
+  },
+  sudachi_get_eos_with_limit: {
+    args: ["ptr", "cstring", "i32", "ptr", "ptr"],
+    returns: "i32",
+  },
   sudachi_free_sentence_spans: {
     args: ["ptr"],
     returns: "void",

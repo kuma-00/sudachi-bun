@@ -45,6 +45,11 @@ export interface SentenceSpan {
   end: number;
 }
 
+export interface SentenceDetector {
+  getEos(text: string): number | null;
+  withLimit(limit: number): SentenceDetector;
+}
+
 export interface Morpheme {
   surface: string;
   normalized: string;

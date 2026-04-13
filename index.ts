@@ -53,6 +53,7 @@ export type {
   PretokenizedToken,
   PretokenizeOptions,
   PretokenizerOptions,
+  SentenceDetector,
   SentenceSpan,
   SentenceSplitterOptions,
   StatefulTokenizeArgs,

@@ -38,6 +38,22 @@ function createMockLibrary(): NativeSentenceSplitterLibrary {
         (outResult as BigUint64Array)[0] = 2n;
         return 0;
       },
+      sudachi_get_eos: (_handle, _input, outEos, outFound) => {
+        (outEos as BigUint64Array)[0] = 7n;
+        (outFound as Int32Array)[0] = 1;
+        return 0;
+      },
+      sudachi_get_eos_with_limit: (
+        _handle,
+        _input,
+        _limit,
+        outEos,
+        outFound,
+      ) => {
+        (outEos as BigUint64Array)[0] = 7n;
+        (outFound as Int32Array)[0] = 1;
+        return 0;
+      },
       sudachi_free_sentence_spans: () => {},
       sudachi_get_sentence_span_layout: () => 0,
       sudachi_get_last_error: () => "native error" as never,
@@ -151,6 +167,167 @@ test("split rejects invalid UTF-8 byte boundaries from native", () => {
   } finally {
     splitter.close();
     readSpy.mockRestore();
+    layoutSpy.mockRestore();
+    loadSpy.mockRestore();
+  }
+});
+
+test("getEos returns null for an empty string", () => {
+  const loadSpy = spyOn(native, "loadSentenceSplitterLibrary").mockReturnValue(
+    createMockLibrary(),
+  );
+  const layoutSpy = spyOn(
+    native,
+    "readSentenceSpanResultLayout",
+  ).mockReturnValue(SENTENCE_SPAN_LAYOUT);
+  const splitter = createSentenceSplitter({ dictPath: "/tmp/dict" });
+
+  try {
+    expect(splitter.getEos("")).toBeNull();
+  } finally {
+    splitter.close();
+    layoutSpy.mockRestore();
+    loadSpy.mockRestore();
+  }
+});
+
+test("getEos returns byte offset from native", () => {
+  const library = createMockLibrary();
+  const loadSpy = spyOn(native, "loadSentenceSplitterLibrary").mockReturnValue(
+    library,
+  );
+  const layoutSpy = spyOn(
+    native,
+    "readSentenceSpanResultLayout",
+  ).mockReturnValue(SENTENCE_SPAN_LAYOUT);
+  const eosSpy = spyOn(library.symbols, "sudachi_get_eos");
+  const splitter = createSentenceSplitter({ dictPath: "/tmp/dict" });
+
+  try {
+    expect(splitter.getEos("😀。 B？")).toBe(7);
+    expect(eosSpy).toHaveBeenCalledTimes(1);
+    expect(eosSpy).toHaveBeenCalledWith(
+      1 as never,
+      "😀。 B？",
+      expect.any(BigUint64Array),
+      expect.any(Int32Array),
+    );
+  } finally {
+    splitter.close();
+    eosSpy.mockRestore();
+    layoutSpy.mockRestore();
+    loadSpy.mockRestore();
+  }
+});
+
+test("getEos returns null when native reports unresolved boundary", () => {
+  const library = createMockLibrary();
+  const loadSpy = spyOn(native, "loadSentenceSplitterLibrary").mockReturnValue(
+    library,
+  );
+  const layoutSpy = spyOn(
+    native,
+    "readSentenceSpanResultLayout",
+  ).mockReturnValue(SENTENCE_SPAN_LAYOUT);
+  const eosSpy = spyOn(library.symbols, "sudachi_get_eos").mockImplementation(
+    (_handle, _input, outEos, outFound) => {
+      (outEos as BigUint64Array)[0] = 0n;
+      (outFound as Int32Array)[0] = 0;
+      return 0;
+    },
+  );
+  const splitter = createSentenceSplitter({ dictPath: "/tmp/dict" });
+
+  try {
+    expect(splitter.getEos("これはテストです")).toBeNull();
+  } finally {
+    splitter.close();
+    eosSpy.mockRestore();
+    layoutSpy.mockRestore();
+    loadSpy.mockRestore();
+  }
+});
+
+test("withLimit returns a detector that calls native limited API", () => {
+  const library = createMockLibrary();
+  const loadSpy = spyOn(native, "loadSentenceSplitterLibrary").mockReturnValue(
+    library,
+  );
+  const layoutSpy = spyOn(
+    native,
+    "readSentenceSpanResultLayout",
+  ).mockReturnValue(SENTENCE_SPAN_LAYOUT);
+  const eosSpy = spyOn(library.symbols, "sudachi_get_eos");
+  const eosWithLimitSpy = spyOn(library.symbols, "sudachi_get_eos_with_limit");
+  const splitter = createSentenceSplitter({ dictPath: "/tmp/dict" });
+
+  try {
+    const limited = splitter.withLimit(4);
+
+    expect(limited).toBeInstanceOf(SentenceSplitter);
+    expect(limited.getEos("😀。 B？")).toBe(7);
+    expect(splitter.getEos("😀。 B？")).toBe(7);
+    expect(eosWithLimitSpy).toHaveBeenCalledTimes(1);
+    expect(eosWithLimitSpy).toHaveBeenCalledWith(
+      1 as never,
+      "😀。 B？",
+      4,
+      expect.any(BigUint64Array),
+      expect.any(Int32Array),
+    );
+    expect(eosSpy).toHaveBeenCalledTimes(1);
+  } finally {
+    splitter.close();
+    eosWithLimitSpy.mockRestore();
+    eosSpy.mockRestore();
+    layoutSpy.mockRestore();
+    loadSpy.mockRestore();
+  }
+});
+
+test("withLimit validates positive integers", () => {
+  const loadSpy = spyOn(native, "loadSentenceSplitterLibrary").mockReturnValue(
+    createMockLibrary(),
+  );
+  const layoutSpy = spyOn(
+    native,
+    "readSentenceSpanResultLayout",
+  ).mockReturnValue(SENTENCE_SPAN_LAYOUT);
+  const splitter = createSentenceSplitter({ dictPath: "/tmp/dict" });
+
+  try {
+    expect(() => splitter.withLimit(0)).toThrow("positive integer");
+    expect(() => splitter.withLimit(1.5)).toThrow("positive integer");
+    expect(() => splitter.withLimit(Number.MAX_SAFE_INTEGER + 1)).toThrow(
+      "positive integer",
+    );
+    expect(() => splitter.withLimit(2_147_483_648)).toThrow("positive integer");
+  } finally {
+    splitter.close();
+    layoutSpy.mockRestore();
+    loadSpy.mockRestore();
+  }
+});
+
+test("split/getEos/withLimit throw when splitter has been closed", () => {
+  const loadSpy = spyOn(native, "loadSentenceSplitterLibrary").mockReturnValue(
+    createMockLibrary(),
+  );
+  const layoutSpy = spyOn(
+    native,
+    "readSentenceSpanResultLayout",
+  ).mockReturnValue(SENTENCE_SPAN_LAYOUT);
+  const splitter = createSentenceSplitter({ dictPath: "/tmp/dict" });
+  splitter.close();
+
+  try {
+    expect(() => splitter.split("text")).toThrow("has been closed");
+    expect(() => splitter.getEos("text")).toThrow("has been closed");
+    expect(() => splitter.getEos("")).toThrow("has been closed");
+    expect(() => splitter.withLimit(4).getEos("text")).toThrow(
+      "has been closed",
+    );
+  } finally {
     layoutSpy.mockRestore();
     loadSpy.mockRestore();
   }

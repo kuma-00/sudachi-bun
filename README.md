@@ -198,7 +198,7 @@ try {
 
 `createSudachi()` が返す `splitter` は Rust FFI の sentence splitter ハンドルを保持し、`split(text)` で `SentenceSpan[]` を返します。各 span は文テキスト `text` と UTF-8 バイトオフセット `start` / `end` を持ちます。
 
-`createSudachi()` が返す `tokenizer` には Task-06 相当の再分割 API があります。
+`createSudachi()` が返す `tokenizer` には再分割 API があります。
 
 - `tokenizer.split({ morpheme, projection, mode })`: 既存の単一 morpheme をより細かい `mode` へ再分割する
 - `tokenizer.splitInto({ morphemes, projection, mode })`: morpheme list 全体を再分割する
@@ -206,6 +206,13 @@ try {
 どちらも `tokenize()` と同じ `Morpheme[]` を返し、内部では既存の morpheme 読み出し処理を再利用します。`splitInto()` は `tokenize()` や `split()` が返した配列をそのまま渡した場合はネイティブの list resplit を使い、コピー済み配列のように list コンテキストが失われた場合は各 morpheme の `split()` を順に適用します。
 
 `split()` / `splitInto()` は、同じ `tokenizer` が生成した morpheme のみ受け付けます。`tokenize({ text, projection, mode })` との差分として、再分割は既存解析結果を起点にするため、元トークン境界に従って細分化されます。
+
+Task-06 相当の文境界詳細制御APIは `splitter` にあります。
+
+- `splitter.getEos(text)`: 先頭文の EOS byte offset を返す。境界未確定時は `null`
+- `splitter.withLimit(limit).getEos(text)`: 検出limitを指定して EOS を取得する
+
+`getEos()` / `withLimit()` が返す offset は `split()` と同様に UTF-8 byte offset です。
 
 Task-03 相当の stateful API も利用できます。
 
