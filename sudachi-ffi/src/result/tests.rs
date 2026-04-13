@@ -30,8 +30,10 @@ fn layout_version_is_stable() {
     let layout = morpheme_result_layout();
     assert_eq!(layout.layout_version, MORPHEME_RESULT_LAYOUT_VERSION);
     assert!(layout.result_size > 0);
+    assert!(layout.array_internal_cost_offset > 0);
     assert!(layout.begin_char_offset > 0);
     assert!(layout.end_char_offset > 0);
+    assert!(layout.total_cost_offset > 0);
 }
 
 #[test]

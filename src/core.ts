@@ -19,6 +19,7 @@ import type {
   LookupArgs,
   LookupEntry,
   Morpheme,
+  MorphemeList,
   SplitArgs,
   SplitIntoArgs,
   StatefulTokenizeArgs,
@@ -72,7 +73,12 @@ export class Tokenizer {
     return this.#session.closed;
   }
 
-  tokenize({ text, projection, mode = "C", subset }: TokenizeArgs): Morpheme[] {
+  tokenize({
+    text,
+    projection,
+    mode = "C",
+    subset,
+  }: TokenizeArgs): MorphemeList {
     return tokenizeMorphemes(this.#context(), text, projection, mode, subset);
   }
 
@@ -100,11 +106,15 @@ export class Tokenizer {
     return new PosMatcher(compilePosMatcher(this.#context(), patterns));
   }
 
-  split({ morpheme, projection, mode = "C" }: SplitArgs): Morpheme[] {
+  split({ morpheme, projection, mode = "C" }: SplitArgs): MorphemeList {
     return splitMorpheme(this.#context(), morpheme, projection, mode);
   }
 
-  splitInto({ morphemes, projection, mode = "C" }: SplitIntoArgs): Morpheme[] {
+  splitInto({
+    morphemes,
+    projection,
+    mode = "C",
+  }: SplitIntoArgs): MorphemeList {
     return splitMorphemes(this.#context(), morphemes, projection, mode);
   }
 
@@ -246,7 +256,7 @@ export class StatefulTokenizer {
     return this;
   }
 
-  doTokenize({ projection }: StatefulTokenizeArgs): Morpheme[] {
+  doTokenize({ projection }: StatefulTokenizeArgs): MorphemeList {
     const { library, layout, handle } = this.#openHandles();
     const outResult = new BigUint64Array(1);
     const status = library.symbols.sudachi_stateful_tokenizer_do_tokenize(
@@ -280,7 +290,7 @@ export class StatefulTokenizer {
     return attached;
   }
 
-  tokenize(args: StatefulTokenizeArgs): Morpheme[] {
+  tokenize(args: StatefulTokenizeArgs): MorphemeList {
     return this.doTokenize(args);
   }
 

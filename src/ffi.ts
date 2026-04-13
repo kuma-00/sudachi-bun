@@ -9,6 +9,7 @@ import type {
 import type {
   LookupEntry,
   Morpheme,
+  MorphemeList,
   PretokenizedToken,
   SudachiErrorCode,
 } from "./types.ts";
@@ -162,14 +163,41 @@ function readMorpheme(
     posId: readUnsigned16Field(itemPtr, layout.posIdOffset),
     dictionaryId: readNumberField(itemPtr, layout.dictionaryIdOffset),
     isOov: readBoolField(itemPtr, layout.isOovOffset),
+    totalCost:
+      layout.totalCostOffset > 0
+        ? readNumberField(itemPtr, layout.totalCostOffset)
+        : 0,
     synonymGroupIds: readSynonymGroupIds(itemPtr, layout),
   };
+}
+
+function attachInternalCost(
+  morphemes: Morpheme[],
+  internalCost: number,
+): MorphemeList {
+  Object.defineProperty(morphemes, "internalCost", {
+    value: internalCost,
+    writable: false,
+    configurable: false,
+    enumerable: false,
+  });
+  return morphemes as MorphemeList;
+}
+
+function readInternalCost(
+  arrayPtr: Pointer,
+  layout: MorphemeResultLayout,
+): number {
+  if (layout.arrayInternalCostOffset <= 0) {
+    return 0;
+  }
+  return readNumberField(arrayPtr, layout.arrayInternalCostOffset);
 }
 
 export function readMorphemeArray(
   arrayPtr: Pointer,
   layout: MorphemeResultLayout,
-): Morpheme[] {
+): MorphemeList {
   const entries = readArrayEntries(
     arrayPtr,
     layout.arrayItemsOffset,
@@ -184,7 +212,7 @@ export function readMorphemeArray(
     results[index] = readMorpheme(entryBase, layout);
   }
 
-  return results;
+  return attachInternalCost(results, readInternalCost(arrayPtr, layout));
 }
 
 function readLookupEntry(

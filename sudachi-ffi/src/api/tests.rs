@@ -244,10 +244,28 @@ fn collect_morpheme_result(result: *mut MorphemeResultArray) -> Vec<MorphemeResu
                 pos_id: item.pos_id,
                 dictionary_id: item.dictionary_id,
                 is_oov: item.is_oov,
+                total_cost: item.total_cost,
                 synonym_group_ids: item.synonym_group_ids,
                 synonym_group_ids_len: item.synonym_group_ids_len,
             })
             .collect()
+    }
+}
+
+fn collect_morpheme_costs(result: *mut MorphemeResultArray) -> (i32, Vec<i32>) {
+    assert!(!result.is_null());
+
+    unsafe {
+        let array = &*result;
+        if array.len == 0 {
+            return (array.internal_cost, Vec::new());
+        }
+
+        let items = std::slice::from_raw_parts(array.items, array.len);
+        (
+            array.internal_cost,
+            items.iter().map(|item| item.total_cost).collect(),
+        )
     }
 }
 
@@ -662,6 +680,8 @@ fn get_morpheme_result_layout_returns_stable_offsets() {
     assert!(layout.begin_offset > 0);
     assert!(layout.begin_char_offset > 0);
     assert!(layout.end_char_offset > 0);
+    assert!(layout.array_internal_cost_offset > 0);
+    assert!(layout.total_cost_offset > 0);
 }
 
 #[test]
@@ -729,6 +749,41 @@ fn tokenize_subset_surface_projection_matches_surface_fields() {
         sudachi_free_result(subset_result);
 
         assert_eq!(subset_values, compat_values);
+    });
+}
+
+#[test]
+fn tokenize_exposes_total_and_internal_costs() {
+    with_test_tokenizer(|handle| {
+        let text = CString::new("京都東京都").unwrap();
+        let mut compat_result = ptr::null_mut();
+        let status = sudachi_tokenize(
+            handle,
+            text.as_ptr(),
+            2,
+            Projection::Surface as i32,
+            &mut compat_result,
+        );
+        assert_eq!(status, OK, "{}", last_error_message());
+        let compat_costs = collect_morpheme_costs(compat_result);
+        sudachi_free_result(compat_result);
+
+        let mut subset_result = ptr::null_mut();
+        let status = sudachi_tokenize_subset(
+            handle,
+            text.as_ptr(),
+            2,
+            Projection::Surface as i32,
+            InfoSubset::all().bits(),
+            &mut subset_result,
+        );
+        assert_eq!(status, OK, "{}", last_error_message());
+        let subset_costs = collect_morpheme_costs(subset_result);
+        sudachi_free_result(subset_result);
+
+        assert!(!compat_costs.1.is_empty());
+        assert!(compat_costs.1.iter().all(|cost| *cost != i32::MAX));
+        assert_eq!(compat_costs, subset_costs);
     });
 }
 

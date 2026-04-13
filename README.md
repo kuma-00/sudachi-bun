@@ -194,6 +194,8 @@ try {
 
 `projection` は `tokenizer.tokenize()` / `tokenizer.lookup()` / `tokenizer.split()` / `tokenizer.splitInto()` の必須プロパティです。サポートする値は `surface`, `normalized`, `dictionary_form`, `reading` です。`Morpheme.surface` と `LookupEntry.surface` はこの投影結果を持ち、`--wakati` もこの値を使って表示します。
 
+`tokenizer.tokenize()` / `tokenizer.split()` / `tokenizer.splitInto()` / `stateful.doTokenize()` が返す morpheme 配列には、解析全体のコスト指標 `internalCost` が数値プロパティとして付与されます。各 `Morpheme` には、そのノードまでの累積コスト `totalCost` が含まれます。
+
 `createSudachi()` が返す `splitter` は Rust FFI の sentence splitter ハンドルを保持し、`split(text)` で `SentenceSpan[]` を返します。各 span は文テキスト `text` と UTF-8 バイトオフセット `start` / `end` を持ちます。
 
 `createSudachi()` が返す `tokenizer` には Task-06 相当の再分割 API があります。
@@ -277,6 +279,7 @@ const hfPretokenizer = createHuggingFacePretokenizer(sudachi.pretokenizer, {
 - `beginChar`, `endChar`（JavaScript string index）
 - `wordId`, `posId`, `dictionaryId`
 - `isOov`
+- `totalCost`
 - `synonymGroupIds`
 
 ## 開発者向け

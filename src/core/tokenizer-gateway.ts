@@ -17,7 +17,7 @@ import { readOwnedNativeResult } from "../native-session.ts";
 import {
   type InfoSubset,
   type LookupEntry,
-  type Morpheme,
+  type MorphemeList,
   type PosMatcherPatterns,
   SudachiError,
   type SurfaceProjection,
@@ -61,7 +61,7 @@ export interface TokenizerGateway {
     projection: SurfaceProjection,
     mode: TokenizeMode,
     options?: InfoSubset,
-  ): Morpheme[];
+  ): MorphemeList;
   lookup(
     surface: string,
     projection: SurfaceProjection,
@@ -74,13 +74,13 @@ export interface TokenizerGateway {
     projection: SurfaceProjection,
     sourceIndex: number,
     splitMode: TokenizeMode,
-  ): Morpheme[];
+  ): MorphemeList;
   splitMorphemes(
     sourceText: string,
     sourceMode: TokenizeMode,
     projection: SurfaceProjection,
     splitMode: TokenizeMode,
-  ): Morpheme[];
+  ): MorphemeList;
 }
 
 function normalizePosPattern(

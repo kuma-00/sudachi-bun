@@ -376,6 +376,7 @@ pub(crate) fn morpheme_to_result(
     }
     result.value.dictionary_id = morpheme.dictionary_id();
     result.value.is_oov = u8::from(morpheme.is_oov());
+    result.value.total_cost = morpheme.total_cost();
 
     if subset.contains(InfoSubset::SYNONYM_GROUP_ID) {
         let mut synonym_group_ids = morpheme.synonym_group_ids().to_vec().into_boxed_slice();

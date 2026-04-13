@@ -8,7 +8,7 @@ use super::{
 };
 
 pub const MORPHEME_RESULT_ARRAY_LAYOUT_CONTIGUOUS: u64 = 0;
-pub const MORPHEME_RESULT_LAYOUT_VERSION: u64 = 2;
+pub const MORPHEME_RESULT_LAYOUT_VERSION: u64 = 3;
 pub const LOOKUP_RESULT_ARRAY_LAYOUT_CONTIGUOUS: u64 = 0;
 pub const LOOKUP_RESULT_LAYOUT_VERSION: u64 = 1;
 pub const POS_MATCHER_RESULT_ARRAY_LAYOUT_CONTIGUOUS: u64 = 0;
@@ -25,6 +25,7 @@ impl MorphemeResultLayout {
             array_layout_kind: MORPHEME_RESULT_ARRAY_LAYOUT_CONTIGUOUS,
             array_items_offset: offset_of!(MorphemeResultArray, items) as u64,
             array_len_offset: offset_of!(MorphemeResultArray, len) as u64,
+            array_internal_cost_offset: offset_of!(MorphemeResultArray, internal_cost) as u64,
             result_size: size_of::<MorphemeResult>() as u64,
             surface_offset: offset_of!(MorphemeResult, surface) as u64,
             normalized_offset: offset_of!(MorphemeResult, normalized) as u64,
@@ -39,6 +40,7 @@ impl MorphemeResultLayout {
             pos_id_offset: offset_of!(MorphemeResult, pos_id) as u64,
             dictionary_id_offset: offset_of!(MorphemeResult, dictionary_id) as u64,
             is_oov_offset: offset_of!(MorphemeResult, is_oov) as u64,
+            total_cost_offset: offset_of!(MorphemeResult, total_cost) as u64,
             synonym_group_ids_offset: offset_of!(MorphemeResult, synonym_group_ids) as u64,
             synonym_group_ids_len_offset: offset_of!(MorphemeResult, synonym_group_ids_len) as u64,
         }

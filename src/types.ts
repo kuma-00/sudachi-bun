@@ -59,7 +59,12 @@ export interface Morpheme {
   posId: number;
   dictionaryId: number;
   isOov: boolean;
+  totalCost: number;
   synonymGroupIds: number[];
+}
+
+export interface MorphemeList extends Array<Morpheme> {
+  internalCost: number;
 }
 
 export interface LookupEntry {

@@ -293,8 +293,13 @@ fn morpheme_list_to_array(
         }
     }
 
+    let internal_cost = morpheme_list.get_internal_cost();
     let (items, len) = boxed_slice_into_raw_parts(results.into_boxed_slice());
-    Ok(Box::new(MorphemeResultArray { items, len }))
+    Ok(Box::new(MorphemeResultArray {
+        items,
+        len,
+        internal_cost,
+    }))
 }
 
 fn lookup_text_with_subset(

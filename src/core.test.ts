@@ -26,6 +26,7 @@ const MORPHEME_LAYOUT: MorphemeResultLayout = {
   arrayLayoutKind: 0,
   arrayItemsOffset: 0,
   arrayLenOffset: 8,
+  arrayInternalCostOffset: 16,
   resultSize: 112,
   surfaceOffset: 0,
   normalizedOffset: 8,
@@ -40,6 +41,7 @@ const MORPHEME_LAYOUT: MorphemeResultLayout = {
   posIdOffset: 80,
   dictionaryIdOffset: 84,
   isOovOffset: 88,
+  totalCostOffset: 92,
   synonymGroupIdsOffset: 96,
   synonymGroupIdsLenOffset: 104,
 };
@@ -66,11 +68,16 @@ const POS_MATCHER_LAYOUT: PosMatcherResultLayout = {
   resultSize: 2,
 };
 
+type MorphemeListWithInternalCost = Morpheme[] & {
+  internalCost: number;
+};
+
 function createMorpheme(
   surface: string,
   begin: number,
   end: number,
   posId = 0,
+  totalCost = 0,
 ): Morpheme {
   return {
     surface,
@@ -86,6 +93,7 @@ function createMorpheme(
     posId,
     dictionaryId: 0,
     isOov: false,
+    totalCost,
     synonymGroupIds: [],
   };
 }
@@ -96,6 +104,7 @@ function createSubsetMorpheme(
   end: number,
   posId = 0,
   pos = "",
+  totalCost = 0,
 ): Morpheme {
   return {
     surface,
@@ -111,6 +120,7 @@ function createSubsetMorpheme(
     posId,
     dictionaryId: 0,
     isOov: false,
+    totalCost,
     synonymGroupIds: [],
   };
 }
@@ -138,6 +148,13 @@ function requireDefined<T>(value: T | undefined, label: string): T {
   }
 
   return value;
+}
+
+function withInternalCost(
+  morphemes: Morpheme[],
+  internalCost: number,
+): MorphemeListWithInternalCost {
+  return Object.assign(morphemes, { internalCost });
 }
 
 function createSubsetLookupEntry(
@@ -610,6 +627,23 @@ test("tokenize forwards the required projection to the native symbol", () => {
       subsetTokenizeSpy.mockRestore();
       tokenizeSpy.mockRestore();
     }
+  });
+});
+
+test("tokenize exposes internalCost on the returned morpheme list", () => {
+  withTokenizer(({ tokenizer, readSpy }) => {
+    readSpy.mockImplementationOnce(() =>
+      withInternalCost([createMorpheme("東京都", 0, 9)], 321),
+    );
+
+    const result = tokenizer.tokenize({
+      text: "東京都",
+      projection: DEFAULT_PROJECTION,
+      mode: "C",
+    }) as MorphemeListWithInternalCost;
+
+    expect(result[0]?.totalCost).toBe(0);
+    expect(result.internalCost).toBe(321);
   });
 });
 

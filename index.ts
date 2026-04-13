@@ -44,6 +44,7 @@ export type {
   InfoSubsetFields,
   LookupEntry,
   Morpheme,
+  MorphemeList,
   NativeLibraryLoadOptions,
   NativeSudachiErrorCode,
   PosMatcherPattern,

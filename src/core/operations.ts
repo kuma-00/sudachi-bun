@@ -2,6 +2,7 @@ import {
   type InfoSubset,
   type LookupEntry,
   type Morpheme,
+  type MorphemeList,
   type PosMatcherPatterns,
   SudachiError,
   type SurfaceProjection,
@@ -91,6 +92,7 @@ function morphemeMatches(left: Morpheme, right: Morpheme): boolean {
     left.posId === right.posId &&
     left.dictionaryId === right.dictionaryId &&
     left.isOov === right.isOov &&
+    left.totalCost === right.totalCost &&
     sameSynonymGroupIds(left.synonymGroupIds, right.synonymGroupIds)
   );
 }
@@ -118,7 +120,7 @@ function tokenize(
   projection: SurfaceProjection,
   mode: TokenizeMode,
   options: InfoSubset | undefined = undefined,
-): Morpheme[] {
+): MorphemeList {
   const morphemes = getGateway(context).tokenize(
     text,
     projection,
@@ -142,7 +144,7 @@ export function tokenizeMorphemes(
   projection: SurfaceProjection,
   mode: TokenizeMode = "C",
   options: InfoSubset | undefined = undefined,
-): Morpheme[] {
+): MorphemeList {
   return tokenize(context, text, projection, mode, options);
 }
 
@@ -167,7 +169,7 @@ export function splitMorpheme(
   morpheme: Morpheme,
   projection: SurfaceProjection,
   mode: TokenizeMode = "C",
-): Morpheme[] {
+): MorphemeList {
   const morphemeState = context.state.getMorphemeState(context.owner, morpheme);
   const index = splitSourceIndex(context, projection, morpheme, morphemeState);
   const splitResult = getGateway(context).splitMorpheme(
@@ -193,9 +195,9 @@ export function splitMorphemes(
   morphemes: readonly Morpheme[],
   projection: SurfaceProjection,
   mode: TokenizeMode = "C",
-): Morpheme[] {
+): MorphemeList {
   if (morphemes.length === 0) {
-    return [];
+    return withInternalCost([], 0);
   }
 
   const listState = context.state.getListState(morphemes);
@@ -231,9 +233,33 @@ export function splitMorphemes(
   }
 
   const results: Morpheme[] = [];
+  let internalCost: number | undefined;
+  let hasInternalCostMismatch = false;
   for (const morpheme of morphemes) {
-    results.push(...splitMorpheme(context, morpheme, projection, mode));
+    const split = splitMorpheme(context, morpheme, projection, mode);
+    results.push(...split);
+    if (internalCost === undefined) {
+      internalCost = split.internalCost;
+    } else if (split.internalCost !== internalCost) {
+      hasInternalCostMismatch = true;
+    }
   }
 
-  return results;
+  return withInternalCost(
+    results,
+    hasInternalCostMismatch ? 0 : (internalCost ?? 0),
+  );
+}
+
+function withInternalCost(
+  morphemes: Morpheme[],
+  internalCost: number,
+): MorphemeList {
+  Object.defineProperty(morphemes, "internalCost", {
+    value: internalCost,
+    writable: false,
+    configurable: false,
+    enumerable: false,
+  });
+  return morphemes as MorphemeList;
 }

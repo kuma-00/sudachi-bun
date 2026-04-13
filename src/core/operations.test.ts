@@ -24,8 +24,16 @@ function createMorpheme(surface: string, begin: number, end: number): Morpheme {
     posId: 0,
     dictionaryId: 0,
     isOov: false,
+    totalCost: 0,
     synonymGroupIds: [],
   };
+}
+
+function createMorphemeList(
+  morphemes: Morpheme[],
+  internalCost: number,
+): Morpheme[] & { internalCost: number } {
+  return Object.assign(morphemes, { internalCost });
 }
 
 function createContext(gateway: TokenizerGateway): {
@@ -206,4 +214,108 @@ test("splitMorphemes falls back to per-morpheme splitting for non-owned lists", 
   const fallbackCalls = tokenizeSpy.mock.calls.slice(1);
   expect(fallbackCalls[0]).toEqual(["東京都", "reading", "A", undefined]);
   expect(fallbackCalls[1]).toEqual(["東京都", "reading", "A", undefined]);
+});
+
+test("splitMorphemes fallback preserves a shared internalCost", () => {
+  const gateway: TokenizerGateway = {
+    tokenize: (_text, projection) => {
+      if (projection === "surface") {
+        return [createMorpheme("東京都", 0, 9)];
+      }
+
+      return [createMorpheme("東京", 0, 6), createMorpheme("都", 6, 9)];
+    },
+    lookup: () => [],
+    compilePosMatcher: () => [],
+    splitMorpheme: (
+      _sourceText,
+      _sourceMode,
+      projection,
+      sourceIndex,
+      _splitMode,
+    ) => {
+      if (projection === "reading" && sourceIndex === 0) {
+        return createMorphemeList(
+          [createMorpheme("東京", 0, 6), createMorpheme("都", 6, 9)],
+          5,
+        );
+      }
+
+      if (sourceIndex === 0) {
+        return createMorphemeList([createMorpheme("東京", 0, 6)], 17);
+      }
+
+      return createMorphemeList([createMorpheme("都", 6, 9)], 17);
+    },
+    splitMorphemes: () => [createMorpheme("SHOULD_NOT_BE_USED", 0, 1)],
+  };
+
+  const context = createContext(gateway);
+
+  const tokenized = tokenizeMorphemes(context, "東京都", "surface", "C");
+  const splitList = splitMorpheme(
+    context,
+    requireDefined(tokenized[0], "tokenized[0]"),
+    "reading",
+    "A",
+  );
+  const splitAgain = splitMorphemes(context, splitList, "normalized", "A");
+
+  expect(splitAgain.internalCost).toBe(17);
+});
+
+test("splitMorphemes fallback clears internalCost when splits disagree", () => {
+  const gateway: TokenizerGateway = {
+    tokenize: (_text, projection) => {
+      if (projection === "surface") {
+        return [createMorpheme("東京都", 0, 9)];
+      }
+
+      return [createMorpheme("東京", 0, 6), createMorpheme("都", 6, 9)];
+    },
+    lookup: () => [],
+    compilePosMatcher: () => [],
+    splitMorpheme: (
+      _sourceText,
+      _sourceMode,
+      projection,
+      sourceIndex,
+      _splitMode,
+    ) => {
+      if (projection === "reading" && sourceIndex === 0) {
+        return createMorphemeList(
+          [createMorpheme("東京", 0, 6), createMorpheme("都", 6, 9)],
+          5,
+        );
+      }
+
+      if (sourceIndex === 0) {
+        return createMorphemeList([createMorpheme("東京", 0, 6)], 11);
+      }
+
+      return createMorphemeList([createMorpheme("都", 6, 9)], 22);
+    },
+    splitMorphemes: () => [createMorpheme("SHOULD_NOT_BE_USED", 0, 1)],
+  };
+
+  const context = createContext(gateway);
+
+  const tokenized = tokenizeMorphemes(context, "東京都", "surface", "C");
+  const splitList = splitMorpheme(
+    context,
+    requireDefined(tokenized[0], "tokenized[0]"),
+    "reading",
+    "A",
+  );
+
+  const splitAgain = splitMorphemes(context, splitList, "normalized", "A");
+  const reversed = splitMorphemes(
+    context,
+    [...splitList].reverse(),
+    "normalized",
+    "A",
+  );
+
+  expect(splitAgain.internalCost).toBe(0);
+  expect(reversed.internalCost).toBe(0);
 });

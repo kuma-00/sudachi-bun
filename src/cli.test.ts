@@ -39,6 +39,7 @@ const SAMPLE_MORPHEMES = [
     posId: 1,
     dictionaryId: 0,
     isOov: false,
+    totalCost: 0,
     synonymGroupIds: [],
   },
   {
@@ -55,6 +56,7 @@ const SAMPLE_MORPHEMES = [
     posId: 1,
     dictionaryId: 0,
     isOov: false,
+    totalCost: 0,
     synonymGroupIds: [],
   },
 ] as const;
@@ -74,6 +76,7 @@ const NORMALIZED_SAMPLE_MORPHEMES = [
     posId: 1,
     dictionaryId: 0,
     isOov: false,
+    totalCost: 0,
     synonymGroupIds: [],
   },
   {
@@ -90,6 +93,7 @@ const NORMALIZED_SAMPLE_MORPHEMES = [
     posId: 1,
     dictionaryId: 0,
     isOov: false,
+    totalCost: 0,
     synonymGroupIds: [],
   },
 ] as const;

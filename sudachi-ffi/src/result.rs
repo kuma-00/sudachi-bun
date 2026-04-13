@@ -21,6 +21,7 @@ pub struct MorphemeResult {
     pub pos_id: u16,
     pub dictionary_id: i32,
     pub is_oov: u8,
+    pub total_cost: i32,
     pub synonym_group_ids: *mut u32,
     pub synonym_group_ids_len: usize,
 }
@@ -41,6 +42,7 @@ impl MorphemeResult {
             pos_id: 0,
             dictionary_id: 0,
             is_oov: 0,
+            total_cost: 0,
             synonym_group_ids: ptr::null_mut(),
             synonym_group_ids_len: 0,
         }
@@ -70,6 +72,7 @@ impl MorphemeResult {
 pub struct MorphemeResultArray {
     pub items: *mut MorphemeResult,
     pub len: usize,
+    pub internal_cost: i32,
 }
 
 #[repr(C)]
@@ -227,6 +230,7 @@ pub struct MorphemeResultLayout {
     pub array_layout_kind: u64,
     pub array_items_offset: u64,
     pub array_len_offset: u64,
+    pub array_internal_cost_offset: u64,
     pub result_size: u64,
     pub surface_offset: u64,
     pub normalized_offset: u64,
@@ -241,6 +245,7 @@ pub struct MorphemeResultLayout {
     pub pos_id_offset: u64,
     pub dictionary_id_offset: u64,
     pub is_oov_offset: u64,
+    pub total_cost_offset: u64,
     pub synonym_group_ids_offset: u64,
     pub synonym_group_ids_len_offset: u64,
 }

@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
 
+import { SudachiError } from "../../types.ts";
 import type {
   NativeLookupLibrary,
   NativePretokenizerLibrary,
@@ -35,6 +36,7 @@ function createMorphemeLibrary(
       0n,
       8n,
       16n,
+      24n,
       112n,
       0n,
       8n,
@@ -49,6 +51,7 @@ function createMorphemeLibrary(
       80n,
       84n,
       88n,
+      92n,
       96n,
       104n,
     ]),
@@ -163,6 +166,7 @@ test("readMorphemeResultLayout maps fields in order", () => {
     arrayLayoutKind: 0,
     arrayItemsOffset: 8,
     arrayLenOffset: 16,
+    arrayInternalCostOffset: 24,
     resultSize: 112,
     surfaceOffset: 0,
     normalizedOffset: 8,
@@ -177,20 +181,29 @@ test("readMorphemeResultLayout maps fields in order", () => {
     posIdOffset: 80,
     dictionaryIdOffset: 84,
     isOovOffset: 88,
+    totalCostOffset: 92,
     synonymGroupIdsOffset: 96,
     synonymGroupIdsLenOffset: 104,
   });
 });
 
 test("readMorphemeResultLayout rejects unsupported layout versions", () => {
-  expect(() =>
+  try {
     readMorphemeResultLayout(
       createMorphemeLibrary((outLayout) => {
         outLayout[0] = 999n;
         return 0;
       }),
-    ),
-  ).toThrow("Unsupported morpheme result layout version");
+    );
+    throw new Error("Expected readMorphemeResultLayout to throw.");
+  } catch (error) {
+    expect(error).toBeInstanceOf(SudachiError);
+    expect(error).toMatchObject({
+      code: "LAYOUT_MISMATCH",
+      message:
+        "Unsupported morpheme result layout version: expected 2 or 3, received 999.",
+    });
+  }
 });
 
 test("readLookupResultLayout maps fields in order", () => {

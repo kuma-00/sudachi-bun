@@ -1,4 +1,4 @@
-import type { Morpheme, TokenizeMode } from "../types.ts";
+import type { Morpheme, MorphemeList, TokenizeMode } from "../types.ts";
 import { SudachiError } from "../types.ts";
 
 export type MorphemeListStateKind = "owned" | "split";
@@ -25,11 +25,11 @@ const MORPHEME_STATE = new WeakMap<Morpheme, MorphemeState>();
 export class MorphemeStateTracker {
   attach(
     tokenizer: object,
-    morphemes: Morpheme[],
+    morphemes: MorphemeList,
     text: string,
     mode: TokenizeMode,
     kind: MorphemeListStateKind,
-  ): Morpheme[] {
+  ): MorphemeList {
     const signatures = morphemes.map((morpheme) =>
       this.#morphemeSignature(morpheme),
     );
@@ -113,6 +113,7 @@ export class MorphemeStateTracker {
       morpheme.posId,
       morpheme.dictionaryId,
       morpheme.isOov ? 1 : 0,
+      morpheme.totalCost,
       morpheme.synonymGroupIds.join(","),
     ].join("\u0001");
   }

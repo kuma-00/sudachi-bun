@@ -5,6 +5,7 @@ export interface MorphemeResultLayout {
   arrayLayoutKind: number;
   arrayItemsOffset: number;
   arrayLenOffset: number;
+  arrayInternalCostOffset: number;
   resultSize: number;
   surfaceOffset: number;
   normalizedOffset: number;
@@ -19,6 +20,7 @@ export interface MorphemeResultLayout {
   posIdOffset: number;
   dictionaryIdOffset: number;
   isOovOffset: number;
+  totalCostOffset: number;
   synonymGroupIdsOffset: number;
   synonymGroupIdsLenOffset: number;
 }
