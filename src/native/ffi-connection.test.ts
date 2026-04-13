@@ -20,6 +20,9 @@ import {
 } from "./index.ts";
 
 const PROJECT_ROOT = resolve(import.meta.dir, "..", "..");
+// If these FFI integration tests fail due to missing symbols/library mismatch,
+// rebuild the native library first:
+//   cd sudachi-ffi && cargo build --release
 
 function fileExists(path: string): boolean {
   const testBinary = Bun.which("test") ?? "/usr/bin/test";
@@ -147,26 +150,8 @@ function decodeDictionaryInspection(
 
 const nativeLibraryPath = resolveNativeLibraryPath();
 const dictPath = resolveDictionaryPath();
-const canLoadCurrentNativeAbi = (() => {
-  if (nativeLibraryPath === null) {
-    return false;
-  }
-
-  try {
-    const library = loadNativeLibrary({ libraryPath: nativeLibraryPath });
-    library.close();
-    return true;
-  } catch {
-    return false;
-  }
-})();
-
-const nativeTest =
-  nativeLibraryPath === null || !canLoadCurrentNativeAbi ? test.skip : test;
-const dictTest =
-  nativeLibraryPath === null || !canLoadCurrentNativeAbi || dictPath === null
-    ? test.skip
-    : test;
+const nativeTest = test;
+const dictTest = test;
 
 nativeTest(
   "FFI: can load all native libraries and call common error/status symbols",
