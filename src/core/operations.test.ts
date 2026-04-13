@@ -1,6 +1,6 @@
 import { expect, spyOn, test } from "bun:test";
 
-import type { Morpheme } from "../types.ts";
+import type { Morpheme, MorphemeList } from "../types.ts";
 import { MorphemeStateTracker } from "./morpheme-state.ts";
 import {
   splitMorpheme,
@@ -32,7 +32,7 @@ function createMorpheme(surface: string, begin: number, end: number): Morpheme {
 function createMorphemeList(
   morphemes: Morpheme[],
   internalCost: number,
-): Morpheme[] & { internalCost: number } {
+): MorphemeList {
   return Object.assign(morphemes, { internalCost });
 }
 
@@ -62,21 +62,27 @@ test("tokenize attaches state and fallback split keeps remembered source project
   const gateway: TokenizerGateway = {
     tokenize: (_text, projection) => {
       if (projection === "dictionary_form") {
-        return [createMorpheme("東京都", 0, 9)];
+        return createMorphemeList([createMorpheme("東京都", 0, 9)], 0);
       }
 
-      return [createMorpheme("東京", 0, 6), createMorpheme("都", 6, 9)];
+      return createMorphemeList(
+        [createMorpheme("東京", 0, 6), createMorpheme("都", 6, 9)],
+        0,
+      );
     },
     lookup: () => [],
     compilePosMatcher: () => [],
     splitMorpheme: (_text, _sourceMode, _projection, sourceIndex) => {
       if (sourceIndex === 0) {
-        return [createMorpheme("東京", 0, 6), createMorpheme("都", 6, 9)];
+        return createMorphemeList(
+          [createMorpheme("東京", 0, 6), createMorpheme("都", 6, 9)],
+          0,
+        );
       }
 
-      return [createMorpheme("都", 6, 9)];
+      return createMorphemeList([createMorpheme("都", 6, 9)], 0);
     },
-    splitMorphemes: () => [],
+    splitMorphemes: () => createMorphemeList([], 0),
   };
 
   const tokenizeSpy = spyOn(gateway, "tokenize");
@@ -139,14 +145,15 @@ test("tokenize attaches state and fallback split keeps remembered source project
 
 test("splitMorphemes uses whole-list split for owned lists", () => {
   const gateway: TokenizerGateway = {
-    tokenize: () => [createMorpheme("東京都", 0, 9)],
+    tokenize: () => createMorphemeList([createMorpheme("東京都", 0, 9)], 0),
     lookup: () => [],
     compilePosMatcher: () => [],
-    splitMorpheme: () => [createMorpheme("東京", 0, 6)],
-    splitMorphemes: () => [
-      createMorpheme("東京", 0, 6),
-      createMorpheme("都", 6, 9),
-    ],
+    splitMorpheme: () => createMorphemeList([createMorpheme("東京", 0, 6)], 0),
+    splitMorphemes: () =>
+      createMorphemeList(
+        [createMorpheme("東京", 0, 6), createMorpheme("都", 6, 9)],
+        0,
+      ),
   };
 
   const splitMorphemeSpy = spyOn(gateway, "splitMorpheme");
@@ -167,10 +174,13 @@ test("splitMorphemes falls back to per-morpheme splitting for non-owned lists", 
   const gateway: TokenizerGateway = {
     tokenize: (_text, projection) => {
       if (projection === "surface") {
-        return [createMorpheme("東京都", 0, 9)];
+        return createMorphemeList([createMorpheme("東京都", 0, 9)], 0);
       }
 
-      return [createMorpheme("東京", 0, 6), createMorpheme("都", 6, 9)];
+      return createMorphemeList(
+        [createMorpheme("東京", 0, 6), createMorpheme("都", 6, 9)],
+        0,
+      );
     },
     lookup: () => [],
     compilePosMatcher: () => [],
@@ -182,12 +192,16 @@ test("splitMorphemes falls back to per-morpheme splitting for non-owned lists", 
       _splitMode,
     ) => {
       if (sourceIndex === 0) {
-        return [createMorpheme("東京", 0, 6), createMorpheme("都", 6, 9)];
+        return createMorphemeList(
+          [createMorpheme("東京", 0, 6), createMorpheme("都", 6, 9)],
+          0,
+        );
       }
 
-      return [createMorpheme("都", 6, 9)];
+      return createMorphemeList([createMorpheme("都", 6, 9)], 0);
     },
-    splitMorphemes: () => [createMorpheme("SHOULD_NOT_BE_USED", 0, 1)],
+    splitMorphemes: () =>
+      createMorphemeList([createMorpheme("SHOULD_NOT_BE_USED", 0, 1)], 0),
   };
 
   const tokenizeSpy = spyOn(gateway, "tokenize");
@@ -220,10 +234,13 @@ test("splitMorphemes fallback preserves a shared internalCost", () => {
   const gateway: TokenizerGateway = {
     tokenize: (_text, projection) => {
       if (projection === "surface") {
-        return [createMorpheme("東京都", 0, 9)];
+        return createMorphemeList([createMorpheme("東京都", 0, 9)], 0);
       }
 
-      return [createMorpheme("東京", 0, 6), createMorpheme("都", 6, 9)];
+      return createMorphemeList(
+        [createMorpheme("東京", 0, 6), createMorpheme("都", 6, 9)],
+        0,
+      );
     },
     lookup: () => [],
     compilePosMatcher: () => [],
@@ -247,7 +264,8 @@ test("splitMorphemes fallback preserves a shared internalCost", () => {
 
       return createMorphemeList([createMorpheme("都", 6, 9)], 17);
     },
-    splitMorphemes: () => [createMorpheme("SHOULD_NOT_BE_USED", 0, 1)],
+    splitMorphemes: () =>
+      createMorphemeList([createMorpheme("SHOULD_NOT_BE_USED", 0, 1)], 0),
   };
 
   const context = createContext(gateway);
@@ -268,10 +286,13 @@ test("splitMorphemes fallback clears internalCost when splits disagree", () => {
   const gateway: TokenizerGateway = {
     tokenize: (_text, projection) => {
       if (projection === "surface") {
-        return [createMorpheme("東京都", 0, 9)];
+        return createMorphemeList([createMorpheme("東京都", 0, 9)], 0);
       }
 
-      return [createMorpheme("東京", 0, 6), createMorpheme("都", 6, 9)];
+      return createMorphemeList(
+        [createMorpheme("東京", 0, 6), createMorpheme("都", 6, 9)],
+        0,
+      );
     },
     lookup: () => [],
     compilePosMatcher: () => [],
@@ -295,7 +316,8 @@ test("splitMorphemes fallback clears internalCost when splits disagree", () => {
 
       return createMorphemeList([createMorpheme("都", 6, 9)], 22);
     },
-    splitMorphemes: () => [createMorpheme("SHOULD_NOT_BE_USED", 0, 1)],
+    splitMorphemes: () =>
+      createMorphemeList([createMorpheme("SHOULD_NOT_BE_USED", 0, 1)], 0),
   };
 
   const context = createContext(gateway);

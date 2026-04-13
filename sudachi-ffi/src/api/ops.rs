@@ -964,8 +964,8 @@ pub(crate) fn stateful_tokenizer_reset_impl(
     input_utf8: *const c_char,
 ) -> i32 {
     run_ffi(|| {
-        let mut handle = require_non_null(handle, "stateful tokenizer handle was null")?;
-        let handle = unsafe { handle.as_mut() };
+        let handle = require_non_null(handle, "stateful tokenizer handle was null")?;
+        let handle = unsafe { &mut *handle.as_ptr() };
         let input = if input_utf8.is_null() {
             None
         } else {
@@ -983,8 +983,8 @@ pub(crate) fn stateful_tokenizer_set_mode_impl(
     mode: i32,
 ) -> i32 {
     run_ffi(|| {
-        let mut handle = require_non_null(handle, "stateful tokenizer handle was null")?;
-        let handle = unsafe { handle.as_mut() };
+        let handle = require_non_null(handle, "stateful tokenizer handle was null")?;
+        let handle = unsafe { &mut *handle.as_ptr() };
         handle.tokenizer.set_mode(mode_from_raw(mode)?);
         Ok(())
     })
@@ -995,8 +995,8 @@ pub(crate) fn stateful_tokenizer_set_subset_impl(
     subset_bits: u32,
 ) -> i32 {
     run_ffi(|| {
-        let mut handle = require_non_null(handle, "stateful tokenizer handle was null")?;
-        let handle = unsafe { handle.as_mut() };
+        let handle = require_non_null(handle, "stateful tokenizer handle was null")?;
+        let handle = unsafe { &mut *handle.as_ptr() };
         let selection = parsed_info_subset_from_bits(subset_bits)?;
         handle.tokenizer.set_subset(selection.subset);
         handle.include_pos_text = selection.include_pos_text;
@@ -1010,8 +1010,8 @@ pub(crate) fn stateful_tokenizer_do_tokenize_impl(
     out_result: *mut *mut MorphemeResultArray,
 ) -> i32 {
     run_ffi(|| {
-        let mut handle = require_non_null(handle, "stateful tokenizer handle was null")?;
-        let handle = unsafe { handle.as_mut() };
+        let handle = require_non_null(handle, "stateful tokenizer handle was null")?;
+        let handle = unsafe { &mut *handle.as_ptr() };
         let projection = projection_from_raw(projection)?;
         handle.tokenizer.reset().push_str(&handle.input_text);
         handle.tokenizer.do_tokenize().map_err(|err| {
@@ -1337,9 +1337,11 @@ fn get_eos_inner(
         let _ = require_non_null(out_found, "out_found pointer was null")?;
         let handle = unsafe { handle.as_ref() };
         let text = cstr_to_string(input_utf8)?;
-        let split_result = catch_unwind(AssertUnwindSafe(|| {
+        let split_result = catch_unwind(AssertUnwindSafe(|| -> Result<isize, String> {
             let checker = NonBreakChecker::new(handle.dictionary.lexicon());
-            detector.get_eos(&text, Some(&checker))
+            detector
+                .get_eos(&text, Some(&checker))
+                .map_err(|err| err.to_string())
         }));
 
         let eos = match split_result {

@@ -66,6 +66,7 @@ function createLibrary(
       sudachi_split_morpheme: () => 0,
       sudachi_split_morphemes: () => 0,
       sudachi_compile_pos_matcher: () => 0,
+      sudachi_inspect_dictionary_bytes: () => 0,
       sudachi_free_result: () => {},
       sudachi_free_pos_matcher_result: () => {},
       sudachi_get_morpheme_result_layout: (outLayout) =>

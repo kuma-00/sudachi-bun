@@ -350,6 +350,7 @@ function createMockLibrary(): NativeSudachiLibrary {
         (outResult as BigUint64Array)[0] = 60n;
         return 0;
       },
+      sudachi_inspect_dictionary_bytes: (_bytesPtr, _bytesLen, _outResult) => 0,
       sudachi_free_result: () => {},
       sudachi_free_pos_matcher_result: () => {},
       sudachi_get_morpheme_result_layout: () => 0,
@@ -450,44 +451,74 @@ function withTokenizer(
     "readPosMatcherResultLayout",
   ).mockReturnValue(POS_MATCHER_LAYOUT);
   const readSpy = spyOn(ffi, "readMorphemeArray").mockImplementation(
-    (resultPtr) => {
+    (resultPtr, _layout) => {
       switch (Number(resultPtr)) {
         case 2:
-          return [createMorpheme("東京都", 0, 9), createMorpheme("に", 9, 12)];
+          return withInternalCost(
+            [createMorpheme("東京都", 0, 9), createMorpheme("に", 9, 12)],
+            0,
+          );
         case 30:
-          return [createMorpheme("東京", 0, 6), createMorpheme("都", 6, 9)];
+          return withInternalCost(
+            [createMorpheme("東京", 0, 6), createMorpheme("都", 6, 9)],
+            0,
+          );
         case 31:
-          return [createMorpheme("に", 9, 12)];
+          return withInternalCost([createMorpheme("に", 9, 12)], 0);
         case 32:
-          return [createMorpheme("東京", 0, 6)];
+          return withInternalCost([createMorpheme("東京", 0, 6)], 0);
         case 33:
-          return [createMorpheme("都", 6, 9)];
+          return withInternalCost([createMorpheme("都", 6, 9)], 0);
         case 40:
-          return [
-            createMorpheme("東京", 0, 6),
-            createMorpheme("都", 6, 9),
-            createMorpheme("に", 9, 12),
-          ];
+          return withInternalCost(
+            [
+              createMorpheme("東京", 0, 6),
+              createMorpheme("都", 6, 9),
+              createMorpheme("に", 9, 12),
+            ],
+            0,
+          );
         case 41:
-          return [
-            createSubsetMorpheme("東京", 0, 6, 7),
-            createSubsetMorpheme("都", 6, 9, 8),
-            createSubsetMorpheme("に", 9, 12, 9),
-          ];
+          return withInternalCost(
+            [
+              createSubsetMorpheme("東京", 0, 6, 7),
+              createSubsetMorpheme("都", 6, 9, 8),
+              createSubsetMorpheme("に", 9, 12, 9),
+            ],
+            0,
+          );
         case 42:
-          return [createSubsetMorpheme("東京", 0, 6, 11)];
+          return withInternalCost([createSubsetMorpheme("東京", 0, 6, 11)], 0);
         case 43:
-          return [
-            createSubsetMorpheme("東京", 0, 6, 12, "名詞,普通名詞,一般,*,*,*"),
-          ];
+          return withInternalCost(
+            [
+              createSubsetMorpheme(
+                "東京",
+                0,
+                6,
+                12,
+                "名詞,普通名詞,一般,*,*,*",
+              ),
+            ],
+            0,
+          );
         case 44:
-          return [
-            createSubsetMorpheme("東京", 0, 6, 13, "名詞,普通名詞,一般,*,*,*"),
-            createSubsetMorpheme("都", 6, 9, 14, "名詞,普通名詞,一般,*,*,*"),
-            createSubsetMorpheme("に", 9, 12, 15, "助詞,格助詞,*,*,*,*"),
-          ];
+          return withInternalCost(
+            [
+              createSubsetMorpheme(
+                "東京",
+                0,
+                6,
+                13,
+                "名詞,普通名詞,一般,*,*,*",
+              ),
+              createSubsetMorpheme("都", 6, 9, 14, "名詞,普通名詞,一般,*,*,*"),
+              createSubsetMorpheme("に", 9, 12, 15, "助詞,格助詞,*,*,*,*"),
+            ],
+            0,
+          );
         default:
-          return [];
+          return withInternalCost([], 0);
       }
     },
   );
@@ -609,7 +640,12 @@ test("tokenize forwards the required projection to the native symbol", () => {
           projection: DEFAULT_PROJECTION,
           mode: "C",
         }),
-      ).toEqual([createMorpheme("東京都", 0, 9), createMorpheme("に", 9, 12)]);
+      ).toEqual(
+        withInternalCost(
+          [createMorpheme("東京都", 0, 9), createMorpheme("に", 9, 12)],
+          0,
+        ),
+      );
       expect(tokenizeSpy).toHaveBeenCalledTimes(1);
       expect(tokenizeSpy).toHaveBeenCalledWith(
         1 as never,
@@ -661,11 +697,16 @@ test("tokenize with fields uses the subset native symbol and omits unrequested f
           mode: "C",
           subset: { fields: ["surface", "posId"] },
         }),
-      ).toEqual([
-        createSubsetMorpheme("東京", 0, 6, 7),
-        createSubsetMorpheme("都", 6, 9, 8),
-        createSubsetMorpheme("に", 9, 12, 9),
-      ]);
+      ).toEqual(
+        withInternalCost(
+          [
+            createSubsetMorpheme("東京", 0, 6, 7),
+            createSubsetMorpheme("都", 6, 9, 8),
+            createSubsetMorpheme("に", 9, 12, 9),
+          ],
+          0,
+        ),
+      );
       expect(tokenizeSpy).not.toHaveBeenCalled();
       expect(subsetTokenizeSpy).toHaveBeenCalledTimes(1);
       expect(subsetTokenizeSpy).toHaveBeenCalledWith(
@@ -911,7 +952,12 @@ test("split uses the native morpheme resplit symbol and reuses the decoder", () 
           projection: DEFAULT_PROJECTION,
           mode: "A",
         }),
-      ).toEqual([createMorpheme("東京", 0, 6), createMorpheme("都", 6, 9)]);
+      ).toEqual(
+        withInternalCost(
+          [createMorpheme("東京", 0, 6), createMorpheme("都", 6, 9)],
+          0,
+        ),
+      );
       expect(splitSpy).toHaveBeenCalledTimes(1);
       expect(splitSpy).toHaveBeenCalledWith(
         1 as never,
@@ -947,11 +993,16 @@ test("splitInto uses the native whole-list split symbol for owned lists", () => 
           projection: DEFAULT_PROJECTION,
           mode: "A",
         }),
-      ).toEqual([
-        createMorpheme("東京", 0, 6),
-        createMorpheme("都", 6, 9),
-        createMorpheme("に", 9, 12),
-      ]);
+      ).toEqual(
+        withInternalCost(
+          [
+            createMorpheme("東京", 0, 6),
+            createMorpheme("都", 6, 9),
+            createMorpheme("に", 9, 12),
+          ],
+          0,
+        ),
+      );
       expect(listSplitSpy).toHaveBeenCalledTimes(1);
       expect(listSplitSpy).toHaveBeenCalledWith(
         1 as never,
@@ -991,7 +1042,12 @@ test("splitInto on a split result stays on the per-morpheme path", () => {
           projection: DEFAULT_PROJECTION,
           mode: "A",
         }),
-      ).toEqual([createMorpheme("東京", 0, 6), createMorpheme("都", 6, 9)]);
+      ).toEqual(
+        withInternalCost(
+          [createMorpheme("東京", 0, 6), createMorpheme("都", 6, 9)],
+          0,
+        ),
+      );
       expect(listSplitSpy).not.toHaveBeenCalled();
       expect(singleSplitSpy).toHaveBeenCalledTimes(3);
       expect(singleSplitSpy).toHaveBeenNthCalledWith(
@@ -1049,7 +1105,12 @@ test("splitInto falls back when a tokenize result array was mutated", () => {
           projection: DEFAULT_PROJECTION,
           mode: "A",
         }),
-      ).toEqual([createMorpheme("東京", 0, 6), createMorpheme("都", 6, 9)]);
+      ).toEqual(
+        withInternalCost(
+          [createMorpheme("東京", 0, 6), createMorpheme("都", 6, 9)],
+          0,
+        ),
+      );
       expect(listSplitSpy).not.toHaveBeenCalled();
       expect(singleSplitSpy).toHaveBeenCalledTimes(1);
       expect(singleSplitSpy).toHaveBeenCalledWith(
@@ -1086,11 +1147,16 @@ test("splitInto falls back to per-morpheme splits for copied lists", () => {
           projection: DEFAULT_PROJECTION,
           mode: "A",
         }),
-      ).toEqual([
-        createMorpheme("東京", 0, 6),
-        createMorpheme("都", 6, 9),
-        createMorpheme("に", 9, 12),
-      ]);
+      ).toEqual(
+        withInternalCost(
+          [
+            createMorpheme("東京", 0, 6),
+            createMorpheme("都", 6, 9),
+            createMorpheme("に", 9, 12),
+          ],
+          0,
+        ),
+      );
       expect(listSplitSpy).not.toHaveBeenCalled();
       expect(singleSplitSpy).toHaveBeenCalledTimes(2);
       expect(singleSplitSpy).toHaveBeenNthCalledWith(
@@ -1138,11 +1204,16 @@ test("splitInto fallback resolves copied morphemes even when projection changes"
           projection: "reading",
           mode: "A",
         }),
-      ).toEqual([
-        createMorpheme("東京", 0, 6),
-        createMorpheme("都", 6, 9),
-        createMorpheme("に", 9, 12),
-      ]);
+      ).toEqual(
+        withInternalCost(
+          [
+            createMorpheme("東京", 0, 6),
+            createMorpheme("都", 6, 9),
+            createMorpheme("に", 9, 12),
+          ],
+          0,
+        ),
+      );
       expect(listSplitSpy).not.toHaveBeenCalled();
       expect(singleSplitSpy).toHaveBeenCalledTimes(2);
       expect(singleSplitSpy).toHaveBeenNthCalledWith(
@@ -1211,24 +1282,34 @@ test("stateful tokenizer tokenizes with persisted mode and subset", () => {
         .createStatefulTokenizer()
         .reset("東京都に")
         .setMode("A");
-      expect(stateful.doTokenize({ projection: DEFAULT_PROJECTION })).toEqual([
-        createMorpheme("東京", 0, 6),
-        createMorpheme("都", 6, 9),
-        createMorpheme("に", 9, 12),
-      ]);
+      expect(stateful.doTokenize({ projection: DEFAULT_PROJECTION })).toEqual(
+        withInternalCost(
+          [
+            createMorpheme("東京", 0, 6),
+            createMorpheme("都", 6, 9),
+            createMorpheme("に", 9, 12),
+          ],
+          0,
+        ),
+      );
       expect(createSpy).toHaveBeenCalledTimes(1);
-      expect(createSpy.mock.calls[0]?.[0]).toBe(1);
+      expect(Number(createSpy.mock.calls[0]?.[0] ?? 0)).toBe(1);
       expect(createSpy.mock.calls[0]?.[1]).toBeInstanceOf(BigUint64Array);
       expect(resetSpy).toHaveBeenNthCalledWith(1, 101 as never, "");
       expect(resetSpy).toHaveBeenNthCalledWith(2, 101 as never, "東京都に");
       expect(setModeSpy).toHaveBeenCalledWith(101 as never, 0);
 
       stateful.setMode("C").setSubset({ fields: ["surface", "posId"] });
-      expect(stateful.tokenize({ projection: DEFAULT_PROJECTION })).toEqual([
-        createSubsetMorpheme("東京", 0, 6, 7),
-        createSubsetMorpheme("都", 6, 9, 8),
-        createSubsetMorpheme("に", 9, 12, 9),
-      ]);
+      expect(stateful.tokenize({ projection: DEFAULT_PROJECTION })).toEqual(
+        withInternalCost(
+          [
+            createSubsetMorpheme("東京", 0, 6, 7),
+            createSubsetMorpheme("都", 6, 9, 8),
+            createSubsetMorpheme("に", 9, 12, 9),
+          ],
+          0,
+        ),
+      );
       expect(setModeSpy).toHaveBeenLastCalledWith(101 as never, 2);
       expect(setSubsetSpy).toHaveBeenCalledWith(
         101 as never,
@@ -1328,7 +1409,12 @@ test("closing stateful tokenizer does not close tokenizer", () => {
         projection: DEFAULT_PROJECTION,
         mode: "C",
       }),
-    ).toEqual([createMorpheme("東京都", 0, 9), createMorpheme("に", 9, 12)]);
+    ).toEqual(
+      withInternalCost(
+        [createMorpheme("東京都", 0, 9), createMorpheme("に", 9, 12)],
+        0,
+      ),
+    );
   });
 });
 

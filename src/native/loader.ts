@@ -488,6 +488,8 @@ export function createNativeSentenceSplitterLibrary(
   close: () => void,
 ): NativeSentenceSplitterLibrary {
   const toNativeCString = (value: string | null): NativeCStringArg => value;
+  const getEos = symbols.sudachi_get_eos;
+  const getEosWithLimit = symbols.sudachi_get_eos_with_limit;
 
   return {
     symbols: {
@@ -510,15 +512,13 @@ export function createNativeSentenceSplitterLibrary(
           toNativeCString(inputUtf8),
           outResult,
         ),
-      sudachi_get_eos: symbols.sudachi_get_eos
+      sudachi_get_eos: getEos
         ? (handle, inputUtf8, outEos, outFound) => {
-            const getEos = symbols.sudachi_get_eos;
             return getEos(handle, toNativeCString(inputUtf8), outEos, outFound);
           }
         : undefined,
-      sudachi_get_eos_with_limit: symbols.sudachi_get_eos_with_limit
+      sudachi_get_eos_with_limit: getEosWithLimit
         ? (handle, inputUtf8, limit, outEos, outFound) => {
-            const getEosWithLimit = symbols.sudachi_get_eos_with_limit;
             return getEosWithLimit(
               handle,
               toNativeCString(inputUtf8),
@@ -764,6 +764,9 @@ function createNativeSentenceSplitterLibraryWithCStringEncoding(
   symbols: NativeSentenceSplitterSymbols,
   close: () => void,
 ): NativeSentenceSplitterLibrary {
+  const getEos = symbols.sudachi_get_eos;
+  const getEosWithLimit = symbols.sudachi_get_eos_with_limit;
+
   return {
     symbols: {
       ...createNativeSentenceSplitterLibrary(symbols, close).symbols,
@@ -785,9 +788,8 @@ function createNativeSentenceSplitterLibraryWithCStringEncoding(
           toCStringPointer(inputUtf8),
           outResult,
         ),
-      sudachi_get_eos: symbols.sudachi_get_eos
+      sudachi_get_eos: getEos
         ? (handle, inputUtf8, outEos, outFound) => {
-            const getEos = symbols.sudachi_get_eos;
             return getEos(
               handle,
               toCStringPointer(inputUtf8),
@@ -796,9 +798,8 @@ function createNativeSentenceSplitterLibraryWithCStringEncoding(
             );
           }
         : undefined,
-      sudachi_get_eos_with_limit: symbols.sudachi_get_eos_with_limit
+      sudachi_get_eos_with_limit: getEosWithLimit
         ? (handle, inputUtf8, limit, outEos, outFound) => {
-            const getEosWithLimit = symbols.sudachi_get_eos_with_limit;
             return getEosWithLimit(
               handle,
               toCStringPointer(inputUtf8),

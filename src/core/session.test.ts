@@ -7,7 +7,7 @@ import type {
   PosMatcherResultLayout,
 } from "../native/types.ts";
 import * as native from "../native.ts";
-import type { TokenizerOptions } from "../types.ts";
+import type { MorphemeList, TokenizerOptions } from "../types.ts";
 import { TokenizerSessionManager } from "./session.ts";
 import * as gatewayModule from "./tokenizer-gateway.ts";
 
@@ -16,6 +16,7 @@ const MORPHEME_LAYOUT: MorphemeResultLayout = {
   arrayLayoutKind: 0,
   arrayItemsOffset: 0,
   arrayLenOffset: 8,
+  arrayInternalCostOffset: 16,
   resultSize: 112,
   surfaceOffset: 0,
   normalizedOffset: 8,
@@ -30,6 +31,7 @@ const MORPHEME_LAYOUT: MorphemeResultLayout = {
   posIdOffset: 80,
   dictionaryIdOffset: 84,
   isOovOffset: 88,
+  totalCostOffset: 92,
   synonymGroupIdsOffset: 96,
   synonymGroupIdsLenOffset: 104,
 };
@@ -84,6 +86,7 @@ function createMockTokenizerLibrary(): NativeSudachiLibrary {
       sudachi_split_morpheme: () => 0,
       sudachi_split_morphemes: () => 0,
       sudachi_compile_pos_matcher: () => 0,
+      sudachi_inspect_dictionary_bytes: () => 0,
       sudachi_free_result: () => {},
       sudachi_free_pos_matcher_result: () => {},
       sudachi_get_morpheme_result_layout: () => 0,
@@ -177,12 +180,14 @@ test("TokenizerSessionManager memoizes gateway instance", () => {
     POS_MATCHER_LAYOUT,
   );
 
+  const createMorphemeList = (): MorphemeList =>
+    Object.assign([], { internalCost: 0 });
   const gateway = {
-    tokenize: () => [],
+    tokenize: () => createMorphemeList(),
     lookup: () => [],
     compilePosMatcher: () => [],
-    splitMorpheme: () => [],
-    splitMorphemes: () => [],
+    splitMorpheme: () => createMorphemeList(),
+    splitMorphemes: () => createMorphemeList(),
   };
   const gatewayFactorySpy = spyOn(
     gatewayModule,
