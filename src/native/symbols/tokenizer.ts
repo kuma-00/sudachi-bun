@@ -54,6 +54,10 @@ export const TOKENIZER_NATIVE_SYMBOL_DEFS = {
     args: ["ptr", "cstring", "ptr"],
     returns: "i32",
   },
+  sudachi_inspect_dictionary_bytes: {
+    args: ["ptr", "usize", "ptr"],
+    returns: "i32",
+  },
   sudachi_free_result: {
     args: ["ptr"],
     returns: "void",
@@ -63,6 +67,10 @@ export const TOKENIZER_NATIVE_SYMBOL_DEFS = {
     returns: "void",
   },
   sudachi_get_morpheme_result_layout: {
+    args: ["ptr"],
+    returns: "i32",
+  },
+  sudachi_get_dictionary_inspection_result_layout: {
     args: ["ptr"],
     returns: "i32",
   },

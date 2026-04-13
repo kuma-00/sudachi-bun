@@ -8,6 +8,7 @@ test("package root exports the new API entrypoint", () => {
   expect(typeof pkg.runCli).toBe("function");
   expect(typeof pkg.createSudachi).toBe("function");
   expect(typeof pkg.createHuggingFacePretokenizer).toBe("function");
+  expect(typeof pkg.inspectDictionaryBytes).toBe("function");
 });
 
 test("package root no longer exports legacy create* APIs", () => {

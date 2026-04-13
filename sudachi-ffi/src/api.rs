@@ -19,6 +19,8 @@ pub use exports::{
     sudachi_free_result, sudachi_free_sentence_spans, sudachi_free_sentence_splitter,
     sudachi_free_stateful_tokenizer, sudachi_free_tokenizer, sudachi_free_pretokenizer,
     sudachi_get_abi_version, sudachi_get_eos, sudachi_get_eos_with_limit,
+    sudachi_get_dictionary_inspection_result_layout,
+    sudachi_inspect_dictionary_bytes,
     sudachi_get_last_error, sudachi_get_lookup_result_layout, sudachi_get_morpheme_result_layout,
     sudachi_get_pos_matcher_result_layout, sudachi_get_pretokenized_result_layout,
     sudachi_get_sentence_span_layout, sudachi_lookup, sudachi_lookup_subset, sudachi_pretokenize,
@@ -29,4 +31,8 @@ pub use exports::{
     sudachi_status_code_name, sudachi_tokenize, sudachi_tokenize_subset,
 };
 
-pub use ops::{PretokenizerHandle, SentenceSplitterHandle, StatefulTokenizerHandle, TokenizerHandle};
+pub use ops::{
+    DictionaryInspectionResult, DictionaryInspectionResultLayout, PretokenizerHandle,
+    SentenceSplitterHandle, StatefulTokenizerHandle,
+    TokenizerHandle,
+};

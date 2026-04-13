@@ -89,11 +89,19 @@ interface NativeSymbols extends CommonNativeSymbols {
     patternsJson: NativeCStringArg,
     outResult: NodeJS.TypedArray | Pointer | null,
   ) => number;
+  sudachi_inspect_dictionary_bytes: (
+    bytesPtr: Pointer | NodeJS.TypedArray | null,
+    bytesLen: number,
+    outResult: NodeJS.TypedArray | Pointer | null,
+  ) => number;
   sudachi_free_result: (result: Pointer | NodeJS.TypedArray | null) => void;
   sudachi_free_pos_matcher_result: (
     result: Pointer | NodeJS.TypedArray | null,
   ) => void;
   sudachi_get_morpheme_result_layout: (
+    outLayout: NodeJS.TypedArray | Pointer | null,
+  ) => number;
+  sudachi_get_dictionary_inspection_result_layout: (
     outLayout: NodeJS.TypedArray | Pointer | null,
   ) => number;
   sudachi_get_pos_matcher_result_layout: (
@@ -362,10 +370,14 @@ export function createNativeSudachiLibrary(
           toNativeCString(patternsJson),
           outResult,
         ),
+      sudachi_inspect_dictionary_bytes: (bytesPtr, bytesLen, outResult) =>
+        symbols.sudachi_inspect_dictionary_bytes(bytesPtr, bytesLen, outResult),
       sudachi_free_result: symbols.sudachi_free_result,
       sudachi_free_pos_matcher_result: symbols.sudachi_free_pos_matcher_result,
       sudachi_get_morpheme_result_layout:
         symbols.sudachi_get_morpheme_result_layout,
+      sudachi_get_dictionary_inspection_result_layout:
+        symbols.sudachi_get_dictionary_inspection_result_layout,
       sudachi_get_pos_matcher_result_layout:
         symbols.sudachi_get_pos_matcher_result_layout,
       sudachi_get_last_error: symbols.sudachi_get_last_error,

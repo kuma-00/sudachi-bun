@@ -42,6 +42,22 @@ pub extern "C" fn sudachi_get_abi_version() -> i32 {
 }
 
 #[unsafe(no_mangle)]
+pub extern "C" fn sudachi_get_dictionary_inspection_result_layout(
+    out_layout: *mut ops::DictionaryInspectionResultLayout,
+) -> i32 {
+    ops::get_dictionary_inspection_result_layout_impl(out_layout)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn sudachi_inspect_dictionary_bytes(
+    bytes_ptr: *const u8,
+    bytes_len: usize,
+    out_result: *mut ops::DictionaryInspectionResult,
+) -> i32 {
+    ops::inspect_dictionary_bytes_impl(bytes_ptr, bytes_len, out_result)
+}
+
+#[unsafe(no_mangle)]
 pub extern "C" fn sudachi_create_pretokenizer(
     config_path: *const c_char,
     resource_dir: *const c_char,

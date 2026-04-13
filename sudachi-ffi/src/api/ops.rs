@@ -1,4 +1,5 @@
 use std::os::raw::c_char;
+use std::mem::{offset_of, size_of};
 use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -9,7 +10,9 @@ use sudachi::analysis::mlist::MorphemeList;
 use sudachi::analysis::stateful_tokenizer::StatefulTokenizer;
 use sudachi::analysis::stateless_tokenizer::StatelessTokenizer;
 use sudachi::config::Config;
+use sudachi::dic::DictionaryLoader;
 use sudachi::dic::dictionary::JapaneseDictionary;
+use sudachi::dic::header::{Header, HeaderVersion, SystemDictVersion, UserDictVersion};
 use sudachi::dic::subset::InfoSubset;
 use sudachi::pos::PosMatcher;
 use sudachi::sentence_detector::{NonBreakChecker, SentenceDetector};
@@ -56,6 +59,37 @@ pub struct PretokenizerHandle {
     pub(crate) debug_sink: Arc<dyn PretokenizerDebugSink>,
 }
 
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct DictionaryInspectionResult {
+    pub kind: i32,
+    pub header_version: i32,
+    pub is_loadable: i32,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct DictionaryInspectionResultLayout {
+    pub layout_version: u64,
+    pub result_size: u64,
+    pub kind_offset: u64,
+    pub header_version_offset: u64,
+    pub is_loadable_offset: u64,
+    pub kind_unknown_value: u64,
+    pub kind_system_value: u64,
+    pub kind_user_value: u64,
+}
+
+impl Default for DictionaryInspectionResult {
+    fn default() -> Self {
+        Self {
+            kind: DICTIONARY_KIND_UNKNOWN,
+            header_version: -1,
+            is_loadable: 0,
+        }
+    }
+}
+
 #[derive(Clone, Copy)]
 pub(crate) struct PretokenizeSettings {
     pub mode: Mode,
@@ -98,6 +132,10 @@ struct StderrPretokenizerDebugSink;
 
 const SUDACHI_FFI_ABI_VERSION: i32 = 3;
 const FFI_INFO_SUBSET_POS_TEXT_BIT: u32 = 1 << 30;
+const DICTIONARY_INSPECTION_RESULT_LAYOUT_VERSION: u64 = 1;
+const DICTIONARY_KIND_UNKNOWN: i32 = 0;
+const DICTIONARY_KIND_SYSTEM: i32 = 1;
+const DICTIONARY_KIND_USER: i32 = 2;
 
 #[derive(Clone, Copy)]
 struct ParsedInfoSubset {
@@ -150,6 +188,27 @@ pub(crate) fn format_pretokenize_debug_record(record: &PretokenizeDebugRecord) -
         record.token_count,
         record.elapsed_us,
     )
+}
+
+impl DictionaryInspectionResultLayout {
+    pub const fn new() -> Self {
+        Self {
+            layout_version: DICTIONARY_INSPECTION_RESULT_LAYOUT_VERSION,
+            result_size: size_of::<DictionaryInspectionResult>() as u64,
+            kind_offset: offset_of!(DictionaryInspectionResult, kind) as u64,
+            header_version_offset: offset_of!(DictionaryInspectionResult, header_version) as u64,
+            is_loadable_offset: offset_of!(DictionaryInspectionResult, is_loadable) as u64,
+            kind_unknown_value: DICTIONARY_KIND_UNKNOWN as u64,
+            kind_system_value: DICTIONARY_KIND_SYSTEM as u64,
+            kind_user_value: DICTIONARY_KIND_USER as u64,
+        }
+    }
+}
+
+impl Default for DictionaryInspectionResultLayout {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl PretokenizerDebugSink for StderrPretokenizerDebugSink {
@@ -220,6 +279,26 @@ fn load_dictionary(
     })?;
 
     Ok(Arc::new(dictionary))
+}
+
+fn header_kind_and_version(version: &HeaderVersion) -> (i32, i32) {
+    match version {
+        HeaderVersion::SystemDict(system) => (
+            DICTIONARY_KIND_SYSTEM,
+            match system {
+                SystemDictVersion::Version1 => 1,
+                SystemDictVersion::Version2 => 2,
+            },
+        ),
+        HeaderVersion::UserDict(user) => (
+            DICTIONARY_KIND_USER,
+            match user {
+                UserDictVersion::Version1 => 1,
+                UserDictVersion::Version2 => 2,
+                UserDictVersion::Version3 => 3,
+            },
+        ),
+    }
 }
 
 fn tokenize_text(
@@ -707,6 +786,73 @@ pub(crate) fn create_tokenizer_impl(
 
         write_box_ptr(out_handle, handle, "out_handle pointer was null")
     })
+}
+
+pub(crate) fn inspect_dictionary_bytes_impl(
+    bytes_ptr: *const u8,
+    bytes_len: usize,
+    out_result: *mut DictionaryInspectionResult,
+) -> i32 {
+    run_ffi(|| {
+        require_non_null(out_result, "out_result pointer was null")?;
+        require_non_null(bytes_ptr, "bytes_ptr pointer was null")?;
+
+        let bytes = unsafe { std::slice::from_raw_parts(bytes_ptr, bytes_len) };
+        let mut result = DictionaryInspectionResult::default();
+        unsafe {
+            *out_result = result;
+        }
+
+        if bytes_len < Header::STORAGE_SIZE {
+            return Err(error(
+                ERR_CONFIG,
+                format!(
+                    "dictionary bytes are too short: expected at least {} bytes, got {}",
+                    Header::STORAGE_SIZE,
+                    bytes_len
+                ),
+            ));
+        }
+
+        let header = Header::parse(&bytes[..Header::STORAGE_SIZE]).map_err(|err| {
+            error(
+                ERR_CONFIG,
+                format!("failed to parse dictionary header from bytes: {err}"),
+            )
+        })?;
+        let (kind, header_version) = header_kind_and_version(&header.version);
+        result.kind = kind;
+        result.header_version = header_version;
+
+        let load_result = match kind {
+            DICTIONARY_KIND_SYSTEM => DictionaryLoader::read_system_dictionary(bytes).map(|_| ()),
+            DICTIONARY_KIND_USER => DictionaryLoader::read_user_dictionary(bytes).map(|_| ()),
+            _ => DictionaryLoader::read_system_dictionary(bytes).map(|_| ()),
+        };
+
+        match load_result {
+            Ok(()) => {
+                result.is_loadable = 1;
+                unsafe {
+                    *out_result = result;
+                }
+                Ok(())
+            }
+            Err(err) => {
+                unsafe {
+                    *out_result = result;
+                }
+                Err(error(
+                    ERR_CONFIG,
+                    format!("dictionary bytes are not loadable: {err}"),
+                ))
+            }
+        }
+    })
+}
+
+pub(crate) fn dictionary_inspection_result_layout() -> DictionaryInspectionResultLayout {
+    DictionaryInspectionResultLayout::new()
 }
 
 pub(crate) fn create_sentence_splitter_impl(
@@ -1255,6 +1401,18 @@ pub(crate) fn get_morpheme_result_layout_impl(out_layout: *mut MorphemeResultLay
         write_ptr(
             out_layout,
             morpheme_result_layout(),
+            "out_layout pointer was null",
+        )
+    })
+}
+
+pub(crate) fn get_dictionary_inspection_result_layout_impl(
+    out_layout: *mut DictionaryInspectionResultLayout,
+) -> i32 {
+    run_ffi(|| {
+        write_ptr(
+            out_layout,
+            dictionary_inspection_result_layout(),
             "out_layout pointer was null",
         )
     })

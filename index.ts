@@ -27,6 +27,7 @@ export {
   listInstalledDictionaries,
   setupDictionary,
 } from "./src/dictionary.ts";
+export { inspectDictionaryBytes } from "./src/dictionary-loader.ts";
 export type {
   HfNormalizedStringLike,
   HfOffsets,
@@ -39,6 +40,8 @@ export type {
   Sudachi,
 } from "./src/sudachi.ts";
 export type {
+  DictionaryBytesInspection,
+  DictionaryKind,
   InfoSubset,
   InfoSubsetField,
   InfoSubsetFields,

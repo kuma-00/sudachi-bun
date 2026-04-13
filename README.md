@@ -192,6 +192,18 @@ try {
 }
 ```
 
+辞書バイナリを `Uint8Array` で検査したい場合は `inspectDictionaryBytes()` を使います。
+
+```ts
+import { inspectDictionaryBytes } from "sudachi-bun";
+
+const bytes = await Bun.file("./dict/system_core.dic").bytes();
+const inspected = inspectDictionaryBytes(bytes);
+
+console.log(inspected);
+// { dictionaryKind: "system", headerVersion: 2, loadable: true }
+```
+
 `projection` は `tokenizer.tokenize()` / `tokenizer.lookup()` / `tokenizer.split()` / `tokenizer.splitInto()` の必須プロパティです。サポートする値は `surface`, `normalized`, `dictionary_form`, `reading` です。`Morpheme.surface` と `LookupEntry.surface` はこの投影結果を持ち、`--wakati` もこの値を使って表示します。
 
 `tokenizer.tokenize()` / `tokenizer.split()` / `tokenizer.splitInto()` / `stateful.doTokenize()` が返す morpheme 配列には、解析全体のコスト指標 `internalCost` が数値プロパティとして付与されます。各 `Morpheme` には、そのノードまでの累積コスト `totalCost` が含まれます。

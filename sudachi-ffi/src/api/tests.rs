@@ -1,12 +1,12 @@
 use super::*;
 use crate::error::{
-    ERR_INVALID_INDEX, ERR_NULL_POINTER, ERR_PRETOKENIZE, ERR_SENTENCE_SPLIT, OK,
+    ERR_CONFIG, ERR_INVALID_INDEX, ERR_NULL_POINTER, ERR_PRETOKENIZE, ERR_SENTENCE_SPLIT, OK,
     status_code_name,
 };
 use crate::result::{
     LookupResultArray, LookupResultLayout, MorphemeResult, MorphemeResultArray,
-    MorphemeResultLayout,
-    PosMatcherResultArray, PretokenizedResultArray, PretokenizedResultLayout, SentenceSpanLayout,
+    MorphemeResultLayout, PosMatcherResultArray, PretokenizedResultArray,
+    PretokenizedResultLayout, SentenceSpanLayout,
 };
 use std::env;
 use std::ffi::{CStr, CString};
@@ -16,6 +16,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::{fs, ptr};
 use sudachi::analysis::Mode;
+use sudachi::dic::header::Header;
 use sudachi::dic::subset::InfoSubset;
 
 static TOKENIZER_TEST_COUNTER: AtomicU64 = AtomicU64::new(0);
@@ -123,6 +124,16 @@ fn prepare_test_dictionary_config() -> TestDictionaryConfig {
         dict_path_c: CString::new(dict_path.to_str().expect("dict path must be UTF-8")).unwrap(),
         config_path,
     }
+}
+
+fn read_test_dictionary_bytes(file_name: &str) -> Vec<u8> {
+    let checkout_dir = find_sudachi_checkout_dir();
+    let path = checkout_dir
+        .join("sudachi")
+        .join("tests")
+        .join("resources")
+        .join(file_name);
+    fs::read(path).expect("failed to read dictionary fixture")
 }
 
 fn with_test_tokenizer<T>(f: impl FnOnce(*mut TokenizerHandle) -> T) -> T {
@@ -589,6 +600,102 @@ fn get_sentence_span_layout_returns_stable_offsets() {
 #[test]
 fn get_abi_version_returns_expected_value() {
     assert_eq!(sudachi_get_abi_version(), 3);
+}
+
+#[test]
+fn get_dictionary_inspection_result_layout_returns_stable_offsets() {
+    let mut layout = MaybeUninit::<DictionaryInspectionResultLayout>::uninit();
+    let status = sudachi_get_dictionary_inspection_result_layout(layout.as_mut_ptr());
+
+    assert_eq!(status, OK);
+    let layout = unsafe { layout.assume_init() };
+    assert_eq!(layout.layout_version, 1);
+    assert!(layout.result_size > 0);
+    assert_eq!(layout.kind_offset, 0);
+    assert_eq!(layout.header_version_offset, 4);
+    assert_eq!(layout.is_loadable_offset, 8);
+    assert_eq!(layout.kind_unknown_value, 0);
+    assert_eq!(layout.kind_system_value, 1);
+    assert_eq!(layout.kind_user_value, 2);
+}
+
+#[test]
+fn inspect_dictionary_bytes_detects_system_dictionary() {
+    let bytes = read_test_dictionary_bytes("system.dic.test");
+    let mut inspection = MaybeUninit::<DictionaryInspectionResult>::uninit();
+
+    let status =
+        sudachi_inspect_dictionary_bytes(bytes.as_ptr(), bytes.len(), inspection.as_mut_ptr());
+
+    assert_eq!(status, OK, "{}", last_error_message());
+    let inspection = unsafe { inspection.assume_init() };
+    assert_eq!(inspection.kind, 1);
+    assert_eq!(inspection.header_version, 2);
+    assert_eq!(inspection.is_loadable, 1);
+}
+
+#[test]
+fn inspect_dictionary_bytes_detects_user_dictionary() {
+    let bytes = read_test_dictionary_bytes("user.dic.test");
+    let mut inspection = MaybeUninit::<DictionaryInspectionResult>::uninit();
+
+    let status =
+        sudachi_inspect_dictionary_bytes(bytes.as_ptr(), bytes.len(), inspection.as_mut_ptr());
+
+    assert_eq!(status, OK, "{}", last_error_message());
+    let inspection = unsafe { inspection.assume_init() };
+    assert_eq!(inspection.kind, 2);
+    assert_eq!(inspection.header_version, 3);
+    assert_eq!(inspection.is_loadable, 1);
+}
+
+#[test]
+fn inspect_dictionary_bytes_rejects_invalid_bytes() {
+    let bytes = [1_u8, 2, 3, 4];
+    let mut inspection = MaybeUninit::<DictionaryInspectionResult>::uninit();
+
+    let status =
+        sudachi_inspect_dictionary_bytes(bytes.as_ptr(), bytes.len(), inspection.as_mut_ptr());
+
+    assert_eq!(status, ERR_CONFIG);
+    assert_eq!(status_code_name(status), "CONFIG");
+    let inspection = unsafe { inspection.assume_init() };
+    assert_eq!(inspection.kind, 0);
+    assert_eq!(inspection.header_version, -1);
+    assert_eq!(inspection.is_loadable, 0);
+}
+
+#[test]
+fn inspect_dictionary_bytes_rejects_invalid_header_bytes() {
+    let bytes = vec![0_u8; Header::STORAGE_SIZE];
+    let mut inspection = MaybeUninit::<DictionaryInspectionResult>::uninit();
+
+    let status =
+        sudachi_inspect_dictionary_bytes(bytes.as_ptr(), bytes.len(), inspection.as_mut_ptr());
+
+    assert_eq!(status, ERR_CONFIG);
+    assert_eq!(status_code_name(status), "CONFIG");
+    let inspection = unsafe { inspection.assume_init() };
+    assert_eq!(inspection.kind, 0);
+    assert_eq!(inspection.header_version, -1);
+    assert_eq!(inspection.is_loadable, 0);
+}
+
+#[test]
+fn inspect_dictionary_bytes_preserves_header_on_load_failure() {
+    let mut bytes = read_test_dictionary_bytes("system.dic.test");
+    bytes.truncate(Header::STORAGE_SIZE);
+    let mut inspection = MaybeUninit::<DictionaryInspectionResult>::uninit();
+
+    let status =
+        sudachi_inspect_dictionary_bytes(bytes.as_ptr(), bytes.len(), inspection.as_mut_ptr());
+
+    assert_eq!(status, ERR_CONFIG);
+    assert_eq!(status_code_name(status), "CONFIG");
+    let inspection = unsafe { inspection.assume_init() };
+    assert_eq!(inspection.kind, 1);
+    assert_eq!(inspection.header_version, 2);
+    assert_eq!(inspection.is_loadable, 0);
 }
 
 #[test]

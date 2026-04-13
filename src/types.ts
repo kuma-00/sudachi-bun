@@ -16,6 +16,16 @@ export interface NativeLibraryLoadOptions {
   debug?: boolean;
 }
 
+export const DICTIONARY_KINDS = ["system", "user", "unknown"] as const;
+
+export type DictionaryKind = (typeof DICTIONARY_KINDS)[number];
+
+export interface DictionaryBytesInspection {
+  dictionaryKind: DictionaryKind;
+  headerVersion: number | null;
+  loadable: boolean;
+}
+
 export interface TokenizerOptions extends NativeLibraryLoadOptions {
   dictPath: string;
   configPath?: string;

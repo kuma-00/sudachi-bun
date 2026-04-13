@@ -11,6 +11,7 @@ import {
   loadNativeLibrary,
   loadPretokenizerLibrary,
   loadSentenceSplitterLibrary,
+  readDictionaryInspectionResultLayout,
   readLookupResultLayout,
   readMorphemeResultLayout,
   readPosMatcherResultLayout,
@@ -108,6 +109,42 @@ function requireResolvedPath(path: string | null, label: string): string {
   return path;
 }
 
+function decodeDictionaryInspection(
+  outResult: Uint8Array,
+  layout: {
+    kindOffset: number;
+    headerVersionOffset: number;
+    isLoadableOffset: number;
+    kindUnknownValue: number;
+    kindSystemValue: number;
+    kindUserValue: number;
+  },
+): {
+  dictionaryKind: "system" | "user" | "unknown";
+  headerVersion: number | null;
+  loadable: boolean;
+} {
+  const view = new DataView(
+    outResult.buffer,
+    outResult.byteOffset,
+    outResult.byteLength,
+  );
+  const kind = view.getInt32(layout.kindOffset, true);
+  const rawHeaderVersion = view.getInt32(layout.headerVersionOffset, true);
+  const loadable = view.getInt32(layout.isLoadableOffset, true) !== 0;
+  const headerVersion = rawHeaderVersion < 0 ? null : rawHeaderVersion;
+
+  if (kind === layout.kindSystemValue) {
+    return { dictionaryKind: "system", headerVersion, loadable };
+  }
+
+  if (kind === layout.kindUserValue) {
+    return { dictionaryKind: "user", headerVersion, loadable };
+  }
+
+  return { dictionaryKind: "unknown", headerVersion, loadable };
+}
+
 const nativeLibraryPath = resolveNativeLibraryPath();
 const dictPath = resolveDictionaryPath();
 const canLoadCurrentNativeAbi = (() => {
@@ -161,6 +198,53 @@ nativeTest(
       pretokenizerLibrary.close();
       lookupLibrary.close();
       tokenizerLibrary.close();
+    }
+  },
+);
+
+nativeTest(
+  "FFI: can call sudachi_inspect_dictionary_bytes from the real native library",
+  async () => {
+    const options = {
+      libraryPath: requireResolvedPath(nativeLibraryPath, "nativeLibraryPath"),
+    };
+    const library = loadNativeLibrary(options);
+
+    try {
+      const layout = readDictionaryInspectionResultLayout(library);
+
+      const invalidBytes = new Uint8Array([1, 2, 3, 4]);
+      const invalidResult = new Uint8Array(layout.resultSize);
+      const invalidStatus = library.symbols.sudachi_inspect_dictionary_bytes(
+        invalidBytes,
+        invalidBytes.byteLength,
+        invalidResult,
+      );
+      expect(invalidStatus).not.toBe(0);
+      expect(
+        String(library.symbols.sudachi_status_code_name(invalidStatus)),
+      ).toBe("CONFIG");
+      expect(decodeDictionaryInspection(invalidResult, layout)).toEqual({
+        dictionaryKind: "unknown",
+        headerVersion: null,
+        loadable: false,
+      });
+
+      const resolvedDictPath = requireResolvedPath(dictPath, "dictPath");
+      const dictionaryBytes = await Bun.file(resolvedDictPath).bytes();
+      const okResult = new Uint8Array(layout.resultSize);
+      const okStatus = library.symbols.sudachi_inspect_dictionary_bytes(
+        dictionaryBytes,
+        dictionaryBytes.byteLength,
+        okResult,
+      );
+      expect(okStatus).toBe(0);
+      const okInspection = decodeDictionaryInspection(okResult, layout);
+      expect(okInspection.dictionaryKind).not.toBe("unknown");
+      expect(typeof okInspection.headerVersion).toBe("number");
+      expect(okInspection.loadable).toBe(true);
+    } finally {
+      library.close();
     }
   },
 );

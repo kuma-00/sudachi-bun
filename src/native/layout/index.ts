@@ -1,4 +1,5 @@
 export * from "./core.ts";
+export * from "./dictionary-inspection.ts";
 export * from "./lookup.ts";
 export * from "./morpheme.ts";
 export * from "./pos-matcher.ts";
