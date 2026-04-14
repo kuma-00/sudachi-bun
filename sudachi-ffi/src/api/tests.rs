@@ -4,6 +4,7 @@ use crate::error::{
     status_code_name,
 };
 use crate::result::{
+    DictionaryBuildReportArray, DictionaryBuildReportLayout,
     LookupResultArray, LookupResultLayout, MorphemeResult, MorphemeResultArray,
     MorphemeResultLayout, PosMatcherResultArray, PretokenizedResultArray,
     PretokenizedResultLayout, SentenceSpanLayout,
@@ -134,6 +135,31 @@ fn read_test_dictionary_bytes(file_name: &str) -> Vec<u8> {
         .join("resources")
         .join(file_name);
     fs::read(path).expect("failed to read dictionary fixture")
+}
+
+fn test_resources_dir() -> PathBuf {
+    find_sudachi_checkout_dir()
+        .join("sudachi")
+        .join("tests")
+        .join("resources")
+}
+
+fn temp_build_output_path(name: &str, ext: &str) -> PathBuf {
+    env::temp_dir().join(format!(
+        "sudachi-ffi-build-{name}-{}-{}.{}",
+        std::process::id(),
+        TOKENIZER_TEST_COUNTER.fetch_add(1, Ordering::Relaxed),
+        ext
+    ))
+}
+
+fn c_lexicon_array(paths: &[PathBuf]) -> (Vec<CString>, Vec<*const std::os::raw::c_char>) {
+    let c_paths = paths
+        .iter()
+        .map(|path| CString::new(path.to_str().expect("path must be UTF-8")).unwrap())
+        .collect::<Vec<_>>();
+    let ptrs = c_paths.iter().map(|path| path.as_ptr()).collect::<Vec<_>>();
+    (c_paths, ptrs)
 }
 
 fn with_test_tokenizer<T>(f: impl FnOnce(*mut TokenizerHandle) -> T) -> T {
@@ -381,6 +407,31 @@ fn collect_pos_matcher_ids(result: *mut PosMatcherResultArray) -> Vec<u16> {
     }
 }
 
+fn collect_dictionary_build_report(
+    result: *mut DictionaryBuildReportArray,
+) -> Vec<(String, usize, u64, u8)> {
+    assert!(!result.is_null());
+    unsafe {
+        let array = &*result;
+        if array.len == 0 {
+            return Vec::new();
+        }
+
+        let items = std::slice::from_raw_parts(array.items, array.len);
+        items
+            .iter()
+            .map(|item| {
+                (
+                    CStr::from_ptr(item.part).to_str().unwrap().to_owned(),
+                    item.size,
+                    item.elapsed_millis,
+                    item.is_write,
+                )
+            })
+            .collect()
+    }
+}
+
 fn last_error_message() -> String {
     let ptr = sudachi_get_last_error();
     if ptr.is_null() {
@@ -617,6 +668,328 @@ fn get_dictionary_inspection_result_layout_returns_stable_offsets() {
     assert_eq!(layout.kind_unknown_value, 0);
     assert_eq!(layout.kind_system_value, 1);
     assert_eq!(layout.kind_user_value, 2);
+}
+
+#[test]
+fn get_dictionary_build_report_layout_requires_output_pointer() {
+    let status = sudachi_get_dictionary_build_report_layout(ptr::null_mut());
+    assert_eq!(status, ERR_NULL_POINTER);
+    assert_eq!(status_code_name(status), "NULL_POINTER");
+}
+
+#[test]
+fn get_dictionary_build_report_layout_returns_stable_offsets() {
+    let mut layout = MaybeUninit::<DictionaryBuildReportLayout>::uninit();
+    let status = sudachi_get_dictionary_build_report_layout(layout.as_mut_ptr());
+    assert_eq!(status, OK);
+    let layout = unsafe { layout.assume_init() };
+    assert_eq!(
+        layout.layout_version,
+        crate::result::DICTIONARY_BUILD_REPORT_LAYOUT_VERSION
+    );
+    assert!(layout.result_size > 0);
+    assert!(layout.part_offset < layout.result_size);
+}
+
+#[test]
+fn build_system_dictionary_succeeds_and_returns_report() {
+    let resources = test_resources_dir();
+    let matrix_path = resources.join("matrix_10x10.def");
+    let lexicon_paths = vec![resources.join("lex.csv")];
+    let output_path = temp_build_output_path("system", "dic");
+    let description = CString::new("ffi system build test").unwrap();
+    let matrix_path_c = CString::new(matrix_path.to_str().expect("matrix path must be UTF-8")).unwrap();
+    let output_path_c = CString::new(output_path.to_str().expect("output path must be UTF-8")).unwrap();
+    let (_lexicon_c, lexicon_ptrs) = c_lexicon_array(&lexicon_paths);
+    let mut out_report = ptr::null_mut();
+
+    let status = sudachi_build_system_dictionary(
+        matrix_path_c.as_ptr(),
+        lexicon_ptrs.as_ptr(),
+        lexicon_ptrs.len(),
+        output_path_c.as_ptr(),
+        description.as_ptr(),
+        &mut out_report,
+    );
+
+    assert_eq!(status, OK, "{}", last_error_message());
+    assert!(!out_report.is_null());
+    let report = collect_dictionary_build_report(out_report);
+    assert!(!report.is_empty());
+    assert!(report.iter().all(|(part, _, _, _)| !part.is_empty()));
+
+    let bytes = fs::read(&output_path).expect("failed to read built system dictionary");
+    let mut inspect = DictionaryInspectionResult::default();
+    let status = sudachi_inspect_dictionary_bytes(bytes.as_ptr(), bytes.len(), &mut inspect);
+    assert_eq!(status, OK, "{}", last_error_message());
+    assert_eq!(inspect.kind, 1);
+    assert_eq!(inspect.is_loadable, 1);
+
+    sudachi_free_dictionary_build_report(out_report);
+    let _ = fs::remove_file(output_path);
+}
+
+#[test]
+fn build_user_dictionary_succeeds_and_returns_report() {
+    let resources = test_resources_dir();
+    let system_dict_path = resources.join("system.dic.test");
+    let lexicon_paths = vec![resources.join("user1.csv")];
+    let output_path = temp_build_output_path("user", "dic");
+    let description = CString::new("ffi user build test").unwrap();
+    let system_dict_path_c =
+        CString::new(system_dict_path.to_str().expect("system dict path must be UTF-8")).unwrap();
+    let output_path_c = CString::new(output_path.to_str().expect("output path must be UTF-8")).unwrap();
+    let (_lexicon_c, lexicon_ptrs) = c_lexicon_array(&lexicon_paths);
+    let mut out_report = ptr::null_mut();
+
+    let status = sudachi_build_user_dictionary(
+        system_dict_path_c.as_ptr(),
+        lexicon_ptrs.as_ptr(),
+        lexicon_ptrs.len(),
+        output_path_c.as_ptr(),
+        description.as_ptr(),
+        &mut out_report,
+    );
+
+    assert_eq!(status, OK, "{}", last_error_message());
+    assert!(!out_report.is_null());
+    let report = collect_dictionary_build_report(out_report);
+    assert!(!report.is_empty());
+    assert!(report.iter().all(|(part, _, _, _)| !part.is_empty()));
+
+    let bytes = fs::read(&output_path).expect("failed to read built user dictionary");
+    let mut inspect = DictionaryInspectionResult::default();
+    let status = sudachi_inspect_dictionary_bytes(bytes.as_ptr(), bytes.len(), &mut inspect);
+    assert_eq!(status, OK, "{}", last_error_message());
+    assert_eq!(inspect.kind, 2);
+    assert_eq!(inspect.is_loadable, 1);
+
+    sudachi_free_dictionary_build_report(out_report);
+    let _ = fs::remove_file(output_path);
+}
+
+#[test]
+fn build_dictionary_rejects_output_path_aliasing_inputs() {
+    let resources = test_resources_dir();
+
+    // System build: output_path == matrix_path must be rejected before any writes.
+    let matrix_path = resources.join("matrix_10x10.def");
+    let lexicon_paths = vec![resources.join("lex.csv")];
+    let matrix_before = fs::read(&matrix_path).expect("failed to read matrix fixture");
+    let matrix_name = matrix_path
+        .file_name()
+        .expect("matrix file name must exist")
+        .to_string_lossy()
+        .to_string();
+    let matrix_temp_prefix = format!(".{matrix_name}.sudachi-build-");
+    let matrix_parent = matrix_path.parent().expect("matrix parent must exist");
+    assert!(
+        fs::read_dir(matrix_parent)
+            .unwrap()
+            .filter_map(|entry| entry.ok())
+            .filter_map(|entry| entry.file_name().into_string().ok())
+            .all(|name| !name.starts_with(&matrix_temp_prefix)),
+        "unexpected pre-existing build temp files next to matrix fixture"
+    );
+
+    let matrix_path_c =
+        CString::new(matrix_path.to_str().expect("matrix path must be UTF-8")).unwrap();
+    let output_path_c =
+        CString::new(matrix_path.to_str().expect("output path must be UTF-8")).unwrap();
+    let (_lexicon_c, lexicon_ptrs) = c_lexicon_array(&lexicon_paths);
+    let mut out_report = ptr::null_mut();
+    let status = sudachi_build_system_dictionary(
+        matrix_path_c.as_ptr(),
+        lexicon_ptrs.as_ptr(),
+        lexicon_ptrs.len(),
+        output_path_c.as_ptr(),
+        ptr::null(),
+        &mut out_report,
+    );
+    assert_eq!(status, ERR_CONFIG);
+    assert!(out_report.is_null());
+    assert!(
+        last_error_message().contains("must not alias input file"),
+        "unexpected error message: {}",
+        last_error_message()
+    );
+    let matrix_after = fs::read(&matrix_path).expect("failed to read matrix fixture after call");
+    assert_eq!(matrix_before, matrix_after, "matrix fixture was modified");
+    assert!(
+        fs::read_dir(matrix_parent)
+            .unwrap()
+            .filter_map(|entry| entry.ok())
+            .filter_map(|entry| entry.file_name().into_string().ok())
+            .all(|name| !name.starts_with(&matrix_temp_prefix)),
+        "build temp files were created next to the matrix fixture"
+    );
+
+    // User build: output_path == system_dict_path must be rejected before any writes.
+    let system_dict_path = resources.join("system.dic.test");
+    let user_lexicon_paths = vec![resources.join("user1.csv")];
+    let system_before = fs::read(&system_dict_path).expect("failed to read system dic fixture");
+    let system_name = system_dict_path
+        .file_name()
+        .expect("system dic file name must exist")
+        .to_string_lossy()
+        .to_string();
+    let system_temp_prefix = format!(".{system_name}.sudachi-build-");
+    let system_parent = system_dict_path.parent().expect("system dic parent must exist");
+    assert!(
+        fs::read_dir(system_parent)
+            .unwrap()
+            .filter_map(|entry| entry.ok())
+            .filter_map(|entry| entry.file_name().into_string().ok())
+            .all(|name| !name.starts_with(&system_temp_prefix)),
+        "unexpected pre-existing build temp files next to system dic fixture"
+    );
+
+    let system_dict_path_c = CString::new(
+        system_dict_path
+            .to_str()
+            .expect("system dict path must be UTF-8"),
+    )
+    .unwrap();
+    let user_output_path_c = CString::new(
+        system_dict_path
+            .to_str()
+            .expect("user output path must be UTF-8"),
+    )
+    .unwrap();
+    let (_user_lexicon_c, user_lexicon_ptrs) = c_lexicon_array(&user_lexicon_paths);
+    let mut out_report = ptr::null_mut();
+    let status = sudachi_build_user_dictionary(
+        system_dict_path_c.as_ptr(),
+        user_lexicon_ptrs.as_ptr(),
+        user_lexicon_ptrs.len(),
+        user_output_path_c.as_ptr(),
+        ptr::null(),
+        &mut out_report,
+    );
+    assert_eq!(status, ERR_CONFIG);
+    assert!(out_report.is_null());
+    assert!(
+        last_error_message().contains("must not alias input file"),
+        "unexpected error message: {}",
+        last_error_message()
+    );
+    let system_after =
+        fs::read(&system_dict_path).expect("failed to read system dic fixture after call");
+    assert_eq!(system_before, system_after, "system dic fixture was modified");
+    assert!(
+        fs::read_dir(system_parent)
+            .unwrap()
+            .filter_map(|entry| entry.ok())
+            .filter_map(|entry| entry.file_name().into_string().ok())
+            .all(|name| !name.starts_with(&system_temp_prefix)),
+        "build temp files were created next to the system dic fixture"
+    );
+}
+
+#[test]
+fn finalize_dictionary_output_replaces_existing_output_file() {
+    let output_path = temp_build_output_path("finalize-replace-existing", "dic");
+    let output_name = output_path
+        .file_name()
+        .expect("output file name must exist")
+        .to_string_lossy()
+        .to_string();
+    let temp_path = output_path.with_file_name(format!(
+        ".{output_name}.sudachi-finalize-test-{}",
+        TOKENIZER_TEST_COUNTER.fetch_add(1, Ordering::Relaxed)
+    ));
+
+    fs::write(&output_path, b"old").expect("failed to write pre-existing output file");
+    fs::write(&temp_path, b"new").expect("failed to write temp output file");
+
+    let result = super::ops::finalize_dictionary_output(&temp_path, &output_path, "test");
+    assert_eq!(result, Ok(()), "{}", last_error_message());
+    assert_eq!(
+        fs::read(&output_path).expect("failed to read finalized output"),
+        b"new"
+    );
+    assert!(!temp_path.exists(), "temp file should have been moved");
+
+    let _ = fs::remove_file(output_path);
+}
+
+#[test]
+fn build_dictionary_cleans_up_temp_file_on_finalize_error() {
+    let resources = test_resources_dir();
+    let matrix_path = resources.join("matrix_10x10.def");
+    let lexicon_paths = vec![resources.join("lex.csv")];
+    let output_path = temp_build_output_path("finalize-error-dir-output", "dic");
+    fs::create_dir(&output_path).expect("failed to create output directory");
+
+    let output_name = output_path
+        .file_name()
+        .expect("output file name must exist")
+        .to_string_lossy()
+        .to_string();
+    let temp_prefix = format!(".{output_name}.sudachi-build-");
+    let output_parent = output_path.parent().expect("output parent must exist");
+
+    let matrix_path_c =
+        CString::new(matrix_path.to_str().expect("matrix path must be UTF-8")).unwrap();
+    let output_path_c =
+        CString::new(output_path.to_str().expect("output path must be UTF-8")).unwrap();
+    let (_lexicon_c, lexicon_ptrs) = c_lexicon_array(&lexicon_paths);
+    let mut out_report = ptr::null_mut();
+    let status = sudachi_build_system_dictionary(
+        matrix_path_c.as_ptr(),
+        lexicon_ptrs.as_ptr(),
+        lexicon_ptrs.len(),
+        output_path_c.as_ptr(),
+        ptr::null(),
+        &mut out_report,
+    );
+
+    assert_eq!(status, ERR_CONFIG);
+    assert!(out_report.is_null());
+    assert!(
+        fs::read_dir(output_parent)
+            .unwrap()
+            .filter_map(|entry| entry.ok())
+            .filter_map(|entry| entry.file_name().into_string().ok())
+            .all(|name| !name.starts_with(&temp_prefix)),
+        "build temp files were not cleaned up after finalize error"
+    );
+
+    let _ = fs::remove_dir(output_path);
+}
+
+#[test]
+fn build_dictionary_fails_on_invalid_arguments() {
+    let resources = test_resources_dir();
+    let matrix_path = resources.join("matrix_10x10.def");
+    let output_path = temp_build_output_path("invalid", "dic");
+    let matrix_path_c = CString::new(matrix_path.to_str().expect("matrix path must be UTF-8")).unwrap();
+    let output_path_c = CString::new(output_path.to_str().expect("output path must be UTF-8")).unwrap();
+    let mut out_report = ptr::null_mut();
+
+    let status = sudachi_build_system_dictionary(
+        matrix_path_c.as_ptr(),
+        ptr::null(),
+        1,
+        output_path_c.as_ptr(),
+        ptr::null(),
+        &mut out_report,
+    );
+    assert_eq!(status, ERR_NULL_POINTER);
+    assert_eq!(status_code_name(status), "NULL_POINTER");
+    assert!(out_report.is_null());
+
+    let status = sudachi_build_system_dictionary(
+        matrix_path_c.as_ptr(),
+        ptr::null(),
+        0,
+        output_path_c.as_ptr(),
+        ptr::null(),
+        &mut out_report,
+    );
+    assert_eq!(status, ERR_NULL_POINTER);
+    assert_eq!(status_code_name(status), "NULL_POINTER");
+    assert!(out_report.is_null());
 }
 
 #[test]

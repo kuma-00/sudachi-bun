@@ -1,12 +1,15 @@
 use std::mem::{offset_of, size_of};
 
 use super::{
+    DictionaryBuildPartReport, DictionaryBuildReportArray, DictionaryBuildReportLayout,
     LookupResultArray, LookupResultItem, LookupResultLayout, MorphemeResult, MorphemeResultArray,
     MorphemeResultLayout, PosMatcherResultArray, PosMatcherResultLayout, PretokenizedResult,
     PretokenizedResultArray, PretokenizedResultLayout, SentenceSpan, SentenceSpanArray,
     SentenceSpanLayout,
 };
 
+pub const DICTIONARY_BUILD_REPORT_ARRAY_LAYOUT_CONTIGUOUS: u64 = 0;
+pub const DICTIONARY_BUILD_REPORT_LAYOUT_VERSION: u64 = 1;
 pub const MORPHEME_RESULT_ARRAY_LAYOUT_CONTIGUOUS: u64 = 0;
 pub const MORPHEME_RESULT_LAYOUT_VERSION: u64 = 3;
 pub const LOOKUP_RESULT_ARRAY_LAYOUT_CONTIGUOUS: u64 = 0;
@@ -17,6 +20,28 @@ pub const PRETOKENIZED_RESULT_ARRAY_LAYOUT_CONTIGUOUS: u64 = 0;
 pub const PRETOKENIZED_RESULT_LAYOUT_VERSION: u64 = 1;
 pub const SENTENCE_SPAN_ARRAY_LAYOUT_CONTIGUOUS: u64 = 0;
 pub const SENTENCE_SPAN_LAYOUT_VERSION: u64 = 1;
+
+impl DictionaryBuildReportLayout {
+    pub const fn new() -> Self {
+        Self {
+            layout_version: DICTIONARY_BUILD_REPORT_LAYOUT_VERSION,
+            array_layout_kind: DICTIONARY_BUILD_REPORT_ARRAY_LAYOUT_CONTIGUOUS,
+            array_items_offset: offset_of!(DictionaryBuildReportArray, items) as u64,
+            array_len_offset: offset_of!(DictionaryBuildReportArray, len) as u64,
+            result_size: size_of::<DictionaryBuildPartReport>() as u64,
+            part_offset: offset_of!(DictionaryBuildPartReport, part) as u64,
+            size_offset: offset_of!(DictionaryBuildPartReport, size) as u64,
+            elapsed_millis_offset: offset_of!(DictionaryBuildPartReport, elapsed_millis) as u64,
+            is_write_offset: offset_of!(DictionaryBuildPartReport, is_write) as u64,
+        }
+    }
+}
+
+impl Default for DictionaryBuildReportLayout {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 impl MorphemeResultLayout {
     pub const fn new() -> Self {

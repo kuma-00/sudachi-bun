@@ -89,6 +89,22 @@ interface NativeSymbols extends CommonNativeSymbols {
     patternsJson: NativeCStringArg,
     outResult: NodeJS.TypedArray | Pointer | null,
   ) => number;
+  sudachi_build_system_dictionary?: (
+    matrixPath: NativeCStringArg,
+    lexiconPaths: Pointer | NodeJS.TypedArray | null,
+    lexiconPathsLen: number,
+    outputPath: NativeCStringArg,
+    description: NativeCStringArg,
+    outReport: NodeJS.TypedArray | Pointer | null,
+  ) => number;
+  sudachi_build_user_dictionary?: (
+    systemDictPath: NativeCStringArg,
+    lexiconPaths: Pointer | NodeJS.TypedArray | null,
+    lexiconPathsLen: number,
+    outputPath: NativeCStringArg,
+    description: NativeCStringArg,
+    outReport: NodeJS.TypedArray | Pointer | null,
+  ) => number;
   sudachi_inspect_dictionary_bytes: (
     bytesPtr: Pointer | NodeJS.TypedArray | null,
     bytesLen: number,
@@ -98,10 +114,16 @@ interface NativeSymbols extends CommonNativeSymbols {
   sudachi_free_pos_matcher_result: (
     result: Pointer | NodeJS.TypedArray | null,
   ) => void;
+  sudachi_free_dictionary_build_report?: (
+    report: Pointer | NodeJS.TypedArray | null,
+  ) => void;
   sudachi_get_morpheme_result_layout: (
     outLayout: NodeJS.TypedArray | Pointer | null,
   ) => number;
   sudachi_get_dictionary_inspection_result_layout: (
+    outLayout: NodeJS.TypedArray | Pointer | null,
+  ) => number;
+  sudachi_get_dictionary_build_report_layout?: (
     outLayout: NodeJS.TypedArray | Pointer | null,
   ) => number;
   sudachi_get_pos_matcher_result_layout: (
@@ -270,6 +292,8 @@ export function createNativeSudachiLibrary(
   close: () => void,
 ): NativeSudachiLibrary {
   const toNativeCString = (value: string | null): NativeCStringArg => value;
+  const buildSystemDictionary = symbols.sudachi_build_system_dictionary;
+  const buildUserDictionary = symbols.sudachi_build_user_dictionary;
 
   return {
     symbols: {
@@ -370,14 +394,54 @@ export function createNativeSudachiLibrary(
           toNativeCString(patternsJson),
           outResult,
         ),
+      sudachi_build_system_dictionary: buildSystemDictionary
+        ? (
+            matrixPath,
+            lexiconPaths,
+            lexiconPathsLen,
+            outputPath,
+            description,
+            outReport,
+          ) =>
+            buildSystemDictionary(
+              toNativeCString(matrixPath),
+              lexiconPaths,
+              lexiconPathsLen,
+              toNativeCString(outputPath),
+              toNativeCString(description),
+              outReport,
+            )
+        : undefined,
+      sudachi_build_user_dictionary: buildUserDictionary
+        ? (
+            systemDictPath,
+            lexiconPaths,
+            lexiconPathsLen,
+            outputPath,
+            description,
+            outReport,
+          ) =>
+            buildUserDictionary(
+              toNativeCString(systemDictPath),
+              lexiconPaths,
+              lexiconPathsLen,
+              toNativeCString(outputPath),
+              toNativeCString(description),
+              outReport,
+            )
+        : undefined,
       sudachi_inspect_dictionary_bytes: (bytesPtr, bytesLen, outResult) =>
         symbols.sudachi_inspect_dictionary_bytes(bytesPtr, bytesLen, outResult),
       sudachi_free_result: symbols.sudachi_free_result,
       sudachi_free_pos_matcher_result: symbols.sudachi_free_pos_matcher_result,
+      sudachi_free_dictionary_build_report:
+        symbols.sudachi_free_dictionary_build_report,
       sudachi_get_morpheme_result_layout:
         symbols.sudachi_get_morpheme_result_layout,
       sudachi_get_dictionary_inspection_result_layout:
         symbols.sudachi_get_dictionary_inspection_result_layout,
+      sudachi_get_dictionary_build_report_layout:
+        symbols.sudachi_get_dictionary_build_report_layout,
       sudachi_get_pos_matcher_result_layout:
         symbols.sudachi_get_pos_matcher_result_layout,
       sudachi_get_last_error: symbols.sudachi_get_last_error,
@@ -590,6 +654,9 @@ function createNativeSudachiLibraryWithCStringEncoding(
   symbols: NativeSymbols,
   close: () => void,
 ): NativeSudachiLibrary {
+  const buildSystemDictionary = symbols.sudachi_build_system_dictionary;
+  const buildUserDictionary = symbols.sudachi_build_user_dictionary;
+
   return {
     symbols: {
       ...createNativeSudachiLibrary(symbols, close).symbols,
@@ -674,6 +741,42 @@ function createNativeSudachiLibraryWithCStringEncoding(
           toCStringPointer(patternsJson),
           outResult,
         ),
+      sudachi_build_system_dictionary: buildSystemDictionary
+        ? (
+            matrixPath,
+            lexiconPaths,
+            lexiconPathsLen,
+            outputPath,
+            description,
+            outReport,
+          ) =>
+            buildSystemDictionary(
+              toCStringPointer(matrixPath),
+              lexiconPaths,
+              lexiconPathsLen,
+              toCStringPointer(outputPath),
+              toCStringPointer(description),
+              outReport,
+            )
+        : undefined,
+      sudachi_build_user_dictionary: buildUserDictionary
+        ? (
+            systemDictPath,
+            lexiconPaths,
+            lexiconPathsLen,
+            outputPath,
+            description,
+            outReport,
+          ) =>
+            buildUserDictionary(
+              toCStringPointer(systemDictPath),
+              lexiconPaths,
+              lexiconPathsLen,
+              toCStringPointer(outputPath),
+              toCStringPointer(description),
+              outReport,
+            )
+        : undefined,
     },
     close,
   };

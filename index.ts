@@ -27,6 +27,10 @@ export {
   listInstalledDictionaries,
   setupDictionary,
 } from "./src/dictionary.ts";
+export {
+  buildSystemDictionary,
+  buildUserDictionary,
+} from "./src/dictionary-build.ts";
 export { inspectDictionaryBytes } from "./src/dictionary-loader.ts";
 export type {
   HfNormalizedStringLike,
@@ -40,6 +44,10 @@ export type {
   Sudachi,
 } from "./src/sudachi.ts";
 export type {
+  BuildSystemDictionaryOptions,
+  BuildUserDictionaryOptions,
+  DictionaryBuildPartReport,
+  DictionaryBuildResult,
   DictionaryBytesInspection,
   DictionaryKind,
   InfoSubset,

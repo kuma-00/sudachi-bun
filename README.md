@@ -204,6 +204,29 @@ console.log(inspected);
 // { dictionaryKind: "system", headerVersion: 2, loadable: true }
 ```
 
+system/user 辞書をビルドしたい場合は `buildSystemDictionary()` / `buildUserDictionary()` を使います。
+
+```ts
+import { buildSystemDictionary, buildUserDictionary } from "sudachi-bun";
+
+const system = buildSystemDictionary({
+  matrixPath: "./dict/matrix.def",
+  lexiconPaths: ["./dict/lex_1.csv", "./dict/lex_2.csv"],
+  outputPath: "./dict/system_custom.dic",
+  description: "custom system dictionary",
+});
+
+const user = buildUserDictionary({
+  systemDictPath: "./dict/system_custom.dic",
+  lexiconPaths: ["./dict/user_1.csv"],
+  outputPath: "./dict/user_custom.dic",
+});
+
+console.log(system.report);
+console.log(user.report);
+// [{ part: "matrix", size: 123, timeSeconds: 0.12, isWrite: false }, ...]
+```
+
 `projection` は `tokenizer.tokenize()` / `tokenizer.lookup()` / `tokenizer.split()` / `tokenizer.splitInto()` の必須プロパティです。サポートする値は `surface`, `normalized`, `dictionary_form`, `reading` です。`Morpheme.surface` と `LookupEntry.surface` はこの投影結果を持ち、`--wakati` もこの値を使って表示します。
 
 `tokenizer.tokenize()` / `tokenizer.split()` / `tokenizer.splitInto()` / `stateful.doTokenize()` が返す morpheme 配列には、解析全体のコスト指標 `internalCost` が数値プロパティとして付与されます。各 `Morpheme` には、そのノードまでの累積コスト `totalCost` が含まれます。

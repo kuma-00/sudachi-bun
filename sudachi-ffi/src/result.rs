@@ -225,6 +225,49 @@ pub struct SentenceSpanArray {
 }
 
 #[repr(C)]
+pub struct DictionaryBuildPartReport {
+    pub part: *mut c_char,
+    pub size: usize,
+    pub elapsed_millis: u64,
+    pub is_write: u8,
+}
+
+impl DictionaryBuildPartReport {
+    pub(crate) fn empty() -> Self {
+        Self {
+            part: ptr::null_mut(),
+            size: 0,
+            elapsed_millis: 0,
+            is_write: 0,
+        }
+    }
+
+    pub(crate) fn free_owned_fields(&mut self) {
+        marshal::free_c_string(self.part);
+        self.part = ptr::null_mut();
+    }
+}
+
+#[repr(C)]
+pub struct DictionaryBuildReportArray {
+    pub items: *mut DictionaryBuildPartReport,
+    pub len: usize,
+}
+
+#[repr(C)]
+pub struct DictionaryBuildReportLayout {
+    pub layout_version: u64,
+    pub array_layout_kind: u64,
+    pub array_items_offset: u64,
+    pub array_len_offset: u64,
+    pub result_size: u64,
+    pub part_offset: u64,
+    pub size_offset: u64,
+    pub elapsed_millis_offset: u64,
+    pub is_write_offset: u64,
+}
+
+#[repr(C)]
 pub struct MorphemeResultLayout {
     pub layout_version: u64,
     pub array_layout_kind: u64,
@@ -302,6 +345,7 @@ pub struct SentenceSpanLayout {
 
 #[allow(unused_imports)]
 pub use layout::{
+    DICTIONARY_BUILD_REPORT_ARRAY_LAYOUT_CONTIGUOUS, DICTIONARY_BUILD_REPORT_LAYOUT_VERSION,
     LOOKUP_RESULT_ARRAY_LAYOUT_CONTIGUOUS, LOOKUP_RESULT_LAYOUT_VERSION,
     MORPHEME_RESULT_ARRAY_LAYOUT_CONTIGUOUS, MORPHEME_RESULT_LAYOUT_VERSION,
     POS_MATCHER_RESULT_ARRAY_LAYOUT_CONTIGUOUS, POS_MATCHER_RESULT_LAYOUT_VERSION,
@@ -317,6 +361,7 @@ pub(crate) use marshal::{
     free_sentence_span_array, free_u32_slice, lookup_morpheme_to_result, lookup_result_layout,
     morpheme_list_to_pretokenized_items, morpheme_result_layout, morpheme_to_pretokenized_result,
     morpheme_to_result, pos_matcher_result_layout, pretokenized_items_to_array,
-    pretokenized_result_layout, require_non_null, sentence_span_layout, write_box_ptr,
-    write_ptr, Utf8OffsetMap,
+    pretokenized_result_layout, require_non_null, sentence_span_layout, write_box_ptr, write_ptr,
+    Utf8OffsetMap, dictionary_build_report_layout, dictionary_build_reports_to_array,
+    free_dictionary_build_report_array,
 };

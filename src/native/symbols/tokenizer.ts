@@ -54,6 +54,14 @@ export const TOKENIZER_NATIVE_SYMBOL_DEFS = {
     args: ["ptr", "cstring", "ptr"],
     returns: "i32",
   },
+  sudachi_build_system_dictionary: {
+    args: ["cstring", "ptr", "usize", "cstring", "cstring", "ptr"],
+    returns: "i32",
+  },
+  sudachi_build_user_dictionary: {
+    args: ["cstring", "ptr", "usize", "cstring", "cstring", "ptr"],
+    returns: "i32",
+  },
   sudachi_inspect_dictionary_bytes: {
     args: ["ptr", "usize", "ptr"],
     returns: "i32",
@@ -66,11 +74,19 @@ export const TOKENIZER_NATIVE_SYMBOL_DEFS = {
     args: ["ptr"],
     returns: "void",
   },
+  sudachi_free_dictionary_build_report: {
+    args: ["ptr"],
+    returns: "void",
+  },
   sudachi_get_morpheme_result_layout: {
     args: ["ptr"],
     returns: "i32",
   },
   sudachi_get_dictionary_inspection_result_layout: {
+    args: ["ptr"],
+    returns: "i32",
+  },
+  sudachi_get_dictionary_build_report_layout: {
     args: ["ptr"],
     returns: "i32",
   },

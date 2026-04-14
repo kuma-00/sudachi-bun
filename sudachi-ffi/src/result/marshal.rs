@@ -5,6 +5,7 @@ use std::ptr::{self, NonNull};
 use std::sync::Arc;
 
 use sudachi::analysis::mlist::MorphemeList;
+use sudachi::dic::build::report::DictPartReport;
 use sudachi::dic::dictionary::JapaneseDictionary;
 use sudachi::dic::subset::InfoSubset;
 
@@ -12,6 +13,7 @@ use crate::convert::Projection;
 use crate::error::{ERR_INTERNAL, ERR_NULL_POINTER, error};
 
 use super::{
+    DictionaryBuildPartReport, DictionaryBuildReportArray, DictionaryBuildReportLayout,
     LookupResultItem, LookupResultLayout, MorphemeResult, MorphemeResultArray,
     MorphemeResultLayout, PosMatcherResultArray, PosMatcherResultLayout, PretokenizedItem,
     PretokenizedResult, PretokenizedResultArray, PretokenizedResultLayout, SentenceSpanArray,
@@ -449,6 +451,38 @@ pub(crate) fn free_result_array(result: *mut MorphemeResultArray) {
         let boxed = Box::from_raw(result);
         free_result_items(boxed.items, boxed.len, |item| item.free_owned_fields());
     }
+}
+
+pub(crate) fn dictionary_build_reports_to_array(
+    reports: &[DictPartReport],
+) -> Result<Box<DictionaryBuildReportArray>, i32> {
+    let mut results = Vec::with_capacity(reports.len());
+    for report in reports {
+        let mut item = DictionaryBuildPartReport::empty();
+        item.part = clone_string(report.part())?;
+        item.size = report.size();
+        item.elapsed_millis = report.time().as_millis() as u64;
+        item.is_write = u8::from(report.is_write());
+        results.push(item);
+    }
+
+    let (items, len) = boxed_slice_into_raw_parts(results.into_boxed_slice());
+    Ok(Box::new(DictionaryBuildReportArray { items, len }))
+}
+
+pub(crate) fn free_dictionary_build_report_array(result: *mut DictionaryBuildReportArray) {
+    if result.is_null() {
+        return;
+    }
+
+    unsafe {
+        let boxed = Box::from_raw(result);
+        free_result_items(boxed.items, boxed.len, |item| item.free_owned_fields());
+    }
+}
+
+pub(crate) fn dictionary_build_report_layout() -> DictionaryBuildReportLayout {
+    DictionaryBuildReportLayout::new()
 }
 
 pub(crate) fn morpheme_result_layout() -> MorphemeResultLayout {

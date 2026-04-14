@@ -2,6 +2,7 @@ use std::os::raw::c_char;
 
 use super::ops;
 use crate::result::{
+    DictionaryBuildReportArray, DictionaryBuildReportLayout,
     LookupResultArray, LookupResultLayout, MorphemeResultArray, MorphemeResultLayout,
     PosMatcherResultArray, PosMatcherResultLayout, PretokenizedResultArray,
     PretokenizedResultLayout, SentenceSpanArray, SentenceSpanLayout,
@@ -55,6 +56,44 @@ pub extern "C" fn sudachi_inspect_dictionary_bytes(
     out_result: *mut ops::DictionaryInspectionResult,
 ) -> i32 {
     ops::inspect_dictionary_bytes_impl(bytes_ptr, bytes_len, out_result)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn sudachi_build_system_dictionary(
+    matrix_path: *const c_char,
+    lexicon_paths: *const *const c_char,
+    lexicon_paths_len: usize,
+    output_path: *const c_char,
+    description: *const c_char,
+    out_report: *mut *mut DictionaryBuildReportArray,
+) -> i32 {
+    ops::build_system_dictionary_impl(
+        matrix_path,
+        lexicon_paths,
+        lexicon_paths_len,
+        output_path,
+        description,
+        out_report,
+    )
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn sudachi_build_user_dictionary(
+    system_dict_path: *const c_char,
+    lexicon_paths: *const *const c_char,
+    lexicon_paths_len: usize,
+    output_path: *const c_char,
+    description: *const c_char,
+    out_report: *mut *mut DictionaryBuildReportArray,
+) -> i32 {
+    ops::build_user_dictionary_impl(
+        system_dict_path,
+        lexicon_paths,
+        lexicon_paths_len,
+        output_path,
+        description,
+        out_report,
+    )
 }
 
 #[unsafe(no_mangle)]
@@ -317,8 +356,20 @@ pub extern "C" fn sudachi_free_sentence_spans(result: *mut SentenceSpanArray) {
 }
 
 #[unsafe(no_mangle)]
+pub extern "C" fn sudachi_free_dictionary_build_report(result: *mut DictionaryBuildReportArray) {
+    crate::result::free_dictionary_build_report_array(result);
+}
+
+#[unsafe(no_mangle)]
 pub extern "C" fn sudachi_get_morpheme_result_layout(out_layout: *mut MorphemeResultLayout) -> i32 {
     ops::get_morpheme_result_layout_impl(out_layout)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn sudachi_get_dictionary_build_report_layout(
+    out_layout: *mut DictionaryBuildReportLayout,
+) -> i32 {
+    ops::get_dictionary_build_report_layout_impl(out_layout)
 }
 
 #[unsafe(no_mangle)]

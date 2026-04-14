@@ -26,6 +26,32 @@ export interface DictionaryBytesInspection {
   loadable: boolean;
 }
 
+export interface DictionaryBuildPartReport {
+  part: string;
+  size: number;
+  timeSeconds: number;
+  isWrite: boolean;
+}
+
+export interface DictionaryBuildResult {
+  outputPath: string;
+  report: DictionaryBuildPartReport[];
+}
+
+export interface BuildSystemDictionaryOptions extends NativeLibraryLoadOptions {
+  matrixPath: string;
+  lexiconPaths: readonly string[];
+  outputPath: string;
+  description?: string;
+}
+
+export interface BuildUserDictionaryOptions extends NativeLibraryLoadOptions {
+  systemDictPath: string;
+  lexiconPaths: readonly string[];
+  outputPath: string;
+  description?: string;
+}
+
 export interface TokenizerOptions extends NativeLibraryLoadOptions {
   dictPath: string;
   configPath?: string;

@@ -60,6 +60,18 @@ export interface DictionaryInspectionResultLayout {
   kindUserValue: number;
 }
 
+export interface DictionaryBuildReportLayout {
+  layoutVersion: number;
+  arrayLayoutKind: number;
+  arrayItemsOffset: number;
+  arrayLenOffset: number;
+  resultSize: number;
+  partOffset: number;
+  sizeOffset: number;
+  elapsedMillisOffset: number;
+  isWriteOffset: number;
+}
+
 export interface PretokenizedResultLayout {
   layoutVersion: number;
   arrayLayoutKind: number;
@@ -163,6 +175,22 @@ export interface NativeSudachiLibrary {
       patternsJson: string,
       outResult: NodeJS.TypedArray | Pointer | null,
     ) => number;
+    sudachi_build_system_dictionary?: (
+      matrixPath: string,
+      lexiconPaths: Pointer | NodeJS.TypedArray | null,
+      lexiconPathsLen: number,
+      outputPath: string,
+      description: string | null,
+      outReport: NodeJS.TypedArray | Pointer | null,
+    ) => number;
+    sudachi_build_user_dictionary?: (
+      systemDictPath: string,
+      lexiconPaths: Pointer | NodeJS.TypedArray | null,
+      lexiconPathsLen: number,
+      outputPath: string,
+      description: string | null,
+      outReport: NodeJS.TypedArray | Pointer | null,
+    ) => number;
     sudachi_inspect_dictionary_bytes: (
       bytesPtr: Pointer | NodeJS.TypedArray | null,
       bytesLen: number,
@@ -172,10 +200,16 @@ export interface NativeSudachiLibrary {
     sudachi_free_pos_matcher_result: (
       result: Pointer | NodeJS.TypedArray | null,
     ) => void;
+    sudachi_free_dictionary_build_report?: (
+      report: Pointer | NodeJS.TypedArray | null,
+    ) => void;
     sudachi_get_morpheme_result_layout: (
       outLayout: NodeJS.TypedArray | Pointer | null,
     ) => number;
     sudachi_get_dictionary_inspection_result_layout?: (
+      outLayout: NodeJS.TypedArray | Pointer | null,
+    ) => number;
+    sudachi_get_dictionary_build_report_layout?: (
       outLayout: NodeJS.TypedArray | Pointer | null,
     ) => number;
     sudachi_get_pos_matcher_result_layout: (
