@@ -134,28 +134,15 @@ pub(crate) fn free_c_string(ptr: *mut c_char) {
 }
 
 fn free_boxed_slice<T>(ptr: *mut T, len: usize) {
-    if ptr.is_null() || len == 0 {
-        return;
-    }
-
-    unsafe {
-        let slice = ptr::slice_from_raw_parts_mut(ptr, len);
-        drop(Box::from_raw(slice));
-    }
+    drop(boxed_slice_from_raw_parts(ptr, len));
 }
 
 fn free_result_items<T>(items: *mut T, len: usize, mut free_item: impl FnMut(&mut T)) {
-    if items.is_null() || len == 0 {
+    let Some(mut boxed_items) = boxed_slice_from_raw_parts(items, len) else {
         return;
-    }
-
-    unsafe {
-        let slice = ptr::slice_from_raw_parts_mut(items, len);
-        for item in (&mut *slice).iter_mut() {
-            free_item(item);
-        }
-
-        drop(Box::from_raw(slice));
+    };
+    for item in boxed_items.iter_mut() {
+        free_item(item);
     }
 }
 
@@ -167,69 +154,89 @@ pub(crate) fn free_u16_slice(ptr: *mut u16, len: usize) {
     free_boxed_slice(ptr, len);
 }
 
-pub(crate) fn free_partial_results(results: &mut [MorphemeResult]) {
-    for result in results.iter_mut() {
-        result.free_owned_fields();
+fn boxed_slice_from_raw_parts<T>(ptr: *mut T, len: usize) -> Option<Box<[T]>> {
+    if ptr.is_null() || len == 0 {
+        return None;
     }
+
+    unsafe {
+        let slice = ptr::slice_from_raw_parts_mut(ptr, len);
+        Some(Box::from_raw(slice))
+    }
+}
+
+fn free_partial_result_items<T>(results: &mut [T], free_owned_fields: fn(&mut T)) {
+    for result in results.iter_mut() {
+        free_owned_fields(result);
+    }
+}
+
+pub(crate) fn free_partial_results(results: &mut [MorphemeResult]) {
+    free_partial_result_items(results, MorphemeResult::free_owned_fields);
 }
 
 pub(crate) fn free_partial_lookup_results(results: &mut [LookupResultItem]) {
-    for result in results.iter_mut() {
-        result.free_owned_fields();
-    }
+    free_partial_result_items(results, LookupResultItem::free_owned_fields);
 }
 
 pub(crate) fn free_partial_pretokenized_results(results: &mut [PretokenizedResult]) {
-    for result in results.iter_mut() {
-        result.free_owned_fields();
+    free_partial_result_items(results, PretokenizedResult::free_owned_fields);
+}
+
+fn synonym_group_ids_to_raw_parts(synonym_group_ids: Vec<u32>) -> (*mut u32, usize) {
+    boxed_slice_into_raw_parts(synonym_group_ids.into_boxed_slice())
+}
+
+struct OwnedFieldsGuard<T> {
+    value: T,
+    empty: fn() -> T,
+    free_owned_fields: fn(&mut T),
+}
+
+impl<T> OwnedFieldsGuard<T> {
+    fn new(empty: fn() -> T, free_owned_fields: fn(&mut T)) -> Self {
+        Self {
+            value: empty(),
+            empty,
+            free_owned_fields,
+        }
+    }
+
+    fn value_mut(&mut self) -> &mut T {
+        &mut self.value
+    }
+
+    fn into_inner(mut self) -> T {
+        mem::replace(&mut self.value, (self.empty)())
+    }
+}
+
+impl<T> Drop for OwnedFieldsGuard<T> {
+    fn drop(&mut self) {
+        (self.free_owned_fields)(&mut self.value);
     }
 }
 
 fn pretokenized_item_to_result(item: PretokenizedItem) -> Result<PretokenizedResult, i32> {
-    struct ResultGuard {
-        value: PretokenizedResult,
-    }
-
-    impl ResultGuard {
-        fn new() -> Self {
-            Self {
-                value: PretokenizedResult::empty(),
-            }
-        }
-
-        fn into_inner(mut self) -> PretokenizedResult {
-            std::mem::replace(&mut self.value, PretokenizedResult::empty())
-        }
-    }
-
-    impl Drop for ResultGuard {
-        fn drop(&mut self) {
-            self.value.free_owned_fields();
-        }
-    }
-
-    let mut result = ResultGuard::new();
-    result.value.surface = cloned_option_to_c(item.surface)?;
-    result.value.normalized = cloned_option_to_c(item.normalized)?;
-    result.value.dictionary_form = cloned_option_to_c(item.dictionary_form)?;
-    result.value.reading = cloned_option_to_c(item.reading)?;
-    result.value.pos = cloned_option_to_c(item.pos)?;
-    result.value.begin_byte = item.begin_byte;
-    result.value.end_byte = item.end_byte;
-    result.value.begin_char = item.begin_char;
-    result.value.end_char = item.end_char;
-    result.value.word_id = string_to_c(item.word_id)?;
-    result.value.pos_id = item.pos_id;
-    result.value.dictionary_id = item.dictionary_id;
-    result.value.is_oov = u8::from(item.is_oov);
-    if !item.synonym_group_ids.is_empty() {
-        let mut synonym_group_ids = item.synonym_group_ids.into_boxed_slice();
-        let synonym_group_ids_len = synonym_group_ids.len();
-        let synonym_group_ids_ptr = synonym_group_ids.as_mut_ptr();
-        std::mem::forget(synonym_group_ids);
-        result.value.synonym_group_ids = synonym_group_ids_ptr;
-        result.value.synonym_group_ids_len = synonym_group_ids_len;
-    }
+    let mut result =
+        OwnedFieldsGuard::new(PretokenizedResult::empty, PretokenizedResult::free_owned_fields);
+    result.value_mut().surface = cloned_option_to_c(item.surface)?;
+    result.value_mut().normalized = cloned_option_to_c(item.normalized)?;
+    result.value_mut().dictionary_form = cloned_option_to_c(item.dictionary_form)?;
+    result.value_mut().reading = cloned_option_to_c(item.reading)?;
+    result.value_mut().pos = cloned_option_to_c(item.pos)?;
+    result.value_mut().begin_byte = item.begin_byte;
+    result.value_mut().end_byte = item.end_byte;
+    result.value_mut().begin_char = item.begin_char;
+    result.value_mut().end_char = item.end_char;
+    result.value_mut().word_id = string_to_c(item.word_id)?;
+    result.value_mut().pos_id = item.pos_id;
+    result.value_mut().dictionary_id = item.dictionary_id;
+    result.value_mut().is_oov = u8::from(item.is_oov);
+    let (synonym_group_ids, synonym_group_ids_len) =
+        synonym_group_ids_to_raw_parts(item.synonym_group_ids);
+    result.value_mut().synonym_group_ids = synonym_group_ids;
+    result.value_mut().synonym_group_ids_len = synonym_group_ids_len;
     Ok(result.into_inner())
 }
 
@@ -330,69 +337,41 @@ pub(crate) fn morpheme_to_result(
     projection: Projection,
     offset_map: &Utf8OffsetMap,
 ) -> Result<MorphemeResult, i32> {
-    struct ResultGuard {
-        value: MorphemeResult,
-    }
-
-    impl ResultGuard {
-        fn new() -> Self {
-            Self {
-                value: MorphemeResult::empty(),
-            }
-        }
-
-        fn into_inner(mut self) -> MorphemeResult {
-            std::mem::replace(&mut self.value, MorphemeResult::empty())
-        }
-    }
-
-    impl Drop for ResultGuard {
-        fn drop(&mut self) {
-            self.value.free_owned_fields();
-        }
-    }
-
-    let mut result = ResultGuard::new();
+    let mut result = OwnedFieldsGuard::new(MorphemeResult::empty, MorphemeResult::free_owned_fields);
+    let begin = morpheme.begin();
+    let end = morpheme.end();
     if subset.contains(InfoSubset::SURFACE) {
-        result.value.surface = clone_string(&projected_surface_text(morpheme, projection))?;
+        result.value_mut().surface = clone_string(&projected_surface_text(morpheme, projection))?;
     }
     if subset.contains(InfoSubset::NORMALIZED_FORM) {
-        result.value.normalized = clone_string(morpheme.normalized_form())?;
+        result.value_mut().normalized = clone_string(morpheme.normalized_form())?;
     }
     if subset.contains(InfoSubset::DIC_FORM_WORD_ID) {
-        result.value.dictionary_form = clone_string(morpheme.dictionary_form())?;
+        result.value_mut().dictionary_form = clone_string(morpheme.dictionary_form())?;
     }
     if subset.contains(InfoSubset::READING_FORM) {
-        result.value.reading = clone_string(morpheme.reading_form())?;
+        result.value_mut().reading = clone_string(morpheme.reading_form())?;
     }
     if include_pos_text {
-        result.value.pos = clone_string(&morpheme.part_of_speech().join(","))?;
+        result.value_mut().pos = clone_string(&morpheme.part_of_speech().join(","))?;
     }
-    result.value.begin = morpheme.begin();
-    result.value.end = morpheme.end();
-    result.value.begin_char = offset_map.byte_to_char(result.value.begin)?;
-    result.value.end_char = offset_map.byte_to_char(result.value.end)?;
-    result.value.word_id = clone_string(&format!("{:?}", morpheme.word_id()))?;
+    result.value_mut().begin = begin;
+    result.value_mut().end = end;
+    result.value_mut().begin_char = offset_map.byte_to_char(begin)?;
+    result.value_mut().end_char = offset_map.byte_to_char(end)?;
+    result.value_mut().word_id = clone_string(&format!("{:?}", morpheme.word_id()))?;
     if subset.contains(InfoSubset::POS_ID) {
-        result.value.pos_id = morpheme.part_of_speech_id();
+        result.value_mut().pos_id = morpheme.part_of_speech_id();
     }
-    result.value.dictionary_id = morpheme.dictionary_id();
-    result.value.is_oov = u8::from(morpheme.is_oov());
-    result.value.total_cost = morpheme.total_cost();
+    result.value_mut().dictionary_id = morpheme.dictionary_id();
+    result.value_mut().is_oov = u8::from(morpheme.is_oov());
+    result.value_mut().total_cost = morpheme.total_cost();
 
     if subset.contains(InfoSubset::SYNONYM_GROUP_ID) {
-        let mut synonym_group_ids = morpheme.synonym_group_ids().to_vec().into_boxed_slice();
-        let synonym_group_ids_len = synonym_group_ids.len();
-        let synonym_group_ids_ptr = if synonym_group_ids_len == 0 {
-            ptr::null_mut()
-        } else {
-            let ptr = synonym_group_ids.as_mut_ptr();
-            std::mem::forget(synonym_group_ids);
-            ptr
-        };
-
-        result.value.synonym_group_ids = synonym_group_ids_ptr;
-        result.value.synonym_group_ids_len = synonym_group_ids_len;
+        let (synonym_group_ids, synonym_group_ids_len) =
+            synonym_group_ids_to_raw_parts(morpheme.synonym_group_ids().to_vec());
+        result.value_mut().synonym_group_ids = synonym_group_ids;
+        result.value_mut().synonym_group_ids_len = synonym_group_ids_len;
     }
 
     Ok(result.into_inner())
@@ -404,41 +383,20 @@ pub(crate) fn lookup_morpheme_to_result(
     include_pos_text: bool,
     projection: Projection,
 ) -> Result<LookupResultItem, i32> {
-    struct ResultGuard {
-        value: LookupResultItem,
-    }
-
-    impl ResultGuard {
-        fn new() -> Self {
-            Self {
-                value: LookupResultItem::empty(),
-            }
-        }
-
-        fn into_inner(mut self) -> LookupResultItem {
-            std::mem::replace(&mut self.value, LookupResultItem::empty())
-        }
-    }
-
-    impl Drop for ResultGuard {
-        fn drop(&mut self) {
-            self.value.free_owned_fields();
-        }
-    }
-
-    let mut result = ResultGuard::new();
+    let mut result =
+        OwnedFieldsGuard::new(LookupResultItem::empty, LookupResultItem::free_owned_fields);
     if subset.contains(InfoSubset::SURFACE) {
-        result.value.surface = clone_string(&projected_surface_text(morpheme, projection))?;
+        result.value_mut().surface = clone_string(&projected_surface_text(morpheme, projection))?;
     }
     if include_pos_text {
-        result.value.pos = clone_string(&morpheme.part_of_speech().join(","))?;
+        result.value_mut().pos = clone_string(&morpheme.part_of_speech().join(","))?;
     }
     if subset.contains(InfoSubset::POS_ID) {
-        result.value.pos_id = morpheme.part_of_speech_id();
+        result.value_mut().pos_id = morpheme.part_of_speech_id();
     }
-    result.value.word_id = clone_string(&format!("{:?}", morpheme.word_id()))?;
-    result.value.dictionary_id = morpheme.dictionary_id();
-    result.value.is_oov = u8::from(morpheme.is_oov());
+    result.value_mut().word_id = clone_string(&format!("{:?}", morpheme.word_id()))?;
+    result.value_mut().dictionary_id = morpheme.dictionary_id();
+    result.value_mut().is_oov = u8::from(morpheme.is_oov());
     Ok(result.into_inner())
 }
 

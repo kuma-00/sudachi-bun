@@ -26,6 +26,25 @@ fn free_owned_fields_is_idempotent_for_partial_results() {
 }
 
 #[test]
+fn free_partial_results_cleans_owned_fields() {
+    let mut result = MorphemeResult::empty();
+    result.surface = CString::new("surface").unwrap().into_raw();
+    result.word_id = CString::new("word-id").unwrap().into_raw();
+    let mut synonym_group_ids = vec![10_u32, 20].into_boxed_slice();
+    result.synonym_group_ids = synonym_group_ids.as_mut_ptr();
+    result.synonym_group_ids_len = synonym_group_ids.len();
+    std::mem::forget(synonym_group_ids);
+
+    let mut results = vec![result];
+    free_partial_results(&mut results);
+
+    assert!(results[0].surface.is_null());
+    assert!(results[0].word_id.is_null());
+    assert!(results[0].synonym_group_ids.is_null());
+    assert_eq!(results[0].synonym_group_ids_len, 0);
+}
+
+#[test]
 fn layout_version_is_stable() {
     let layout = morpheme_result_layout();
     assert_eq!(layout.layout_version, MORPHEME_RESULT_LAYOUT_VERSION);
@@ -65,6 +84,25 @@ fn free_lookup_owned_fields_is_idempotent_for_partial_results() {
     assert!(result.surface.is_null());
     assert!(result.pos.is_null());
     assert!(result.word_id.is_null());
+}
+
+#[test]
+fn free_partial_pretokenized_results_cleans_owned_fields() {
+    let mut result = PretokenizedResult::empty();
+    result.surface = CString::new("surface").unwrap().into_raw();
+    result.word_id = CString::new("word-id").unwrap().into_raw();
+    let mut synonym_group_ids = vec![1_u32, 2, 3].into_boxed_slice();
+    result.synonym_group_ids = synonym_group_ids.as_mut_ptr();
+    result.synonym_group_ids_len = synonym_group_ids.len();
+    std::mem::forget(synonym_group_ids);
+
+    let mut results = vec![result];
+    free_partial_pretokenized_results(&mut results);
+
+    assert!(results[0].surface.is_null());
+    assert!(results[0].word_id.is_null());
+    assert!(results[0].synonym_group_ids.is_null());
+    assert_eq!(results[0].synonym_group_ids_len, 0);
 }
 
 #[test]
