@@ -45,6 +45,13 @@ const MORPHEME_LAYOUT: MorphemeResultLayout = {
   dictionaryIdOffset: 84,
   isOovOffset: 88,
   totalCostOffset: 92,
+  headWordLengthOffset: 0,
+  splitAOffset: 0,
+  splitALenOffset: 0,
+  splitBOffset: 0,
+  splitBLenOffset: 0,
+  wordStructureOffset: 0,
+  wordStructureLenOffset: 0,
   synonymGroupIdsOffset: 96,
   synonymGroupIdsLenOffset: 104,
 };
@@ -61,6 +68,13 @@ const LOOKUP_LAYOUT: LookupResultLayout = {
   posIdOffset: 24,
   dictionaryIdOffset: 28,
   isOovOffset: 32,
+  headWordLengthOffset: 0,
+  splitAOffset: 0,
+  splitALenOffset: 0,
+  splitBOffset: 0,
+  splitBLenOffset: 0,
+  wordStructureOffset: 0,
+  wordStructureLenOffset: 0,
 };
 
 const POS_MATCHER_LAYOUT: PosMatcherResultLayout = {
@@ -84,6 +98,7 @@ function createMorpheme(
 ): Morpheme {
   return {
     surface,
+    headWordLength: 0,
     normalized: surface,
     dictionaryForm: surface,
     reading: surface,
@@ -97,6 +112,9 @@ function createMorpheme(
     dictionaryId: 0,
     isOov: false,
     totalCost,
+    splitA: [],
+    splitB: [],
+    wordStructure: [],
     synonymGroupIds: [],
   };
 }
@@ -108,9 +126,14 @@ function createSubsetMorpheme(
   posId = 0,
   pos = "",
   totalCost = 0,
+  headWordLength = 0,
+  splitA: string[] = [],
+  splitB: string[] = [],
+  wordStructure: string[] = [],
 ): Morpheme {
   return {
     surface,
+    headWordLength,
     normalized: "",
     dictionaryForm: "",
     reading: "",
@@ -124,6 +147,9 @@ function createSubsetMorpheme(
     dictionaryId: 0,
     isOov: false,
     totalCost,
+    splitA,
+    splitB,
+    wordStructure,
     synonymGroupIds: [],
   };
 }
@@ -137,11 +163,15 @@ function createLookupEntry(
 ): LookupEntry {
   return {
     surface,
+    headWordLength: 0,
     pos: "名詞,普通名詞,一般,*,*,*",
     wordId,
     posId,
     dictionaryId,
     isOov,
+    splitA: [],
+    splitB: [],
+    wordStructure: [],
   };
 }
 
@@ -167,14 +197,22 @@ function createSubsetLookupEntry(
   isOov: boolean,
   posId = 0,
   pos = "",
+  headWordLength = 0,
+  splitA: string[] = [],
+  splitB: string[] = [],
+  wordStructure: string[] = [],
 ): LookupEntry {
   return {
     surface,
+    headWordLength,
     pos,
     wordId,
     posId,
     dictionaryId,
     isOov,
+    splitA,
+    splitB,
+    wordStructure,
   };
 }
 
@@ -491,7 +529,23 @@ function withTokenizer(
             0,
           );
         case 42:
-          return withInternalCost([createSubsetMorpheme("東京", 0, 6, 11)], 0);
+          return withInternalCost(
+            [
+              createSubsetMorpheme(
+                "東京",
+                0,
+                6,
+                11,
+                "",
+                0,
+                2,
+                ["(0, 1001)", "(0, 1002)"],
+                ["(0, 2001)"],
+                ["(0, 3001)", "(0, 3002)", "(0, 3003)"],
+              ),
+            ],
+            0,
+          );
         case 43:
           return withInternalCost(
             [
@@ -549,7 +603,20 @@ function withTokenizer(
             ),
           ];
         case 53:
-          return [createSubsetLookupEntry("に", "(0, 1)", 0, false, 4)];
+          return [
+            createSubsetLookupEntry(
+              "に",
+              "(0, 1)",
+              0,
+              false,
+              4,
+              "",
+              1,
+              ["(0, 4001)"],
+              ["(0, 5001)", "(0, 5002)"],
+              ["(0, 6001)"],
+            ),
+          ];
         default:
           return [];
       }
@@ -797,6 +864,43 @@ test("tokenize with pos uses the subset native symbol and returns the POS string
   });
 });
 
+test("tokenize with new subset fields forwards expected bit flags and returns field values", () => {
+  withTokenizer(({ library, tokenizer }) => {
+    const subsetTokenizeSpy = spyOn(library.symbols, "sudachi_tokenize_subset");
+
+    try {
+      const result = tokenizer.tokenize({
+        text: "東京都に",
+        projection: DEFAULT_PROJECTION,
+        mode: "C",
+        subset: {
+          fields: ["headWordLength", "splitA", "splitB", "wordStructure"],
+        },
+      });
+
+      expect(subsetTokenizeSpy).toHaveBeenCalledTimes(1);
+      expect(subsetTokenizeSpy).toHaveBeenCalledWith(
+        1 as never,
+        "東京都に",
+        2,
+        0,
+        (1 << 1) | (1 << 6) | (1 << 7) | (1 << 8),
+        expect.any(BigUint64Array),
+      );
+      expect(result[0]?.headWordLength).toBe(2);
+      expect(result[0]?.splitA).toEqual(["(0, 1001)", "(0, 1002)"]);
+      expect(result[0]?.splitB).toEqual(["(0, 2001)"]);
+      expect(result[0]?.wordStructure).toEqual([
+        "(0, 3001)",
+        "(0, 3002)",
+        "(0, 3003)",
+      ]);
+    } finally {
+      subsetTokenizeSpy.mockRestore();
+    }
+  });
+});
+
 test("lookup with fields uses the subset native symbol and returns defaulted omitted fields", () => {
   withTokenizer(({ lookupLibrary, tokenizer, readLookupSpy }) => {
     const lookupSpy = spyOn(lookupLibrary.symbols, "sudachi_lookup");
@@ -830,6 +934,40 @@ test("lookup with fields uses the subset native symbol and returns defaulted omi
       freeSpy.mockRestore();
       subsetLookupSpy.mockRestore();
       lookupSpy.mockRestore();
+    }
+  });
+});
+
+test("lookup with new subset fields forwards expected bit flags and returns field values", () => {
+  withTokenizer(({ lookupLibrary, tokenizer }) => {
+    const subsetLookupSpy = spyOn(
+      lookupLibrary.symbols,
+      "sudachi_lookup_subset",
+    );
+
+    try {
+      const result = tokenizer.lookup({
+        surface: "東京",
+        projection: DEFAULT_PROJECTION,
+        subset: {
+          fields: ["headWordLength", "splitA", "splitB", "wordStructure"],
+        },
+      });
+
+      expect(subsetLookupSpy).toHaveBeenCalledTimes(1);
+      expect(subsetLookupSpy).toHaveBeenCalledWith(
+        1 as never,
+        "東京",
+        0,
+        (1 << 1) | (1 << 6) | (1 << 7) | (1 << 8),
+        expect.any(BigUint64Array),
+      );
+      expect(result[0]?.headWordLength).toBe(1);
+      expect(result[0]?.splitA).toEqual(["(0, 4001)"]);
+      expect(result[0]?.splitB).toEqual(["(0, 5001)", "(0, 5002)"]);
+      expect(result[0]?.wordStructure).toEqual(["(0, 6001)"]);
+    } finally {
+      subsetLookupSpy.mockRestore();
     }
   });
 });
@@ -1359,6 +1497,29 @@ test("stateful tokenizer tokenizes with persisted mode and subset", () => {
       setModeSpy.mockRestore();
       resetSpy.mockRestore();
       createSpy.mockRestore();
+    }
+  });
+});
+
+test("stateful tokenizer forwards expected bits for new subset fields", () => {
+  withTokenizer(({ library, tokenizer }) => {
+    const setSubsetSpy = spyOn(
+      library.symbols,
+      "sudachi_stateful_tokenizer_set_subset",
+    );
+
+    try {
+      tokenizer.createStatefulTokenizer().setSubset({
+        fields: ["headWordLength", "splitA", "splitB", "wordStructure"],
+      });
+
+      expect(setSubsetSpy).toHaveBeenCalledTimes(1);
+      expect(setSubsetSpy).toHaveBeenCalledWith(
+        101 as never,
+        (1 << 1) | (1 << 6) | (1 << 7) | (1 << 8),
+      );
+    } finally {
+      setSubsetSpy.mockRestore();
     }
   });
 });

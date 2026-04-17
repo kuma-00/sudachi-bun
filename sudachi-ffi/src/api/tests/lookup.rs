@@ -64,6 +64,13 @@ fn get_lookup_result_layout_returns_stable_offsets() {
         crate::result::LOOKUP_RESULT_LAYOUT_VERSION
     );
     assert!(layout.result_size > 0);
+    assert!(layout.head_word_length_offset > 0);
+    assert!(layout.split_a_offset > 0);
+    assert!(layout.split_a_len_offset > 0);
+    assert!(layout.split_b_offset > 0);
+    assert!(layout.split_b_len_offset > 0);
+    assert!(layout.word_structure_offset > 0);
+    assert!(layout.word_structure_len_offset > 0);
     assert!(layout.pos_id_offset > 0);
 }
 
@@ -151,6 +158,13 @@ fn lookup_subset_omits_unrequested_fields() {
             let item = &*array.items;
             assert!(item.surface.is_null());
             assert!(item.pos.is_null());
+            assert_eq!(item.head_word_length, 0);
+            assert!(item.split_a.is_null());
+            assert_eq!(item.split_a_len, 0);
+            assert!(item.split_b.is_null());
+            assert_eq!(item.split_b_len, 0);
+            assert!(item.word_structure.is_null());
+            assert_eq!(item.word_structure_len, 0);
             assert_eq!(item.pos_id, 3);
             assert!(!item.word_id.is_null());
             assert_eq!(item.dictionary_id, 0);
@@ -188,6 +202,55 @@ fn lookup_subset_returns_pos_text_when_requested() {
             assert_eq!(item.dictionary_id, 0);
             assert_eq!(item.is_oov, 0);
             assert_eq!(item.pos_id, 3);
+        }
+
+        sudachi_free_lookup_result(out_result);
+    });
+}
+
+#[test]
+fn lookup_subset_accepts_new_info_subset_bits() {
+    with_test_tokenizer(|handle| {
+        let text = CString::new("東京都").unwrap();
+        let mut out_result = ptr::null_mut();
+        let bits = InfoSubset::POS_ID.bits()
+            | InfoSubset::HEAD_WORD_LENGTH.bits()
+            | InfoSubset::SPLIT_A.bits()
+            | InfoSubset::SPLIT_B.bits()
+            | InfoSubset::WORD_STRUCTURE.bits();
+        let status = sudachi_lookup_subset(
+            handle,
+            text.as_ptr(),
+            Projection::Surface as i32,
+            bits,
+            &mut out_result,
+        );
+
+        assert_eq!(status, OK, "{}", last_error_message());
+        unsafe {
+            let array = &*out_result;
+            assert_eq!(array.len, 1);
+            let item = &*array.items;
+            assert!(item.head_word_length > 0);
+            assert!(item.split_a_len > 0);
+            assert!(item.word_structure_len > 0);
+            let split_a = std::slice::from_raw_parts(item.split_a, item.split_a_len);
+            let word_structure =
+                std::slice::from_raw_parts(item.word_structure, item.word_structure_len);
+            let first_split_a = CStr::from_ptr(split_a[0]).to_str().unwrap();
+            let first_word_structure = CStr::from_ptr(word_structure[0]).to_str().unwrap();
+            assert!(first_split_a.starts_with('('));
+            assert!(first_word_structure.starts_with('('));
+            if item.split_b_len == 0 {
+                assert!(item.split_b.is_null());
+            } else {
+                let split_b = std::slice::from_raw_parts(item.split_b, item.split_b_len);
+                let first_split_b = CStr::from_ptr(split_b[0]).to_str().unwrap();
+                assert!(first_split_b.starts_with('('));
+            }
+            assert_eq!(item.pos_id, 3);
+            assert_eq!(item.dictionary_id, 0);
+            assert_eq!(item.is_oov, 0);
         }
 
         sudachi_free_lookup_result(out_result);

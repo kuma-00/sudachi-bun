@@ -95,6 +95,13 @@ fn get_morpheme_result_layout_returns_stable_offsets() {
     assert!(layout.begin_offset > 0);
     assert!(layout.begin_char_offset > 0);
     assert!(layout.end_char_offset > 0);
+    assert!(layout.head_word_length_offset > 0);
+    assert!(layout.split_a_offset > 0);
+    assert!(layout.split_a_len_offset > 0);
+    assert!(layout.split_b_offset > 0);
+    assert!(layout.split_b_len_offset > 0);
+    assert!(layout.word_structure_offset > 0);
+    assert!(layout.word_structure_len_offset > 0);
     assert!(layout.array_internal_cost_offset > 0);
     assert!(layout.total_cost_offset > 0);
 }
@@ -113,4 +120,11 @@ fn get_pretokenized_result_layout_returns_stable_offsets() {
     assert!(layout.result_size > 0);
     assert!(layout.begin_byte_offset > 0);
     assert!(layout.begin_char_offset > 0);
+    assert!(layout.head_word_length_offset > 0);
+    assert!(layout.split_a_offset > 0);
+    assert!(layout.split_a_len_offset > 0);
+    assert!(layout.split_b_offset > 0);
+    assert!(layout.split_b_len_offset > 0);
+    assert!(layout.word_structure_offset > 0);
+    assert!(layout.word_structure_len_offset > 0);
 }

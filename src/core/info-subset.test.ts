@@ -22,6 +22,35 @@ test("resolveInfoSubsetBits combines requested field bits", () => {
   );
 });
 
+test("resolveInfoSubsetBits combines requested bits for new subset fields", () => {
+  expect(
+    resolveInfoSubsetBits({
+      fields: ["headWordLength", "splitA", "splitB", "wordStructure"],
+    }),
+  ).toBe(
+    INFO_SUBSET_FIELD_BITS.headWordLength |
+      INFO_SUBSET_FIELD_BITS.splitA |
+      INFO_SUBSET_FIELD_BITS.splitB |
+      INFO_SUBSET_FIELD_BITS.wordStructure,
+  );
+});
+
+test("ALL_INFO_SUBSET_BITS includes all known field bits", () => {
+  expect(ALL_INFO_SUBSET_BITS).toBe(
+    INFO_SUBSET_FIELD_BITS.surface |
+      INFO_SUBSET_FIELD_BITS.headWordLength |
+      INFO_SUBSET_FIELD_BITS.pos |
+      INFO_SUBSET_FIELD_BITS.posId |
+      INFO_SUBSET_FIELD_BITS.normalized |
+      INFO_SUBSET_FIELD_BITS.dictionaryForm |
+      INFO_SUBSET_FIELD_BITS.reading |
+      INFO_SUBSET_FIELD_BITS.splitA |
+      INFO_SUBSET_FIELD_BITS.splitB |
+      INFO_SUBSET_FIELD_BITS.wordStructure |
+      INFO_SUBSET_FIELD_BITS.synonymGroupIds,
+  );
+});
+
 test("resolveInfoSubsetBits uses POS text bit for pos field", () => {
   const bits = resolveInfoSubsetBits({ fields: ["pos"] });
   expect(bits).toBe(INFO_SUBSET_FIELD_BITS.pos);

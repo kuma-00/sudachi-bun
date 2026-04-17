@@ -28,12 +28,20 @@ const FAKE_LAYOUT: PretokenizedResultLayout = {
   posIdOffset: 80,
   dictionaryIdOffset: 84,
   isOovOffset: 88,
+  headWordLengthOffset: 0,
+  splitAOffset: 0,
+  splitALenOffset: 0,
+  splitBOffset: 0,
+  splitBLenOffset: 0,
+  wordStructureOffset: 0,
+  wordStructureLenOffset: 0,
   synonymGroupIdsOffset: 96,
   synonymGroupIdsLenOffset: 104,
 };
 
 const PRETOKENIZED_TOKEN: PretokenizedToken = {
   surface: "a😀b",
+  headWordLength: 0,
   normalized: "a😀b",
   dictionaryForm: "a😀b",
   reading: "a😀b",
@@ -46,7 +54,18 @@ const PRETOKENIZED_TOKEN: PretokenizedToken = {
   posId: 1,
   dictionaryId: 0,
   isOov: false,
+  splitA: [],
+  splitB: [],
+  wordStructure: [],
   synonymGroupIds: [],
+};
+
+const PRETOKENIZED_TOKEN_WITH_SPLITS: PretokenizedToken = {
+  ...PRETOKENIZED_TOKEN,
+  headWordLength: 2,
+  splitA: ["(0, 1001)", "(0, 1002)"],
+  splitB: ["(0, 2001)"],
+  wordStructure: ["(0, 3001)", "(0, 3002)"],
 };
 
 const activeSpies: Array<{ mockRestore(): void }> = [];
@@ -172,6 +191,42 @@ test("pretokenize forwards new projection ids to the native subset symbol", () =
     readSpy.mockRestore();
     subsetSpy.mockRestore();
   }
+});
+
+test("pretokenize forwards expected bits for new subset fields", () => {
+  const library = createLibrary();
+  const subsetSpy = spyOn(library.symbols, "sudachi_pretokenize_subset");
+  const readSpy = spyOn(ffi, "readPretokenizedArray").mockReturnValue([
+    PRETOKENIZED_TOKEN_WITH_SPLITS,
+  ]);
+
+  const pretokenizer = new Pretokenizer(
+    { library, layout: FAKE_LAYOUT, handle: 1 as never } as never,
+    {
+      mode: "C",
+      projection: "surface",
+      subset: {
+        fields: ["headWordLength", "splitA", "splitB", "wordStructure"],
+      },
+    },
+  );
+
+  expect(pretokenizer.pretokenize("a😀b")).toEqual([
+    PRETOKENIZED_TOKEN_WITH_SPLITS,
+  ]);
+  expect(subsetSpy).toHaveBeenCalledTimes(1);
+  expect(readSpy).toHaveBeenCalledTimes(1);
+  expect(subsetSpy.mock.calls[0]?.[4]).toBe(
+    (1 << 1) | (1 << 6) | (1 << 7) | (1 << 8),
+  );
+  const token = pretokenizer.pretokenize("a😀b")[0];
+  expect(token?.headWordLength).toBe(2);
+  expect(token?.splitA).toEqual(["(0, 1001)", "(0, 1002)"]);
+  expect(token?.splitB).toEqual(["(0, 2001)"]);
+  expect(token?.wordStructure).toEqual(["(0, 3001)", "(0, 3002)"]);
+  pretokenizer.close();
+  readSpy.mockRestore();
+  subsetSpy.mockRestore();
 });
 
 function expectDebugPropagation(debug: boolean): void {

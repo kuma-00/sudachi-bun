@@ -124,33 +124,120 @@ interface SynonymGroupIdLayout {
   synonymGroupIdsLenOffset: number;
 }
 
-function readSynonymGroupIds(
+interface WordIdListLayout {
+  splitAOffset: number;
+  splitALenOffset: number;
+  splitBOffset: number;
+  splitBLenOffset: number;
+  wordStructureOffset: number;
+  wordStructureLenOffset: number;
+}
+
+function readU32List(
   base: Pointer,
-  layout: SynonymGroupIdLayout,
+  offset: number,
+  lenOffset: number,
+  fieldName: string,
 ): number[] {
-  const rawPtr = toPointer(read.ptr(base, layout.synonymGroupIdsOffset));
-  const length = readUsizeField(
-    base,
-    layout.synonymGroupIdsLenOffset,
-    "synonymGroupIdsLen",
-  );
+  if (offset <= 0 || lenOffset <= 0) {
+    return [];
+  }
+
+  const rawPtr = toPointer(read.ptr(base, offset));
+  const length = readUsizeField(base, lenOffset, `${fieldName}Len`);
   if ((rawPtr as number) === 0 || length === 0) {
     return [];
   }
 
-  const ids = new Array<number>(length);
+  const values = new Array<number>(length);
   for (let index = 0; index < length; index += 1) {
-    ids[index] = read.u32(rawPtr, index * 4);
+    values[index] = read.u32(rawPtr, index * 4);
   }
-  return ids;
+  return values;
+}
+
+function readCStringList(
+  base: Pointer,
+  offset: number,
+  lenOffset: number,
+  fieldName: string,
+): string[] {
+  if (offset <= 0 || lenOffset <= 0) {
+    return [];
+  }
+
+  const rawPtr = toPointer(read.ptr(base, offset));
+  const length = readUsizeField(base, lenOffset, `${fieldName}Len`);
+  if ((rawPtr as number) === 0 || length === 0) {
+    return [];
+  }
+  const pointerSize = lenOffset - offset;
+  if (pointerSize <= 0) {
+    return [];
+  }
+
+  const values = new Array<string>(length);
+  for (let index = 0; index < length; index += 1) {
+    values[index] = readCString(
+      toPointer(read.ptr(rawPtr, index * pointerSize)),
+    );
+  }
+  return values;
+}
+
+function readSynonymGroupIds(
+  base: Pointer,
+  layout: SynonymGroupIdLayout,
+): number[] {
+  return readU32List(
+    base,
+    layout.synonymGroupIdsOffset,
+    layout.synonymGroupIdsLenOffset,
+    "synonymGroupIds",
+  );
+}
+
+function readWordIdLists(
+  base: Pointer,
+  layout: WordIdListLayout,
+): {
+  splitA: string[];
+  splitB: string[];
+  wordStructure: string[];
+} {
+  return {
+    splitA: readCStringList(
+      base,
+      layout.splitAOffset,
+      layout.splitALenOffset,
+      "splitA",
+    ),
+    splitB: readCStringList(
+      base,
+      layout.splitBOffset,
+      layout.splitBLenOffset,
+      "splitB",
+    ),
+    wordStructure: readCStringList(
+      base,
+      layout.wordStructureOffset,
+      layout.wordStructureLenOffset,
+      "wordStructure",
+    ),
+  };
 }
 
 function readMorpheme(
   itemPtr: Pointer,
   layout: MorphemeResultLayout,
 ): Morpheme {
+  const wordIdLists = readWordIdLists(itemPtr, layout);
   return {
     surface: readCStringField(itemPtr, layout.surfaceOffset),
+    headWordLength:
+      layout.headWordLengthOffset > 0
+        ? readUsizeField(itemPtr, layout.headWordLengthOffset, "headWordLength")
+        : 0,
     normalized: readCStringField(itemPtr, layout.normalizedOffset),
     dictionaryForm: readCStringField(itemPtr, layout.dictionaryFormOffset),
     reading: readCStringField(itemPtr, layout.readingOffset),
@@ -167,6 +254,9 @@ function readMorpheme(
       layout.totalCostOffset > 0
         ? readNumberField(itemPtr, layout.totalCostOffset)
         : 0,
+    splitA: wordIdLists.splitA,
+    splitB: wordIdLists.splitB,
+    wordStructure: wordIdLists.wordStructure,
     synonymGroupIds: readSynonymGroupIds(itemPtr, layout),
   };
 }
@@ -219,13 +309,21 @@ function readLookupEntry(
   itemPtr: Pointer,
   layout: LookupResultLayout,
 ): LookupEntry {
+  const wordIdLists = readWordIdLists(itemPtr, layout);
   return {
     surface: readCStringField(itemPtr, layout.surfaceOffset),
+    headWordLength:
+      layout.headWordLengthOffset > 0
+        ? readUsizeField(itemPtr, layout.headWordLengthOffset, "headWordLength")
+        : 0,
     pos: readCStringField(itemPtr, layout.posOffset),
     wordId: readCStringField(itemPtr, layout.wordIdOffset),
     posId: readUnsigned16Field(itemPtr, layout.posIdOffset),
     dictionaryId: readNumberField(itemPtr, layout.dictionaryIdOffset),
     isOov: readBoolField(itemPtr, layout.isOovOffset),
+    splitA: wordIdLists.splitA,
+    splitB: wordIdLists.splitB,
+    wordStructure: wordIdLists.wordStructure,
   };
 }
 
@@ -254,8 +352,13 @@ function readPretokenizedToken(
   itemPtr: Pointer,
   layout: PretokenizedResultLayout,
 ): PretokenizedToken {
+  const wordIdLists = readWordIdLists(itemPtr, layout);
   return {
     surface: readCStringField(itemPtr, layout.surfaceOffset),
+    headWordLength:
+      layout.headWordLengthOffset > 0
+        ? readUsizeField(itemPtr, layout.headWordLengthOffset, "headWordLength")
+        : 0,
     normalized: readCStringField(itemPtr, layout.normalizedOffset),
     dictionaryForm: readCStringField(itemPtr, layout.dictionaryFormOffset),
     reading: readCStringField(itemPtr, layout.readingOffset),
@@ -268,6 +371,9 @@ function readPretokenizedToken(
     posId: readUnsigned16Field(itemPtr, layout.posIdOffset),
     dictionaryId: readNumberField(itemPtr, layout.dictionaryIdOffset),
     isOov: readBoolField(itemPtr, layout.isOovOffset),
+    splitA: wordIdLists.splitA,
+    splitB: wordIdLists.splitB,
+    wordStructure: wordIdLists.wordStructure,
     synonymGroupIds: readSynonymGroupIds(itemPtr, layout),
   };
 }

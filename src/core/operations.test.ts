@@ -12,6 +12,7 @@ import type { TokenizerGateway, TokenizerSessionManager } from "./session.ts";
 function createMorpheme(surface: string, begin: number, end: number): Morpheme {
   return {
     surface,
+    headWordLength: 0,
     normalized: surface,
     dictionaryForm: surface,
     reading: surface,
@@ -25,6 +26,9 @@ function createMorpheme(surface: string, begin: number, end: number): Morpheme {
     dictionaryId: 0,
     isOov: false,
     totalCost: 0,
+    splitA: [],
+    splitB: [],
+    wordStructure: [],
     synonymGroupIds: [],
   };
 }

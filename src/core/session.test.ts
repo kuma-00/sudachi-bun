@@ -32,6 +32,13 @@ const MORPHEME_LAYOUT: MorphemeResultLayout = {
   dictionaryIdOffset: 84,
   isOovOffset: 88,
   totalCostOffset: 92,
+  headWordLengthOffset: 0,
+  splitAOffset: 0,
+  splitALenOffset: 0,
+  splitBOffset: 0,
+  splitBLenOffset: 0,
+  wordStructureOffset: 0,
+  wordStructureLenOffset: 0,
   synonymGroupIdsOffset: 96,
   synonymGroupIdsLenOffset: 104,
 };
@@ -48,6 +55,13 @@ const LOOKUP_LAYOUT: LookupResultLayout = {
   posIdOffset: 24,
   dictionaryIdOffset: 28,
   isOovOffset: 32,
+  headWordLengthOffset: 0,
+  splitAOffset: 0,
+  splitALenOffset: 0,
+  splitBOffset: 0,
+  splitBLenOffset: 0,
+  wordStructureOffset: 0,
+  wordStructureLenOffset: 0,
 };
 
 const POS_MATCHER_LAYOUT: PosMatcherResultLayout = {

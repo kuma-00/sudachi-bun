@@ -7,14 +7,17 @@ import type {
   NativeSudachiLibrary,
 } from "../types.ts";
 import {
+  LOOKUP_RESULT_LAYOUT_EXTENDED_VERSION,
   LOOKUP_RESULT_LAYOUT_VERSION,
   readLookupResultLayout,
 } from "./lookup.ts";
 import {
+  MORPHEME_RESULT_LAYOUT_EXTENDED_VERSION,
   MORPHEME_RESULT_LAYOUT_VERSION,
   readMorphemeResultLayout,
 } from "./morpheme.ts";
 import {
+  PRETOKENIZED_RESULT_LAYOUT_EXTENDED_VERSION,
   PRETOKENIZED_RESULT_LAYOUT_VERSION,
   readPretokenizedResultLayout,
 } from "./pretokenized.ts";
@@ -183,6 +186,13 @@ test("readMorphemeResultLayout maps fields in order", () => {
     dictionaryIdOffset: 84,
     isOovOffset: 88,
     totalCostOffset: 92,
+    headWordLengthOffset: 0,
+    splitAOffset: 0,
+    splitALenOffset: 0,
+    splitBOffset: 0,
+    splitBLenOffset: 0,
+    wordStructureOffset: 0,
+    wordStructureLenOffset: 0,
     synonymGroupIdsOffset: 96,
     synonymGroupIdsLenOffset: 104,
   });
@@ -202,9 +212,64 @@ test("readMorphemeResultLayout rejects unsupported layout versions", () => {
     expect(error).toMatchObject({
       code: "LAYOUT_MISMATCH",
       message:
-        "Unsupported morpheme result layout version: expected 2 or 3, received 999.",
+        "Unsupported morpheme result layout version: expected 2, 3, or 4, received 999.",
     });
   }
+});
+
+test("readMorphemeResultLayout maps extended layout fields in order", () => {
+  expect(
+    readMorphemeResultLayout(
+      createMorphemeLibrary((outLayout) =>
+        writeLayout(outLayout, [
+          BigInt(MORPHEME_RESULT_LAYOUT_EXTENDED_VERSION),
+          0n,
+          8n,
+          16n,
+          24n,
+          112n,
+          0n,
+          8n,
+          16n,
+          24n,
+          32n,
+          40n,
+          48n,
+          56n,
+          64n,
+          72n,
+          81n,
+          88n,
+          96n,
+          104n,
+          112n,
+          120n,
+          128n,
+          136n,
+          140n,
+          141n,
+          148n,
+          144n,
+          152n,
+        ]),
+      ),
+    ),
+  ).toMatchObject({
+    layoutVersion: MORPHEME_RESULT_LAYOUT_EXTENDED_VERSION,
+    headWordLengthOffset: 81,
+    splitAOffset: 88,
+    splitALenOffset: 96,
+    splitBOffset: 104,
+    splitBLenOffset: 112,
+    wordStructureOffset: 120,
+    wordStructureLenOffset: 128,
+    posIdOffset: 136,
+    dictionaryIdOffset: 140,
+    isOovOffset: 141,
+    totalCostOffset: 148,
+    synonymGroupIdsOffset: 144,
+    synonymGroupIdsLenOffset: 152,
+  });
 });
 
 test("readLookupResultLayout maps fields in order", () => {
@@ -220,6 +285,13 @@ test("readLookupResultLayout maps fields in order", () => {
     posIdOffset: 24,
     dictionaryIdOffset: 28,
     isOovOffset: 32,
+    headWordLengthOffset: 0,
+    splitAOffset: 0,
+    splitALenOffset: 0,
+    splitBOffset: 0,
+    splitBLenOffset: 0,
+    wordStructureOffset: 0,
+    wordStructureLenOffset: 0,
   });
 });
 
@@ -232,6 +304,47 @@ test("readLookupResultLayout rejects unsupported layout versions", () => {
       }),
     ),
   ).toThrow("Unsupported lookup result layout version");
+});
+
+test("readLookupResultLayout maps extended layout fields in order", () => {
+  expect(
+    readLookupResultLayout(
+      createLookupLibrary((outLayout) =>
+        writeLayout(outLayout, [
+          BigInt(LOOKUP_RESULT_LAYOUT_EXTENDED_VERSION),
+          0n,
+          8n,
+          16n,
+          40n,
+          0n,
+          8n,
+          16n,
+          33n,
+          36n,
+          44n,
+          52n,
+          60n,
+          68n,
+          76n,
+          24n,
+          28n,
+          32n,
+        ]),
+      ),
+    ),
+  ).toMatchObject({
+    layoutVersion: LOOKUP_RESULT_LAYOUT_EXTENDED_VERSION,
+    headWordLengthOffset: 33,
+    splitAOffset: 36,
+    splitALenOffset: 44,
+    splitBOffset: 52,
+    splitBLenOffset: 60,
+    wordStructureOffset: 68,
+    wordStructureLenOffset: 76,
+    posIdOffset: 24,
+    dictionaryIdOffset: 28,
+    isOovOffset: 32,
+  });
 });
 
 test("readPretokenizedResultLayout maps fields in order", () => {
@@ -254,6 +367,13 @@ test("readPretokenizedResultLayout maps fields in order", () => {
     posIdOffset: 80,
     dictionaryIdOffset: 84,
     isOovOffset: 88,
+    headWordLengthOffset: 0,
+    splitAOffset: 0,
+    splitALenOffset: 0,
+    splitBOffset: 0,
+    splitBLenOffset: 0,
+    wordStructureOffset: 0,
+    wordStructureLenOffset: 0,
     synonymGroupIdsOffset: 96,
     synonymGroupIdsLenOffset: 104,
   });
@@ -268,4 +388,56 @@ test("readPretokenizedResultLayout rejects unsupported layout versions", () => {
       }),
     ),
   ).toThrow("Unsupported pretokenized result layout version");
+});
+
+test("readPretokenizedResultLayout maps extended layout fields in order", () => {
+  expect(
+    readPretokenizedResultLayout(
+      createPretokenizerLibrary((outLayout) =>
+        writeLayout(outLayout, [
+          BigInt(PRETOKENIZED_RESULT_LAYOUT_EXTENDED_VERSION),
+          0n,
+          8n,
+          16n,
+          128n,
+          0n,
+          8n,
+          16n,
+          24n,
+          32n,
+          40n,
+          48n,
+          56n,
+          64n,
+          72n,
+          89n,
+          96n,
+          104n,
+          112n,
+          120n,
+          128n,
+          136n,
+          84n,
+          88n,
+          92n,
+          144n,
+          152n,
+        ]),
+      ),
+    ),
+  ).toMatchObject({
+    layoutVersion: PRETOKENIZED_RESULT_LAYOUT_EXTENDED_VERSION,
+    headWordLengthOffset: 89,
+    splitAOffset: 96,
+    splitALenOffset: 104,
+    splitBOffset: 112,
+    splitBLenOffset: 120,
+    wordStructureOffset: 128,
+    wordStructureLenOffset: 136,
+    posIdOffset: 84,
+    dictionaryIdOffset: 88,
+    isOovOffset: 92,
+    synonymGroupIdsOffset: 144,
+    synonymGroupIdsLenOffset: 152,
+  });
 });

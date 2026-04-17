@@ -18,6 +18,13 @@ pub struct MorphemeResult {
     pub begin_char: usize,
     pub end_char: usize,
     pub word_id: *mut c_char,
+    pub head_word_length: usize,
+    pub split_a: *mut *mut c_char,
+    pub split_a_len: usize,
+    pub split_b: *mut *mut c_char,
+    pub split_b_len: usize,
+    pub word_structure: *mut *mut c_char,
+    pub word_structure_len: usize,
     pub pos_id: u16,
     pub dictionary_id: i32,
     pub is_oov: u8,
@@ -39,6 +46,13 @@ impl MorphemeResult {
             begin_char: 0,
             end_char: 0,
             word_id: ptr::null_mut(),
+            head_word_length: 0,
+            split_a: ptr::null_mut(),
+            split_a_len: 0,
+            split_b: ptr::null_mut(),
+            split_b_len: 0,
+            word_structure: ptr::null_mut(),
+            word_structure_len: 0,
             pos_id: 0,
             dictionary_id: 0,
             is_oov: 0,
@@ -55,6 +69,9 @@ impl MorphemeResult {
         marshal::free_c_string(self.reading);
         marshal::free_c_string(self.pos);
         marshal::free_c_string(self.word_id);
+        marshal::free_c_string_slice(self.split_a, self.split_a_len);
+        marshal::free_c_string_slice(self.split_b, self.split_b_len);
+        marshal::free_c_string_slice(self.word_structure, self.word_structure_len);
         marshal::free_u32_slice(self.synonym_group_ids, self.synonym_group_ids_len);
 
         self.surface = ptr::null_mut();
@@ -63,6 +80,12 @@ impl MorphemeResult {
         self.reading = ptr::null_mut();
         self.pos = ptr::null_mut();
         self.word_id = ptr::null_mut();
+        self.split_a = ptr::null_mut();
+        self.split_a_len = 0;
+        self.split_b = ptr::null_mut();
+        self.split_b_len = 0;
+        self.word_structure = ptr::null_mut();
+        self.word_structure_len = 0;
         self.synonym_group_ids = ptr::null_mut();
         self.synonym_group_ids_len = 0;
     }
@@ -87,6 +110,13 @@ pub struct PretokenizedResult {
     pub begin_char: usize,
     pub end_char: usize,
     pub word_id: *mut c_char,
+    pub head_word_length: usize,
+    pub split_a: *mut *mut c_char,
+    pub split_a_len: usize,
+    pub split_b: *mut *mut c_char,
+    pub split_b_len: usize,
+    pub word_structure: *mut *mut c_char,
+    pub word_structure_len: usize,
     pub pos_id: u16,
     pub dictionary_id: i32,
     pub is_oov: u8,
@@ -107,6 +137,13 @@ impl PretokenizedResult {
             begin_char: 0,
             end_char: 0,
             word_id: ptr::null_mut(),
+            head_word_length: 0,
+            split_a: ptr::null_mut(),
+            split_a_len: 0,
+            split_b: ptr::null_mut(),
+            split_b_len: 0,
+            word_structure: ptr::null_mut(),
+            word_structure_len: 0,
             pos_id: 0,
             dictionary_id: 0,
             is_oov: 0,
@@ -122,6 +159,9 @@ impl PretokenizedResult {
         marshal::free_c_string(self.reading);
         marshal::free_c_string(self.pos);
         marshal::free_c_string(self.word_id);
+        marshal::free_c_string_slice(self.split_a, self.split_a_len);
+        marshal::free_c_string_slice(self.split_b, self.split_b_len);
+        marshal::free_c_string_slice(self.word_structure, self.word_structure_len);
         marshal::free_u32_slice(self.synonym_group_ids, self.synonym_group_ids_len);
 
         self.surface = ptr::null_mut();
@@ -130,6 +170,12 @@ impl PretokenizedResult {
         self.reading = ptr::null_mut();
         self.pos = ptr::null_mut();
         self.word_id = ptr::null_mut();
+        self.split_a = ptr::null_mut();
+        self.split_a_len = 0;
+        self.split_b = ptr::null_mut();
+        self.split_b_len = 0;
+        self.word_structure = ptr::null_mut();
+        self.word_structure_len = 0;
         self.synonym_group_ids = ptr::null_mut();
         self.synonym_group_ids_len = 0;
     }
@@ -152,6 +198,10 @@ pub(crate) struct PretokenizedItem {
     pub begin_char: usize,
     pub end_char: usize,
     pub word_id: String,
+    pub head_word_length: usize,
+    pub split_a: Vec<String>,
+    pub split_b: Vec<String>,
+    pub word_structure: Vec<String>,
     pub pos_id: u16,
     pub dictionary_id: i32,
     pub is_oov: bool,
@@ -163,6 +213,13 @@ pub struct LookupResultItem {
     pub surface: *mut c_char,
     pub pos: *mut c_char,
     pub word_id: *mut c_char,
+    pub head_word_length: usize,
+    pub split_a: *mut *mut c_char,
+    pub split_a_len: usize,
+    pub split_b: *mut *mut c_char,
+    pub split_b_len: usize,
+    pub word_structure: *mut *mut c_char,
+    pub word_structure_len: usize,
     pub pos_id: u16,
     pub dictionary_id: i32,
     pub is_oov: u8,
@@ -174,6 +231,13 @@ impl LookupResultItem {
             surface: ptr::null_mut(),
             pos: ptr::null_mut(),
             word_id: ptr::null_mut(),
+            head_word_length: 0,
+            split_a: ptr::null_mut(),
+            split_a_len: 0,
+            split_b: ptr::null_mut(),
+            split_b_len: 0,
+            word_structure: ptr::null_mut(),
+            word_structure_len: 0,
             pos_id: 0,
             dictionary_id: 0,
             is_oov: 0,
@@ -184,10 +248,19 @@ impl LookupResultItem {
         marshal::free_c_string(self.surface);
         marshal::free_c_string(self.pos);
         marshal::free_c_string(self.word_id);
+        marshal::free_c_string_slice(self.split_a, self.split_a_len);
+        marshal::free_c_string_slice(self.split_b, self.split_b_len);
+        marshal::free_c_string_slice(self.word_structure, self.word_structure_len);
 
         self.surface = ptr::null_mut();
         self.pos = ptr::null_mut();
         self.word_id = ptr::null_mut();
+        self.split_a = ptr::null_mut();
+        self.split_a_len = 0;
+        self.split_b = ptr::null_mut();
+        self.split_b_len = 0;
+        self.word_structure = ptr::null_mut();
+        self.word_structure_len = 0;
     }
 }
 
@@ -285,6 +358,13 @@ pub struct MorphemeResultLayout {
     pub begin_char_offset: u64,
     pub end_char_offset: u64,
     pub word_id_offset: u64,
+    pub head_word_length_offset: u64,
+    pub split_a_offset: u64,
+    pub split_a_len_offset: u64,
+    pub split_b_offset: u64,
+    pub split_b_len_offset: u64,
+    pub word_structure_offset: u64,
+    pub word_structure_len_offset: u64,
     pub pos_id_offset: u64,
     pub dictionary_id_offset: u64,
     pub is_oov_offset: u64,
@@ -310,6 +390,13 @@ pub struct PretokenizedResultLayout {
     pub begin_char_offset: u64,
     pub end_char_offset: u64,
     pub word_id_offset: u64,
+    pub head_word_length_offset: u64,
+    pub split_a_offset: u64,
+    pub split_a_len_offset: u64,
+    pub split_b_offset: u64,
+    pub split_b_len_offset: u64,
+    pub word_structure_offset: u64,
+    pub word_structure_len_offset: u64,
     pub pos_id_offset: u64,
     pub dictionary_id_offset: u64,
     pub is_oov_offset: u64,
@@ -327,6 +414,13 @@ pub struct LookupResultLayout {
     pub surface_offset: u64,
     pub pos_offset: u64,
     pub word_id_offset: u64,
+    pub head_word_length_offset: u64,
+    pub split_a_offset: u64,
+    pub split_a_len_offset: u64,
+    pub split_b_offset: u64,
+    pub split_b_len_offset: u64,
+    pub word_structure_offset: u64,
+    pub word_structure_len_offset: u64,
     pub pos_id_offset: u64,
     pub dictionary_id_offset: u64,
     pub is_oov_offset: u64,

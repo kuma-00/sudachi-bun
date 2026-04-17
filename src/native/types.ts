@@ -21,6 +21,13 @@ export interface MorphemeResultLayout {
   dictionaryIdOffset: number;
   isOovOffset: number;
   totalCostOffset: number;
+  headWordLengthOffset: number;
+  splitAOffset: number;
+  splitALenOffset: number;
+  splitBOffset: number;
+  splitBLenOffset: number;
+  wordStructureOffset: number;
+  wordStructureLenOffset: number;
   synonymGroupIdsOffset: number;
   synonymGroupIdsLenOffset: number;
 }
@@ -47,6 +54,13 @@ export interface LookupResultLayout {
   posIdOffset: number;
   dictionaryIdOffset: number;
   isOovOffset: number;
+  headWordLengthOffset: number;
+  splitAOffset: number;
+  splitALenOffset: number;
+  splitBOffset: number;
+  splitBLenOffset: number;
+  wordStructureOffset: number;
+  wordStructureLenOffset: number;
 }
 
 export interface DictionaryInspectionResultLayout {
@@ -91,6 +105,13 @@ export interface PretokenizedResultLayout {
   posIdOffset: number;
   dictionaryIdOffset: number;
   isOovOffset: number;
+  headWordLengthOffset: number;
+  splitAOffset: number;
+  splitALenOffset: number;
+  splitBOffset: number;
+  splitBLenOffset: number;
+  wordStructureOffset: number;
+  wordStructureLenOffset: number;
   synonymGroupIdsOffset: number;
   synonymGroupIdsLenOffset: number;
 }

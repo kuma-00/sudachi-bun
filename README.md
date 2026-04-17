@@ -269,7 +269,7 @@ Task-07 相当の lookup API も利用できます。
 
 - `tokenizer.lookup({ surface, projection })`: 入力 surface に一致する辞書候補を `LookupEntry[]` として返す
 
-`LookupEntry` は `surface`, `pos`, `wordId`, `dictionaryId`, `isOov` を持ちます。lookup 用の Rust FFI シンボルが未実装または古いライブラリでは `lookup()` が失敗するため、その場合は最新の `sudachi-ffi` をビルドしてください。
+`LookupEntry` は `surface`, `headWordLength`, `pos`, `wordId`, `dictionaryId`, `isOov`, `splitA`, `splitB`, `wordStructure` を持ちます。`headWordLength` は数値、`splitA` / `splitB` / `wordStructure` は word ID 文字列（`(dic, word)` 形式）の配列です。subset で未要求（または古い FFI layout）なら `headWordLength = 0` と空配列を返します。lookup 用の Rust FFI シンボルが未実装または古いライブラリでは `lookup()` が失敗するため、その場合は最新の `sudachi-ffi` をビルドしてください。
 
 `createSudachi()` が返す `pretokenizer` は辞書設定から pretokenized 形式を生成する API です。
 
@@ -287,10 +287,14 @@ const tokens = pretokenizer.pretokenize("東京タワー", {
 });
 ```
 
+`subset.fields` には `surface`, `headWordLength`, `pos`, `posId`, `normalized`, `dictionaryForm`, `reading`, `splitA`, `splitB`, `wordStructure`, `synonymGroupIds` を指定できます。
+
 Pretokenizer の各トークンは、UTF-8 byte offset と character index の両方を保持します。
 
 - `beginByte` / `endByte`: 元テキストに対する UTF-8 byte offset
 - `beginChar` / `endChar`: 元テキストに対する JavaScript string index
+
+Pretokenized 出力も `headWordLength`, `splitA`, `splitB`, `wordStructure` を持ちます。subset で未要求（または古い FFI layout）の場合は `headWordLength = 0` と空配列です。
 
 `debug: true` を指定した場合は、Pretokenizer の解析ごとに stderr へ 1 行の JSONL を出力します。主な項目は `mode`, `split_mode`, `projection`, `subset_bits`, `input_bytes`, `token_count`, `elapsed_us` です。
 
@@ -313,6 +317,7 @@ const hfPretokenizer = createHuggingFacePretokenizer(sudachi.pretokenizer, {
 `Morpheme` は以下の情報を含みます。
 
 - `surface`
+- `headWordLength`
 - `normalized`
 - `dictionaryForm`
 - `reading`
@@ -322,6 +327,7 @@ const hfPretokenizer = createHuggingFacePretokenizer(sudachi.pretokenizer, {
 - `wordId`, `posId`, `dictionaryId`
 - `isOov`
 - `totalCost`
+- `splitA`, `splitB`, `wordStructure`
 - `synonymGroupIds`
 
 ## 開発者向け

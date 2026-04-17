@@ -65,11 +65,15 @@ export type SentenceSplitterOptions = TokenizerOptions;
 
 export type InfoSubsetField =
   | "surface"
+  | "headWordLength"
   | "pos"
   | "posId"
   | "normalized"
   | "dictionaryForm"
   | "reading"
+  | "splitA"
+  | "splitB"
+  | "wordStructure"
   | "synonymGroupIds";
 
 export type InfoSubsetFields = readonly InfoSubsetField[];
@@ -91,6 +95,7 @@ export interface SentenceDetector {
 
 export interface Morpheme {
   surface: string;
+  headWordLength: number;
   normalized: string;
   dictionaryForm: string;
   reading: string;
@@ -104,6 +109,9 @@ export interface Morpheme {
   dictionaryId: number;
   isOov: boolean;
   totalCost: number;
+  splitA: string[];
+  splitB: string[];
+  wordStructure: string[];
   synonymGroupIds: number[];
 }
 
@@ -113,15 +121,20 @@ export interface MorphemeList extends Array<Morpheme> {
 
 export interface LookupEntry {
   surface: string;
+  headWordLength: number;
   pos: string;
   wordId: string;
   posId?: number;
   dictionaryId: number;
   isOov: boolean;
+  splitA: string[];
+  splitB: string[];
+  wordStructure: string[];
 }
 
 export interface PretokenizedToken {
   surface: string;
+  headWordLength: number;
   normalized: string;
   dictionaryForm: string;
   reading: string;
@@ -134,6 +147,9 @@ export interface PretokenizedToken {
   posId: number;
   dictionaryId: number;
   isOov: boolean;
+  splitA: string[];
+  splitB: string[];
+  wordStructure: string[];
   synonymGroupIds: number[];
 }
 

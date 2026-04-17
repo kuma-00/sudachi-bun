@@ -1,7 +1,7 @@
 use super::common::*;
 use super::*;
 use crate::error::{ERR_NULL_POINTER, ERR_PRETOKENIZE, OK, status_code_name};
-use std::ffi::CString;
+use std::ffi::{CStr, CString};
 use std::ptr;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
@@ -255,5 +255,51 @@ fn pretokenize_subset_matches_default_when_requesting_all_fields() {
         sudachi_free_pretokenized_result(subset_result);
 
         assert_eq!(subset_values, default_values);
+    });
+}
+
+#[test]
+fn pretokenize_subset_returns_new_info_subset_fields() {
+    with_test_pretokenizer(|handle| {
+        let text = CString::new("東京都").unwrap();
+        let mut out_result = ptr::null_mut();
+        let bits = InfoSubset::HEAD_WORD_LENGTH.bits()
+            | InfoSubset::SPLIT_A.bits()
+            | InfoSubset::SPLIT_B.bits()
+            | InfoSubset::WORD_STRUCTURE.bits();
+        let status = sudachi_pretokenize_subset(
+            handle,
+            text.as_ptr(),
+            2,
+            Projection::Surface as i32,
+            bits,
+            &mut out_result,
+        );
+
+        assert_eq!(status, OK, "{}", last_error_message());
+        unsafe {
+            let array = &*out_result;
+            assert_eq!(array.len, 1);
+            let item = &*array.items;
+            assert!(item.head_word_length > 0);
+            assert!(item.split_a_len > 0);
+            assert!(item.word_structure_len > 0);
+            let split_a = std::slice::from_raw_parts(item.split_a, item.split_a_len);
+            let word_structure =
+                std::slice::from_raw_parts(item.word_structure, item.word_structure_len);
+            let first_split_a = CStr::from_ptr(split_a[0]).to_str().unwrap();
+            let first_word_structure = CStr::from_ptr(word_structure[0]).to_str().unwrap();
+            assert!(first_split_a.starts_with('('));
+            assert!(first_word_structure.starts_with('('));
+            if item.split_b_len == 0 {
+                assert!(item.split_b.is_null());
+            } else {
+                let split_b = std::slice::from_raw_parts(item.split_b, item.split_b_len);
+                let first_split_b = CStr::from_ptr(split_b[0]).to_str().unwrap();
+                assert!(first_split_b.starts_with('('));
+            }
+        }
+
+        sudachi_free_pretokenized_result(out_result);
     });
 }

@@ -8,6 +8,7 @@ use sudachi::analysis::mlist::MorphemeList;
 use sudachi::dic::build::report::DictPartReport;
 use sudachi::dic::dictionary::JapaneseDictionary;
 use sudachi::dic::subset::InfoSubset;
+use sudachi::dic::word_id::WordId;
 
 use crate::convert::Projection;
 use crate::error::{ERR_INTERNAL, ERR_NULL_POINTER, error};
@@ -188,6 +189,17 @@ pub(crate) fn free_u16_slice(ptr: *mut u16, len: usize) {
     free_boxed_slice(ptr, len);
 }
 
+pub(crate) fn free_c_string_slice(ptr: *mut *mut c_char, len: usize) {
+    let Some(mut boxed_items) = boxed_slice_from_raw_parts(ptr, len) else {
+        return;
+    };
+
+    for item in boxed_items.iter_mut() {
+        free_c_string(*item);
+        *item = ptr::null_mut();
+    }
+}
+
 fn boxed_slice_from_raw_parts<T>(ptr: *mut T, len: usize) -> Option<Box<[T]>> {
     if ptr.is_null() || len == 0 {
         return None;
@@ -219,6 +231,30 @@ pub(crate) fn free_partial_pretokenized_results(results: &mut [PretokenizedResul
 
 fn synonym_group_ids_to_raw_parts(synonym_group_ids: Vec<u32>) -> (*mut u32, usize) {
     boxed_slice_into_raw_parts(synonym_group_ids.into_boxed_slice())
+}
+
+fn format_word_id(word_id: WordId) -> String {
+    format!("{word_id:?}")
+}
+
+fn word_ids_to_strings(word_ids: &[WordId]) -> Vec<String> {
+    word_ids.iter().copied().map(format_word_id).collect()
+}
+
+fn word_id_strings_to_raw_parts(word_ids: Vec<String>) -> Result<(*mut *mut c_char, usize), i32> {
+    let mut strings = Vec::with_capacity(word_ids.len());
+    for word_id in word_ids {
+        match string_to_c(word_id) {
+            Ok(ptr) => strings.push(ptr),
+            Err(code) => {
+                for ptr in strings {
+                    free_c_string(ptr);
+                }
+                return Err(code);
+            }
+        }
+    }
+    Ok(boxed_slice_into_raw_parts(strings.into_boxed_slice()))
 }
 
 struct OwnedFieldsGuard<T> {
@@ -264,6 +300,17 @@ fn pretokenized_item_to_result(item: PretokenizedItem) -> Result<PretokenizedRes
     result.value_mut().begin_char = item.begin_char;
     result.value_mut().end_char = item.end_char;
     result.value_mut().word_id = string_to_c(item.word_id)?;
+    result.value_mut().head_word_length = item.head_word_length;
+    let (split_a, split_a_len) = word_id_strings_to_raw_parts(item.split_a)?;
+    result.value_mut().split_a = split_a;
+    result.value_mut().split_a_len = split_a_len;
+    let (split_b, split_b_len) = word_id_strings_to_raw_parts(item.split_b)?;
+    result.value_mut().split_b = split_b;
+    result.value_mut().split_b_len = split_b_len;
+    let (word_structure, word_structure_len) =
+        word_id_strings_to_raw_parts(item.word_structure)?;
+    result.value_mut().word_structure = word_structure;
+    result.value_mut().word_structure_len = word_structure_len;
     result.value_mut().pos_id = item.pos_id;
     result.value_mut().dictionary_id = item.dictionary_id;
     result.value_mut().is_oov = u8::from(item.is_oov);
@@ -303,7 +350,27 @@ pub(crate) fn morpheme_to_pretokenized_result(
         end_byte,
         begin_char,
         end_char,
-        word_id: format!("{:?}", morpheme.word_id()),
+        word_id: format_word_id(morpheme.word_id()),
+        head_word_length: if subset.contains(InfoSubset::HEAD_WORD_LENGTH) {
+            morpheme.get_word_info().head_word_length()
+        } else {
+            0
+        },
+        split_a: if subset.contains(InfoSubset::SPLIT_A) {
+            word_ids_to_strings(morpheme.get_word_info().a_unit_split())
+        } else {
+            Vec::new()
+        },
+        split_b: if subset.contains(InfoSubset::SPLIT_B) {
+            word_ids_to_strings(morpheme.get_word_info().b_unit_split())
+        } else {
+            Vec::new()
+        },
+        word_structure: if subset.contains(InfoSubset::WORD_STRUCTURE) {
+            word_ids_to_strings(morpheme.get_word_info().word_structure())
+        } else {
+            Vec::new()
+        },
         pos_id: if subset.contains(InfoSubset::POS_ID) {
             morpheme.part_of_speech_id()
         } else {
@@ -393,7 +460,29 @@ pub(crate) fn morpheme_to_result(
     result.value_mut().end = end;
     result.value_mut().begin_char = offset_map.byte_to_char(begin)?;
     result.value_mut().end_char = offset_map.byte_to_char(end)?;
-    result.value_mut().word_id = clone_string(&format!("{:?}", morpheme.word_id()))?;
+    result.value_mut().word_id = clone_string(&format_word_id(morpheme.word_id()))?;
+    if subset.contains(InfoSubset::HEAD_WORD_LENGTH) {
+        result.value_mut().head_word_length = morpheme.get_word_info().head_word_length();
+    }
+    if subset.contains(InfoSubset::SPLIT_A) {
+        let (split_a, split_a_len) =
+            word_id_strings_to_raw_parts(word_ids_to_strings(morpheme.get_word_info().a_unit_split()))?;
+        result.value_mut().split_a = split_a;
+        result.value_mut().split_a_len = split_a_len;
+    }
+    if subset.contains(InfoSubset::SPLIT_B) {
+        let (split_b, split_b_len) =
+            word_id_strings_to_raw_parts(word_ids_to_strings(morpheme.get_word_info().b_unit_split()))?;
+        result.value_mut().split_b = split_b;
+        result.value_mut().split_b_len = split_b_len;
+    }
+    if subset.contains(InfoSubset::WORD_STRUCTURE) {
+        let (word_structure, word_structure_len) = word_id_strings_to_raw_parts(
+            word_ids_to_strings(morpheme.get_word_info().word_structure()),
+        )?;
+        result.value_mut().word_structure = word_structure;
+        result.value_mut().word_structure_len = word_structure_len;
+    }
     if subset.contains(InfoSubset::POS_ID) {
         result.value_mut().pos_id = morpheme.part_of_speech_id();
     }
@@ -428,7 +517,29 @@ pub(crate) fn lookup_morpheme_to_result(
     if subset.contains(InfoSubset::POS_ID) {
         result.value_mut().pos_id = morpheme.part_of_speech_id();
     }
-    result.value_mut().word_id = clone_string(&format!("{:?}", morpheme.word_id()))?;
+    result.value_mut().word_id = clone_string(&format_word_id(morpheme.word_id()))?;
+    if subset.contains(InfoSubset::HEAD_WORD_LENGTH) {
+        result.value_mut().head_word_length = morpheme.get_word_info().head_word_length();
+    }
+    if subset.contains(InfoSubset::SPLIT_A) {
+        let (split_a, split_a_len) =
+            word_id_strings_to_raw_parts(word_ids_to_strings(morpheme.get_word_info().a_unit_split()))?;
+        result.value_mut().split_a = split_a;
+        result.value_mut().split_a_len = split_a_len;
+    }
+    if subset.contains(InfoSubset::SPLIT_B) {
+        let (split_b, split_b_len) =
+            word_id_strings_to_raw_parts(word_ids_to_strings(morpheme.get_word_info().b_unit_split()))?;
+        result.value_mut().split_b = split_b;
+        result.value_mut().split_b_len = split_b_len;
+    }
+    if subset.contains(InfoSubset::WORD_STRUCTURE) {
+        let (word_structure, word_structure_len) = word_id_strings_to_raw_parts(
+            word_ids_to_strings(morpheme.get_word_info().word_structure()),
+        )?;
+        result.value_mut().word_structure = word_structure;
+        result.value_mut().word_structure_len = word_structure_len;
+    }
     result.value_mut().dictionary_id = morpheme.dictionary_id();
     result.value_mut().is_oov = u8::from(morpheme.is_oov());
     Ok(result.into_inner())

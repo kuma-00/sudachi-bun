@@ -215,6 +215,13 @@ test("readMorphemeResultLayout maps the Rust layout buffer in order", () => {
     dictionaryIdOffset: 84,
     isOovOffset: 88,
     totalCostOffset: 92,
+    headWordLengthOffset: 0,
+    splitAOffset: 0,
+    splitALenOffset: 0,
+    splitBOffset: 0,
+    splitBLenOffset: 0,
+    wordStructureOffset: 0,
+    wordStructureLenOffset: 0,
     synonymGroupIdsOffset: 96,
     synonymGroupIdsLenOffset: 104,
   });
@@ -308,6 +315,13 @@ test("readLookupResultLayout maps the Rust lookup layout buffer in order", () =>
     posIdOffset: 24,
     dictionaryIdOffset: 28,
     isOovOffset: 32,
+    headWordLengthOffset: 0,
+    splitAOffset: 0,
+    splitALenOffset: 0,
+    splitBOffset: 0,
+    splitBLenOffset: 0,
+    wordStructureOffset: 0,
+    wordStructureLenOffset: 0,
   });
 });
 
@@ -363,6 +377,13 @@ test("readPretokenizedResultLayout maps the Rust pretokenizer layout buffer in o
     posIdOffset: 80,
     dictionaryIdOffset: 84,
     isOovOffset: 88,
+    headWordLengthOffset: 0,
+    splitAOffset: 0,
+    splitALenOffset: 0,
+    splitBOffset: 0,
+    splitBLenOffset: 0,
+    wordStructureOffset: 0,
+    wordStructureLenOffset: 0,
     synonymGroupIdsOffset: 96,
     synonymGroupIdsLenOffset: 104,
   });

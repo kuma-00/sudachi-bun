@@ -11,13 +11,13 @@ use super::{
 pub const DICTIONARY_BUILD_REPORT_ARRAY_LAYOUT_CONTIGUOUS: u64 = 0;
 pub const DICTIONARY_BUILD_REPORT_LAYOUT_VERSION: u64 = 1;
 pub const MORPHEME_RESULT_ARRAY_LAYOUT_CONTIGUOUS: u64 = 0;
-pub const MORPHEME_RESULT_LAYOUT_VERSION: u64 = 3;
+pub const MORPHEME_RESULT_LAYOUT_VERSION: u64 = 4;
 pub const LOOKUP_RESULT_ARRAY_LAYOUT_CONTIGUOUS: u64 = 0;
-pub const LOOKUP_RESULT_LAYOUT_VERSION: u64 = 1;
+pub const LOOKUP_RESULT_LAYOUT_VERSION: u64 = 2;
 pub const POS_MATCHER_RESULT_ARRAY_LAYOUT_CONTIGUOUS: u64 = 0;
 pub const POS_MATCHER_RESULT_LAYOUT_VERSION: u64 = 1;
 pub const PRETOKENIZED_RESULT_ARRAY_LAYOUT_CONTIGUOUS: u64 = 0;
-pub const PRETOKENIZED_RESULT_LAYOUT_VERSION: u64 = 1;
+pub const PRETOKENIZED_RESULT_LAYOUT_VERSION: u64 = 2;
 pub const SENTENCE_SPAN_ARRAY_LAYOUT_CONTIGUOUS: u64 = 0;
 pub const SENTENCE_SPAN_LAYOUT_VERSION: u64 = 1;
 
@@ -62,6 +62,13 @@ impl MorphemeResultLayout {
             begin_char_offset: offset_of!(MorphemeResult, begin_char) as u64,
             end_char_offset: offset_of!(MorphemeResult, end_char) as u64,
             word_id_offset: offset_of!(MorphemeResult, word_id) as u64,
+            head_word_length_offset: offset_of!(MorphemeResult, head_word_length) as u64,
+            split_a_offset: offset_of!(MorphemeResult, split_a) as u64,
+            split_a_len_offset: offset_of!(MorphemeResult, split_a_len) as u64,
+            split_b_offset: offset_of!(MorphemeResult, split_b) as u64,
+            split_b_len_offset: offset_of!(MorphemeResult, split_b_len) as u64,
+            word_structure_offset: offset_of!(MorphemeResult, word_structure) as u64,
+            word_structure_len_offset: offset_of!(MorphemeResult, word_structure_len) as u64,
             pos_id_offset: offset_of!(MorphemeResult, pos_id) as u64,
             dictionary_id_offset: offset_of!(MorphemeResult, dictionary_id) as u64,
             is_oov_offset: offset_of!(MorphemeResult, is_oov) as u64,
@@ -116,6 +123,13 @@ impl PretokenizedResultLayout {
             begin_char_offset: offset_of!(PretokenizedResult, begin_char) as u64,
             end_char_offset: offset_of!(PretokenizedResult, end_char) as u64,
             word_id_offset: offset_of!(PretokenizedResult, word_id) as u64,
+            head_word_length_offset: offset_of!(PretokenizedResult, head_word_length) as u64,
+            split_a_offset: offset_of!(PretokenizedResult, split_a) as u64,
+            split_a_len_offset: offset_of!(PretokenizedResult, split_a_len) as u64,
+            split_b_offset: offset_of!(PretokenizedResult, split_b) as u64,
+            split_b_len_offset: offset_of!(PretokenizedResult, split_b_len) as u64,
+            word_structure_offset: offset_of!(PretokenizedResult, word_structure) as u64,
+            word_structure_len_offset: offset_of!(PretokenizedResult, word_structure_len) as u64,
             pos_id_offset: offset_of!(PretokenizedResult, pos_id) as u64,
             dictionary_id_offset: offset_of!(PretokenizedResult, dictionary_id) as u64,
             is_oov_offset: offset_of!(PretokenizedResult, is_oov) as u64,
@@ -143,6 +157,13 @@ impl LookupResultLayout {
             surface_offset: offset_of!(LookupResultItem, surface) as u64,
             pos_offset: offset_of!(LookupResultItem, pos) as u64,
             word_id_offset: offset_of!(LookupResultItem, word_id) as u64,
+            head_word_length_offset: offset_of!(LookupResultItem, head_word_length) as u64,
+            split_a_offset: offset_of!(LookupResultItem, split_a) as u64,
+            split_a_len_offset: offset_of!(LookupResultItem, split_a_len) as u64,
+            split_b_offset: offset_of!(LookupResultItem, split_b) as u64,
+            split_b_len_offset: offset_of!(LookupResultItem, split_b_len) as u64,
+            word_structure_offset: offset_of!(LookupResultItem, word_structure) as u64,
+            word_structure_len_offset: offset_of!(LookupResultItem, word_structure_len) as u64,
             pos_id_offset: offset_of!(LookupResultItem, pos_id) as u64,
             dictionary_id_offset: offset_of!(LookupResultItem, dictionary_id) as u64,
             is_oov_offset: offset_of!(LookupResultItem, is_oov) as u64,
