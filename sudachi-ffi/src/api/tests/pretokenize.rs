@@ -64,6 +64,35 @@ fn pretokenize_debug_record_uses_dictionary_form_projection_name() {
 }
 
 #[test]
+fn pretokenizer_debug_record_uses_new_projection_names() {
+    with_capturing_pretokenizer(|handle, captured| {
+        let text = CString::new("京都東京都").unwrap();
+        let status = sudachi_set_pretokenizer_debug(handle, 1);
+        assert_eq!(status, OK, "{}", last_error_message());
+
+        for (projection, expected_name) in [
+            (4, "dictionary_and_surface"),
+            (5, "normalized_and_surface"),
+            (6, "normalized_nouns"),
+        ] {
+            let mut out_result = ptr::null_mut();
+            let status = sudachi_pretokenize(handle, text.as_ptr(), 2, projection, &mut out_result);
+            assert_eq!(status, OK, "{}", last_error_message());
+            sudachi_free_pretokenized_result(out_result);
+
+            let lines = captured.lock().unwrap();
+            let last = lines.last().expect("debug log should contain a line");
+            assert!(
+                last.contains(&format!("\"projection\":\"{expected_name}\"")),
+                "{}",
+                last
+            );
+            drop(lines);
+        }
+    });
+}
+
+#[test]
 fn pretokenizer_debug_setter_controls_emission() {
     with_capturing_pretokenizer(|handle, captured| {
         let text = CString::new("京都東京都").unwrap();

@@ -36,6 +36,9 @@ const PROJECTION_TO_NATIVE: Record<SurfaceProjection, number> = {
   normalized: 1,
   dictionary_form: 2,
   reading: 3,
+  dictionary_and_surface: 4,
+  normalized_and_surface: 5,
+  normalized_nouns: 6,
 };
 
 export interface NativeTokenizerSession {

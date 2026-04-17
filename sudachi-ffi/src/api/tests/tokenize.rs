@@ -214,6 +214,84 @@ fn tokenize_projection_changes_surface_field() {
 }
 
 #[test]
+fn tokenize_new_projection_values_match_expected_surface_choice() {
+    with_test_tokenizer(|handle| {
+        let text = CString::new("食べた。東京都。").unwrap();
+
+        let mut surface_result = ptr::null_mut();
+        let status = sudachi_tokenize(
+            handle,
+            text.as_ptr(),
+            2,
+            Projection::Surface as i32,
+            &mut surface_result,
+        );
+        assert_eq!(status, OK, "{}", last_error_message());
+        let surface_values = collect_morpheme_texts(surface_result);
+        sudachi_free_result(surface_result);
+
+        let mut dictionary_and_surface_result = ptr::null_mut();
+        let status = sudachi_tokenize(
+            handle,
+            text.as_ptr(),
+            2,
+            4,
+            &mut dictionary_and_surface_result,
+        );
+        assert_eq!(status, OK, "{}", last_error_message());
+        let dictionary_and_surface_values = collect_morpheme_texts(dictionary_and_surface_result);
+        sudachi_free_result(dictionary_and_surface_result);
+
+        let mut normalized_and_surface_result = ptr::null_mut();
+        let status = sudachi_tokenize(
+            handle,
+            text.as_ptr(),
+            2,
+            5,
+            &mut normalized_and_surface_result,
+        );
+        assert_eq!(status, OK, "{}", last_error_message());
+        let normalized_and_surface_values = collect_morpheme_texts(normalized_and_surface_result);
+        sudachi_free_result(normalized_and_surface_result);
+
+        let mut normalized_nouns_result = ptr::null_mut();
+        let status = sudachi_tokenize(
+            handle,
+            text.as_ptr(),
+            2,
+            6,
+            &mut normalized_nouns_result,
+        );
+        assert_eq!(status, OK, "{}", last_error_message());
+        let normalized_nouns_values = collect_morpheme_texts(normalized_nouns_result);
+        sudachi_free_result(normalized_nouns_result);
+
+        assert_eq!(dictionary_and_surface_values.len(), surface_values.len());
+        assert_eq!(normalized_and_surface_values.len(), surface_values.len());
+        assert_eq!(normalized_nouns_values.len(), surface_values.len());
+
+        assert!(
+            surface_values
+                .iter()
+                .zip(dictionary_and_surface_values.iter())
+                .all(|(surface, projected)| projected.0 == surface.0 || projected.0 == surface.2)
+        );
+        assert!(
+            surface_values
+                .iter()
+                .zip(normalized_and_surface_values.iter())
+                .all(|(surface, projected)| projected.0 == surface.0 || projected.0 == surface.1)
+        );
+        assert!(
+            surface_values
+                .iter()
+                .zip(normalized_nouns_values.iter())
+                .all(|(surface, projected)| projected.0 == surface.0 || projected.0 == surface.1)
+        );
+    });
+}
+
+#[test]
 fn tokenize_subset_uses_utf16_char_offsets_for_surrogate_pairs() {
     with_test_tokenizer(|handle| {
         let text = CString::new("a😀b").unwrap();

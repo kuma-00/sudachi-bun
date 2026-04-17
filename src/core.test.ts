@@ -19,6 +19,9 @@ const PROJECTION_VALUES = new Set([
   "normalized",
   "dictionary_form",
   "reading",
+  "dictionary_and_surface",
+  "normalized_and_surface",
+  "normalized_nouns",
 ]);
 
 const MORPHEME_LAYOUT: MorphemeResultLayout = {
@@ -661,6 +664,36 @@ test("tokenize forwards the required projection to the native symbol", () => {
     } finally {
       freeSpy.mockRestore();
       subsetTokenizeSpy.mockRestore();
+      tokenizeSpy.mockRestore();
+    }
+  });
+});
+
+test("tokenize forwards new projection ids to the native symbol", () => {
+  withTokenizer(({ library, tokenizer }) => {
+    const tokenizeSpy = spyOn(library.symbols, "sudachi_tokenize");
+    const projectionCases = [
+      ["dictionary_and_surface", 4],
+      ["normalized_and_surface", 5],
+      ["normalized_nouns", 6],
+    ] as const;
+
+    try {
+      for (const [projection] of projectionCases) {
+        tokenizer.tokenize({
+          text: "東京都に",
+          projection: projection as never,
+          mode: "C",
+        });
+      }
+
+      expect(tokenizeSpy).toHaveBeenCalledTimes(projectionCases.length);
+      for (const [index, [, expectedNative]] of projectionCases.entries()) {
+        const call = tokenizeSpy.mock.calls[index];
+        expect(call).toBeDefined();
+        expect(call?.[3]).toBe(expectedNative);
+      }
+    } finally {
       tokenizeSpy.mockRestore();
     }
   });

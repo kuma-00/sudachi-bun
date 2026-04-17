@@ -13,6 +13,9 @@ pub(crate) enum Projection {
     Normalized = 1,
     DictionaryForm = 2,
     Reading = 3,
+    DictionaryAndSurface = 4,
+    NormalizedAndSurface = 5,
+    NormalizedNouns = 6,
 }
 
 pub(crate) fn cstr_to_path(ptr: *const c_char) -> Result<PathBuf, i32> {
@@ -56,9 +59,12 @@ pub(crate) fn projection_from_raw(projection: i32) -> Result<Projection, i32> {
         1 => Ok(Projection::Normalized),
         2 => Ok(Projection::DictionaryForm),
         3 => Ok(Projection::Reading),
+        4 => Ok(Projection::DictionaryAndSurface),
+        5 => Ok(Projection::NormalizedAndSurface),
+        6 => Ok(Projection::NormalizedNouns),
         _ => Err(error(
             ERR_INVALID_MODE,
-            "projection must be 0 (surface), 1 (normalized), 2 (dictionary_form), or 3 (reading)",
+            "projection must be 0 (surface), 1 (normalized), 2 (dictionary_form), 3 (reading), 4 (dictionary_and_surface), 5 (normalized_and_surface), or 6 (normalized_nouns)",
         )),
     }
 }
@@ -84,6 +90,15 @@ mod tests {
             Ok(Projection::DictionaryForm)
         ));
         assert!(matches!(projection_from_raw(3), Ok(Projection::Reading)));
-        assert!(projection_from_raw(4).is_err());
+        assert!(matches!(
+            projection_from_raw(4),
+            Ok(Projection::DictionaryAndSurface)
+        ));
+        assert!(matches!(
+            projection_from_raw(5),
+            Ok(Projection::NormalizedAndSurface)
+        ));
+        assert!(matches!(projection_from_raw(6), Ok(Projection::NormalizedNouns)));
+        assert!(projection_from_raw(7).is_err());
     }
 }

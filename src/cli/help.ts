@@ -3,7 +3,7 @@ import type { CliHelpTarget } from "./types.ts";
 function tokenizeHelp(): string {
   return [
     "Usage:",
-    "  bun run index.ts tokenize --dict-path=/path/to/dictionary --projection=<surface|normalized|dictionary_form|reading> [--library-path=/path/to/libsudachi_ffi.dylib] [--text='...' | input.txt [more.txt ...] | pipe] [--wakati|--all] [--split-sentences] [--debug] [--resource-dir <path>] [--output <path>|-]",
+    "  bun run index.ts tokenize --dict-path=/path/to/dictionary --projection=<surface|normalized|dictionary_form|reading|dictionary_and_surface|normalized_and_surface|normalized_nouns> [--library-path=/path/to/libsudachi_ffi.dylib] [--text='...' | input.txt [more.txt ...] | pipe] [--wakati|--all] [--split-sentences] [--debug] [--resource-dir <path>] [--output <path>|-]",
     "",
     "Options:",
     "  --projection <mode>  Required surface projection for tokenize, lookup, and split results.",

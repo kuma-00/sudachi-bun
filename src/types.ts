@@ -7,6 +7,9 @@ export const SURFACE_PROJECTIONS = [
   "normalized",
   "dictionary_form",
   "reading",
+  "dictionary_and_surface",
+  "normalized_and_surface",
+  "normalized_nouns",
 ] as const;
 
 export type SurfaceProjection = (typeof SURFACE_PROJECTIONS)[number];

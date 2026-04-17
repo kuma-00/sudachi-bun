@@ -213,6 +213,39 @@ fn lookup_projection_changes_surface_field() {
 }
 
 #[test]
+fn lookup_accepts_new_projection_values() {
+    with_test_tokenizer(|handle| {
+        let text = CString::new("東京").unwrap();
+
+        let mut surface_result = ptr::null_mut();
+        let status = sudachi_lookup(
+            handle,
+            text.as_ptr(),
+            Projection::Surface as i32,
+            &mut surface_result,
+        );
+        assert_eq!(status, OK, "{}", last_error_message());
+        let surface_values = collect_lookup_values(surface_result);
+        sudachi_free_lookup_result(surface_result);
+
+        for projection in [4, 5, 6] {
+            let mut out_result = ptr::null_mut();
+            let status = sudachi_lookup(handle, text.as_ptr(), projection, &mut out_result);
+            assert_eq!(status, OK, "{}", last_error_message());
+            let values = collect_lookup_values(out_result);
+            sudachi_free_lookup_result(out_result);
+            assert_eq!(values.len(), surface_values.len());
+            assert!(
+                values
+                    .iter()
+                    .zip(surface_values.iter())
+                    .all(|(value, surface)| value.0 == surface.0 || value.0 == "トウキョウ")
+            );
+        }
+    });
+}
+
+#[test]
 fn lookup_subset_rejects_invalid_bits() {
     with_test_tokenizer(|handle| {
         let text = CString::new("東京都").unwrap();

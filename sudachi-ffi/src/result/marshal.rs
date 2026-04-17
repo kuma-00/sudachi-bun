@@ -69,11 +69,45 @@ fn projected_surface_text(
     morpheme: &sudachi::analysis::morpheme::Morpheme<'_, Arc<JapaneseDictionary>>,
     projection: Projection,
 ) -> String {
+    fn is_inflected_pos(morpheme: &sudachi::analysis::morpheme::Morpheme<'_, Arc<JapaneseDictionary>>) -> bool {
+        matches!(
+            morpheme.part_of_speech().first().map(String::as_str),
+            Some("動詞" | "形容詞" | "助動詞")
+        )
+    }
+
+    fn uses_normalized_nouns_fallback(
+        morpheme: &sudachi::analysis::morpheme::Morpheme<'_, Arc<JapaneseDictionary>>,
+    ) -> bool {
+        matches!(morpheme.part_of_speech().get(5).map(String::as_str), Some("*"))
+    }
+
     match projection {
         Projection::Surface => morpheme.surface().to_string(),
         Projection::Normalized => morpheme.normalized_form().to_string(),
         Projection::DictionaryForm => morpheme.dictionary_form().to_string(),
         Projection::Reading => morpheme.reading_form().to_string(),
+        Projection::DictionaryAndSurface => {
+            if is_inflected_pos(morpheme) {
+                morpheme.surface().to_string()
+            } else {
+                morpheme.dictionary_form().to_string()
+            }
+        }
+        Projection::NormalizedAndSurface => {
+            if is_inflected_pos(morpheme) {
+                morpheme.surface().to_string()
+            } else {
+                morpheme.normalized_form().to_string()
+            }
+        }
+        Projection::NormalizedNouns => {
+            if uses_normalized_nouns_fallback(morpheme) {
+                morpheme.normalized_form().to_string()
+            } else {
+                morpheme.surface().to_string()
+            }
+        }
     }
 }
 

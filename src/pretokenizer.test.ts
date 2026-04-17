@@ -141,6 +141,39 @@ test("pretokenize forwards projection settings and preserves byte/char offsets",
   }
 });
 
+test("pretokenize forwards new projection ids to the native subset symbol", () => {
+  const projectionCases = [
+    ["dictionary_and_surface", 4],
+    ["normalized_and_surface", 5],
+    ["normalized_nouns", 6],
+  ] as const;
+
+  for (const [projection, expectedNative] of projectionCases) {
+    const library = createLibrary();
+    const subsetSpy = spyOn(library.symbols, "sudachi_pretokenize_subset");
+    const readSpy = spyOn(ffi, "readPretokenizedArray").mockReturnValue([
+      PRETOKENIZED_TOKEN,
+    ]);
+
+    const pretokenizer = new Pretokenizer(
+      { library, layout: FAKE_LAYOUT, handle: 1 as never } as never,
+      {
+        mode: "C",
+        projection: projection as never,
+        subset: { fields: ["surface"] },
+      },
+    );
+
+    expect(pretokenizer.pretokenize("a😀b")).toEqual([PRETOKENIZED_TOKEN]);
+    expect(subsetSpy).toHaveBeenCalledTimes(1);
+    expect(readSpy).toHaveBeenCalledTimes(1);
+    expect(subsetSpy.mock.calls[0]?.[3]).toBe(expectedNative);
+    pretokenizer.close();
+    readSpy.mockRestore();
+    subsetSpy.mockRestore();
+  }
+});
+
 function expectDebugPropagation(debug: boolean): void {
   const library = createLibrary();
   const loadSpy = trackSpy(

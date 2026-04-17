@@ -7,7 +7,7 @@ TypeScript から Rust FFI (`sudachi-ffi`) を呼び出して、日本語テキ�
 
 - Bun から Sudachi の形態素解析を実行
 - Rust 側の sentence splitter を通して `SentenceSpan[]` を取得し、UTF-8 バイトオフセットをそのまま扱う
-- CLI の `tokenize` サブコマンドで `--mode A|B|C` の分割モードと必須の `--projection surface|normalized|dictionary_form|reading`、`--wakati` / `--all` / `--output <path>`、`--split-sentences` / `--debug` / `--resource-dir` を指定して出力
+- CLI の `tokenize` サブコマンドで `--mode A|B|C` の分割モードと必須の `--projection surface|normalized|dictionary_form|reading|dictionary_and_surface|normalized_and_surface|normalized_nouns`、`--wakati` / `--all` / `--output <path>`、`--split-sentences` / `--debug` / `--resource-dir` を指定して出力
 - CLI で `--text`、stdin、位置引数のファイル入力に対応
 - TypeScript API として package root の `createSudachi` から tokenizer/splitter/pretokenizer をまとめて生成
 - TypeScript API として package root の `createHuggingFacePretokenizer` から HuggingFace tokenizers 向けアダプタを生成
@@ -66,7 +66,7 @@ echo "すもももももももものうち" | bun run index.ts tokenize --dict-p
 基本形式:
 
 ```bash
-bun run index.ts tokenize --dict-path <path-to-dic> --projection <surface|normalized|dictionary_form|reading> [options] [input-file ...]
+bun run index.ts tokenize --dict-path <path-to-dic> --projection <surface|normalized|dictionary_form|reading|dictionary_and_surface|normalized_and_surface|normalized_nouns> [options] [input-file ...]
 ```
 
 `tokenize` 以外に `build` / `ubuild` / `dump` サブコマンドがありますが、現在は scaffold のみで未実装です。これらのコマンドでは tokenize 用フラグ（例: `--dict-path`）は受け付けません。
@@ -83,7 +83,7 @@ bun run index.ts dump --help
 - `--config-path <path>`: Sudachi 設定ファイル（任意）
 - `--library-path <path>`: ネイティブライブラリの明示指定（任意）
 - `--mode <A|B|C>`: 分割モード（デフォルト: `C`）
-- `--projection <surface|normalized|dictionary_form|reading>`: 表示値の投影。必須。`surface` は表層、`normalized` は正規化形、`dictionary_form` は辞書形、`reading` は読みを出力する
+- `--projection <surface|normalized|dictionary_form|reading|dictionary_and_surface|normalized_and_surface|normalized_nouns>`: 表示値の投影。必須。`surface` は表層、`normalized` は正規化形、`dictionary_form` は辞書形、`reading` は読みを出力する。`dictionary_and_surface` は活用語（動詞・形容詞・助動詞）を表層形、それ以外を辞書形で出力する。`normalized_and_surface` は活用語を表層形、それ以外を正規化形で出力する。`normalized_nouns` は品詞細分類6要素目が `*` の語を正規化形、それ以外を表層形で出力する
 - `--wakati`: 分かち書きモードで出力。`--projection` の結果を使って表示する
 - `--all`: すべてのトークン情報を出力。`surface` 系の表示は `--projection` の結果に従う
 - `--output <path>`: 出力先ファイルを指定。`-` を指定すると標準出力に出力
@@ -227,7 +227,7 @@ console.log(user.report);
 // [{ part: "matrix", size: 123, timeSeconds: 0.12, isWrite: false }, ...]
 ```
 
-`projection` は `tokenizer.tokenize()` / `tokenizer.lookup()` / `tokenizer.split()` / `tokenizer.splitInto()` の必須プロパティです。サポートする値は `surface`, `normalized`, `dictionary_form`, `reading` です。`Morpheme.surface` と `LookupEntry.surface` はこの投影結果を持ち、`--wakati` もこの値を使って表示します。
+`projection` は `tokenizer.tokenize()` / `tokenizer.lookup()` / `tokenizer.split()` / `tokenizer.splitInto()` の必須プロパティです。サポートする値は `surface`, `normalized`, `dictionary_form`, `reading`, `dictionary_and_surface`, `normalized_and_surface`, `normalized_nouns` です。`Morpheme.surface` と `LookupEntry.surface` はこの投影結果を持ち、`--wakati` もこの値を使って表示します。`dictionary_and_surface` は活用語（動詞・形容詞・助動詞）を表層形、それ以外を辞書形で返します。`normalized_and_surface` は活用語を表層形、それ以外を正規化形で返します。`normalized_nouns` は品詞細分類6要素目が `*` の語を正規化形、それ以外を表層形で返します。
 
 `tokenizer.tokenize()` / `tokenizer.split()` / `tokenizer.splitInto()` / `stateful.doTokenize()` が返す morpheme 配列には、解析全体のコスト指標 `internalCost` が数値プロパティとして付与されます。各 `Morpheme` には、そのノードまでの累積コスト `totalCost` が含まれます。
 

@@ -91,6 +91,9 @@ fn projection_name(projection: Projection) -> &'static str {
         Projection::Normalized => "normalized",
         Projection::DictionaryForm => "dictionary_form",
         Projection::Reading => "reading",
+        Projection::DictionaryAndSurface => "dictionary_and_surface",
+        Projection::NormalizedAndSurface => "normalized_and_surface",
+        Projection::NormalizedNouns => "normalized_nouns",
     }
 }
 
@@ -163,5 +166,66 @@ impl PretokenizerCore for SudachiPretokenizer {
             settings.include_pos_text,
             settings.projection,
         )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn pretokenize_debug_record_uses_dictionary_and_surface_projection_name() {
+        let record = PretokenizeDebugRecord {
+            mode: Mode::A,
+            split_mode: Mode::B,
+            projection: Projection::DictionaryAndSurface,
+            subset_bits: 0,
+            include_pos_text: false,
+            input_bytes: 1,
+            token_count: 1,
+            elapsed_us: 1,
+        };
+
+        assert!(
+            format_pretokenize_debug_record(&record)
+                .contains("\"projection\":\"dictionary_and_surface\"")
+        );
+    }
+
+    #[test]
+    fn pretokenize_debug_record_uses_normalized_and_surface_projection_name() {
+        let record = PretokenizeDebugRecord {
+            mode: Mode::A,
+            split_mode: Mode::B,
+            projection: Projection::NormalizedAndSurface,
+            subset_bits: 0,
+            include_pos_text: false,
+            input_bytes: 1,
+            token_count: 1,
+            elapsed_us: 1,
+        };
+
+        assert!(
+            format_pretokenize_debug_record(&record)
+                .contains("\"projection\":\"normalized_and_surface\"")
+        );
+    }
+
+    #[test]
+    fn pretokenize_debug_record_uses_normalized_nouns_projection_name() {
+        let record = PretokenizeDebugRecord {
+            mode: Mode::A,
+            split_mode: Mode::B,
+            projection: Projection::NormalizedNouns,
+            subset_bits: 0,
+            include_pos_text: false,
+            input_bytes: 1,
+            token_count: 1,
+            elapsed_us: 1,
+        };
+
+        assert!(
+            format_pretokenize_debug_record(&record).contains("\"projection\":\"normalized_nouns\"")
+        );
     }
 }
