@@ -8,7 +8,8 @@ use sudachi::analysis::stateless_tokenizer::StatelessTokenizer;
 use sudachi::dic::dictionary::JapaneseDictionary;
 use sudachi::dic::subset::InfoSubset;
 
-use super::{split_all_morphemes, tokenize_text_with_subset};
+use super::split::split_all_morphemes;
+use super::tokenize::tokenize_text_with_subset;
 
 #[repr(C)]
 pub struct TokenizerHandle {
