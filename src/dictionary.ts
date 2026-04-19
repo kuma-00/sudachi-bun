@@ -1,4 +1,4 @@
-import { existsSync, readdirSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
 import { dirname, join, resolve, sep } from "node:path";
 import { createTokenizer, type Tokenizer } from "./core.ts";
@@ -53,6 +53,9 @@ export type DictionarySetupResult = {
   archivePath: string;
   extractedDir: string;
   dictPath: string;
+  resourceDir: string;
+  defaultConfigPath: string;
+  resourceFiles: string[];
   downloaded: boolean;
   sourceUrl: string;
 };
@@ -61,6 +64,17 @@ const GITHUB_RELEASES_API =
   "https://api.github.com/repos/WorksApplications/SudachiDict/releases";
 const DEFAULT_VERSION = "latest";
 const GITHUB_API_VERSION = "2022-11-28";
+const DEFAULT_RESOURCE_DIR_NAME = "resources";
+const DEFAULT_CONFIG_FILE_NAME = "sudachi.json";
+const FALLBACK_SUDACHI_RS_REVISION = "7e2f287";
+const SUDACHI_RS_RESOURCE_FILES = [
+  "sudachi.json",
+  "char.def",
+  "rewrite.def",
+  "unk.def",
+] as const;
+const SUDACHI_RS_REVISION = resolveSudachiRsRevision();
+const SUDACHI_RS_RAW_RESOURCES_BASE_URL = `https://raw.githubusercontent.com/WorksApplications/sudachi.rs/${SUDACHI_RS_REVISION}/resources`;
 const GENERIC_DICT_FILES = ["system.dic", "system.dic.test"] as const;
 const DICT_FILE_BY_TYPE: Record<DictionaryType, string> = {
   core: "system_core.dic",
@@ -524,6 +538,62 @@ async function ensureDirectory(path: string): Promise<void> {
   await mkdir(path, { recursive: true });
 }
 
+function defaultResourceDir(outDir: string): string {
+  return join(outDir, DEFAULT_RESOURCE_DIR_NAME);
+}
+
+function defaultConfigPath(outDir: string): string {
+  return join(defaultResourceDir(outDir), DEFAULT_CONFIG_FILE_NAME);
+}
+
+function readTextFileOrEmpty(path: string): string {
+  try {
+    return readFileSync(path, "utf8");
+  } catch {
+    return "";
+  }
+}
+
+function revisionFromCargoLock(content: string): string | null {
+  const sourceMatch =
+    /source = "git\+https:\/\/github\.com\/WorksApplications\/sudachi\.rs\.git\?rev=[^#"]*#([0-9a-f]{7,40})"/.exec(
+      content,
+    );
+  if (sourceMatch?.[1]) {
+    return sourceMatch[1];
+  }
+
+  return null;
+}
+
+function revisionFromCargoToml(content: string): string | null {
+  const revMatch = /sudachi\s*=\s*\{[^}]*\brev\s*=\s*"([0-9a-f]{7,40})"/.exec(
+    content,
+  );
+  if (revMatch?.[1]) {
+    return revMatch[1];
+  }
+
+  return null;
+}
+
+function resolveSudachiRsRevision(): string {
+  const cargoLockPath = resolve(import.meta.dir, "../sudachi-ffi/Cargo.lock");
+  const cargoTomlPath = resolve(import.meta.dir, "../sudachi-ffi/Cargo.toml");
+
+  const fromLock = revisionFromCargoLock(readTextFileOrEmpty(cargoLockPath));
+  if (fromLock) {
+    return fromLock;
+  }
+
+  const fromToml = revisionFromCargoToml(readTextFileOrEmpty(cargoTomlPath));
+  if (fromToml) {
+    return fromToml;
+  }
+
+  return FALLBACK_SUDACHI_RS_REVISION;
+}
+
 function toAbsoluteIfInsideOutDir(
   outDir: string,
   candidate: string,
@@ -611,6 +681,80 @@ export async function downloadArchive(
   await Bun.write(archivePath, body);
 }
 
+async function downloadResourceFile(
+  url: string,
+  outputPath: string,
+): Promise<void> {
+  let response: Response;
+  try {
+    response = await fetch(url);
+  } catch (error) {
+    throw new Error(
+      `Failed to fetch Sudachi resources file from ${url}.\n` +
+        `If you are offline, connect to the network and retry.\n` +
+        `Original error: ${(error as Error).message}`,
+    );
+  }
+
+  if (!response.ok) {
+    throw new Error(
+      `Sudachi resources download failed from ${url} with HTTP ${response.status} ${response.statusText}`,
+    );
+  }
+
+  const body = await response.arrayBuffer();
+  await Bun.write(outputPath, body);
+}
+
+async function setupSudachiResources(outDir: string): Promise<{
+  resourceDir: string;
+  defaultConfigPath: string;
+  resourceFiles: string[];
+}> {
+  const resourceDir = defaultResourceDir(outDir);
+  await ensureDirectory(resourceDir);
+
+  for (const file of SUDACHI_RS_RESOURCE_FILES) {
+    const sourceUrl = `${SUDACHI_RS_RAW_RESOURCES_BASE_URL}/${file}`;
+    const outputPath = join(resourceDir, file);
+    await downloadResourceFile(sourceUrl, outputPath);
+  }
+
+  return {
+    resourceDir: toAbsolute(resourceDir),
+    defaultConfigPath: toAbsolute(defaultConfigPath(outDir)),
+    resourceFiles: SUDACHI_RS_RESOURCE_FILES.map((file) =>
+      toAbsolute(join(resourceDir, file)),
+    ),
+  };
+}
+
+async function ensureSudachiResources(outDir: string): Promise<{
+  resourceDir: string;
+  defaultConfigPath: string;
+  resourceFiles: string[];
+}> {
+  const resourceDir = defaultResourceDir(outDir);
+  await ensureDirectory(resourceDir);
+
+  for (const file of SUDACHI_RS_RESOURCE_FILES) {
+    const outputPath = join(resourceDir, file);
+    if (existsSync(outputPath)) {
+      continue;
+    }
+    const sourceUrl = `${SUDACHI_RS_RAW_RESOURCES_BASE_URL}/${file}`;
+    await downloadResourceFile(sourceUrl, outputPath);
+  }
+
+  return {
+    resourceDir: toAbsolute(resourceDir),
+    defaultConfigPath: toAbsolute(defaultConfigPath(outDir)),
+    resourceFiles: SUDACHI_RS_RESOURCE_FILES.map((file) =>
+      toAbsolute(join(resourceDir, file)),
+    ),
+  };
+}
+
 export async function unzipArchive(
   archivePath: string,
   outDir: string,
@@ -693,6 +837,8 @@ export async function setupDictionary(
     ? dirname(dictPathFromArchive)
     : (installed?.baseDir ?? fallbackExtractedDir);
   const dictPath = dictPathCandidate;
+  console.log("Downloading resources");
+  const resources = await setupSudachiResources(outDir);
 
   console.log(`Dictionary setup complete: ${outDir}`);
   return {
@@ -702,6 +848,9 @@ export async function setupDictionary(
     archivePath: toAbsolute(archivePath),
     extractedDir: toAbsolute(extractedDir),
     dictPath: toAbsolute(dictPath),
+    resourceDir: resources.resourceDir,
+    defaultConfigPath: resources.defaultConfigPath,
+    resourceFiles: resources.resourceFiles,
     downloaded: true,
     sourceUrl: download.url,
   };
@@ -719,6 +868,7 @@ export async function ensureDictionary(
       url: options.url,
     });
     if (installed) {
+      const resources = await ensureSudachiResources(outDir);
       return {
         type: installed.type,
         version: installed.version ?? normalizeVersion(options.version),
@@ -726,6 +876,9 @@ export async function ensureDictionary(
         archivePath: "",
         extractedDir: toAbsolute(installed.baseDir),
         dictPath: toAbsolute(installed.dictPath),
+        resourceDir: resources.resourceDir,
+        defaultConfigPath: resources.defaultConfigPath,
+        resourceFiles: resources.resourceFiles,
         downloaded: false,
         sourceUrl: options.url ?? "",
       };

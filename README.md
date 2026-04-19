@@ -21,6 +21,9 @@ bun install
 bun run setup:dict -- --type core --version latest --out ./dict
 ```
 
+`setup:dict` は辞書アーカイブに加えて `sudachi.rs` の `resources` も `./dict/resources` にダウンロードします。  
+辞書ファイルと `resources` は分離して保持され、`resources/system.dic` は作成しません。必要な場合は `dictPath` / `resourceDir` / `configPath` を利用側で明示指定してください。
+
 `bun install` 時にネイティブライブラリを自動準備します（環境一致の配布バイナリをダウンロードし、見つからない場合は `cargo build --release` を試行）。
 
 利用可能な環境変数:

@@ -21,9 +21,35 @@ import {
 
 import { parseSetupDictionaryArgs } from "./setup-dict.ts";
 
+const SUDACHI_RS_RESOURCE_URL_PREFIX =
+  "https://raw.githubusercontent.com/WorksApplications/sudachi.rs/";
+
 afterEach(() => {
   mock.restore();
 });
+
+function isSudachiResourceUrl(url: string): boolean {
+  return (
+    url.startsWith(SUDACHI_RS_RESOURCE_URL_PREFIX) &&
+    url.includes("/resources/")
+  );
+}
+
+function createBinaryOkFetch(payload: Uint8Array): typeof fetch {
+  return ((..._args: Parameters<typeof fetch>) =>
+    Promise.resolve(
+      new Response(payload.buffer, { status: 200 }),
+    )) as typeof fetch;
+}
+
+function createResourceFiles(outDir: string): void {
+  const resourceDir = join(outDir, "resources");
+  mkdirSync(resourceDir, { recursive: true });
+  writeFileSync(join(resourceDir, "sudachi.json"), "{}");
+  writeFileSync(join(resourceDir, "char.def"), "dummy");
+  writeFileSync(join(resourceDir, "rewrite.def"), "dummy");
+  writeFileSync(join(resourceDir, "unk.def"), "dummy");
+}
 
 function mockUnzipFlow(
   archiveEntries: string[],
@@ -121,8 +147,8 @@ test("downloadArchive saves fetched bytes to the specified archive path", async 
   const archivePath = join(outDir, "dict.zip");
   const payload = new Uint8Array([0x50, 0x4b, 0x03, 0x04, 0x00]);
 
-  const fetchSpy = spyOn(globalThis, "fetch").mockResolvedValue(
-    new Response(payload.buffer, { status: 200 }) as never,
+  const fetchSpy = spyOn(globalThis, "fetch").mockImplementation(
+    createBinaryOkFetch(payload),
   );
 
   await downloadArchive(
@@ -154,8 +180,8 @@ test("setupDictionary downloads and expands the archive specified by --url", asy
   const payload = new Uint8Array([0x50, 0x4b, 0x03, 0x04, 0x00]);
   const archivePath = join(outDir, "custom-dict.zip");
 
-  const fetchSpy = spyOn(globalThis, "fetch").mockResolvedValue(
-    new Response(payload.buffer, { status: 200 }) as never,
+  const fetchSpy = spyOn(globalThis, "fetch").mockImplementation(
+    createBinaryOkFetch(payload),
   );
   const spawnSpy = spyOn(Bun, "spawn").mockImplementation((input: unknown) => {
     const args = Array.isArray(input)
@@ -185,7 +211,7 @@ test("setupDictionary downloads and expands the archive specified by --url", asy
   });
   const logSpy = spyOn(console, "log").mockImplementation(() => {});
 
-  await setupDictionary({
+  const result = await setupDictionary({
     type: "core",
     version: "latest",
     outDir,
@@ -200,15 +226,25 @@ test("setupDictionary downloads and expands the archive specified by --url", asy
     ["unzip", "-o", archivePath, "-d", outDir],
     { stdout: "inherit", stderr: "inherit" },
   );
+  expect(result.resourceDir).toBe(join(outDir, "resources"));
+  expect(result.defaultConfigPath).toBe(
+    join(outDir, "resources", "sudachi.json"),
+  );
+  expect(result.resourceFiles).toEqual([
+    join(outDir, "resources", "sudachi.json"),
+    join(outDir, "resources", "char.def"),
+    join(outDir, "resources", "rewrite.def"),
+    join(outDir, "resources", "unk.def"),
+  ]);
+  expect(existsSync(join(outDir, "resources", "system.dic"))).toBe(false);
+  expect(existsSync(join(outDir, "resources", "sudachi.json"))).toBe(true);
 });
 
 test("setupDictionary resolves dictPath from extracted files even when --url filename has no version", async () => {
   const outDir = mkdtempSync(join(tmpdir(), "sudachi-dict-setup-resolve-"));
   const payload = new Uint8Array([0x50, 0x4b, 0x03, 0x04, 0x00]);
 
-  spyOn(globalThis, "fetch").mockResolvedValue(
-    new Response(payload.buffer, { status: 200 }) as never,
-  );
+  spyOn(globalThis, "fetch").mockImplementation(createBinaryOkFetch(payload));
   mockUnzipFlow(
     ["sudachi-dictionary-20260116/system_core.dic"],
     (outputDir) => {
@@ -246,9 +282,7 @@ test("setupDictionary prefers overwritten root dictionary when no new path is ad
   writeFileSync(olderVersionPath, "older");
   writeFileSync(rootDictPath, "before");
 
-  spyOn(globalThis, "fetch").mockResolvedValue(
-    new Response(payload.buffer, { status: 200 }) as never,
-  );
+  spyOn(globalThis, "fetch").mockImplementation(createBinaryOkFetch(payload));
   mockUnzipFlow(["system_core.dic"], () => {
     writeFileSync(rootDictPath, "after");
   });
@@ -271,6 +305,7 @@ test("ensureDictionary reuses an already-installed dictionary without network/do
   const dictPath = join(extractDir, "system_core.dic");
   mkdirSync(extractDir, { recursive: true });
   writeFileSync(dictPath, "dummy");
+  createResourceFiles(outDir);
 
   const fetchSpy = spyOn(globalThis, "fetch");
   const spawnSpy = spyOn(Bun, "spawn");
@@ -293,6 +328,7 @@ test("ensureDictionary reuses an existing dictionary even when --url is explicit
   const existingDictPath = join(existingExtractDir, "system_core.dic");
   mkdirSync(existingExtractDir, { recursive: true });
   writeFileSync(existingDictPath, "old-dummy");
+  createResourceFiles(outDir);
 
   const fetchSpy = spyOn(globalThis, "fetch");
   const spawnSpy = spyOn(Bun, "spawn");
@@ -345,6 +381,14 @@ test("ensureDictionary downloads and extracts when no installed dictionary exist
       ) as Promise<Response>;
     }
 
+    if (isSudachiResourceUrl(endpoint)) {
+      return Promise.resolve(
+        new Response("{}", {
+          status: 200,
+        }),
+      ) as Promise<Response>;
+    }
+
     throw new Error(`unexpected fetch url: ${endpoint}`);
   }) as typeof fetch);
 
@@ -385,6 +429,8 @@ test("ensureDictionary downloads and extracts when no installed dictionary exist
 
   expect(result.downloaded).toBe(true);
   expect(existsSync(result.dictPath)).toBe(true);
+  expect(existsSync(join(outDir, "resources", "sudachi.json"))).toBe(true);
+  expect(existsSync(join(outDir, "resources", "system.dic"))).toBe(false);
   expect(fetchSpy).toHaveBeenCalled();
   expect(spawnSpy).toHaveBeenCalled();
 });
@@ -398,9 +444,7 @@ test("setupDictionary throws when archive does not contain the expected dictiona
   mkdirSync(existingDir, { recursive: true });
   writeFileSync(join(existingDir, "system_core.dic"), "old-dummy");
 
-  spyOn(globalThis, "fetch").mockResolvedValue(
-    new Response(payload.buffer, { status: 200 }) as never,
-  );
+  spyOn(globalThis, "fetch").mockImplementation(createBinaryOkFetch(payload));
   spyOn(Bun, "spawn").mockImplementation((input: unknown) => {
     const args = Array.isArray(input)
       ? input
@@ -436,9 +480,7 @@ test("setupDictionary accepts Rust-style system.dic paths from custom archives",
   const outDir = mkdtempSync(join(tmpdir(), "sudachi-dict-setup-system-dic-"));
   const payload = new Uint8Array([0x50, 0x4b, 0x03, 0x04, 0x00]);
 
-  spyOn(globalThis, "fetch").mockResolvedValue(
-    new Response(payload.buffer, { status: 200 }) as never,
-  );
+  spyOn(globalThis, "fetch").mockImplementation(createBinaryOkFetch(payload));
   mockUnzipFlow(["sudachi/resources/system.dic"], (outputDir) => {
     const extracted = join(outputDir, "sudachi", "resources");
     mkdirSync(extracted, { recursive: true });
@@ -465,6 +507,7 @@ test("ensureDictionary reuses Rust-style system.dic without downloading", async 
   const dictPath = join(versionDir, "system.dic");
   mkdirSync(versionDir, { recursive: true });
   writeFileSync(dictPath, "dummy");
+  createResourceFiles(outDir);
 
   const fetchSpy = spyOn(globalThis, "fetch");
   const spawnSpy = spyOn(Bun, "spawn");
@@ -479,5 +522,44 @@ test("ensureDictionary reuses Rust-style system.dic without downloading", async 
   expect(result.downloaded).toBe(false);
   expect(result.dictPath).toBe(dictPath);
   expect(fetchSpy).not.toHaveBeenCalled();
+  expect(spawnSpy).not.toHaveBeenCalled();
+});
+
+test("ensureDictionary downloads only missing resources when dictionary is already installed", async () => {
+  const outDir = mkdtempSync(
+    join(tmpdir(), "sudachi-dict-ensure-missing-resources-"),
+  );
+  const versionDir = join(outDir, "sudachi-dictionary-20260116");
+  const dictPath = join(versionDir, "system_core.dic");
+  mkdirSync(versionDir, { recursive: true });
+  writeFileSync(dictPath, "dummy");
+
+  const fetchSpy = spyOn(globalThis, "fetch").mockImplementation(((
+    url: string | URL | Request,
+  ) => {
+    const endpoint = String(url);
+    if (isSudachiResourceUrl(endpoint)) {
+      return Promise.resolve(
+        new Response("{}", { status: 200 }),
+      ) as Promise<Response>;
+    }
+
+    throw new Error(`unexpected fetch url: ${endpoint}`);
+  }) as typeof fetch);
+  const spawnSpy = spyOn(Bun, "spawn");
+
+  const result = await ensureDictionary({
+    type: "core",
+    version: "latest",
+    outDir,
+  });
+
+  expect(result.downloaded).toBe(false);
+  expect(result.dictPath).toBe(dictPath);
+  expect(existsSync(join(outDir, "resources", "sudachi.json"))).toBe(true);
+  expect(existsSync(join(outDir, "resources", "char.def"))).toBe(true);
+  expect(existsSync(join(outDir, "resources", "rewrite.def"))).toBe(true);
+  expect(existsSync(join(outDir, "resources", "unk.def"))).toBe(true);
+  expect(fetchSpy).toHaveBeenCalled();
   expect(spawnSpy).not.toHaveBeenCalled();
 });
