@@ -1,0 +1,65 @@
+name: Release Assets
+
+on:
+  release:
+    types:
+      - published
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag to upload assets to (e.g. v1.2.3)
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  upload-native-assets:
+    name: Build and upload (${{ matrix.name }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Linux x86_64
+            os: ubuntu-24.04
+            target: x86_64-unknown-linux-gnu
+            lib_ext: so
+            asset_name: libsudachi_ffi-linux-x86_64.so
+          - name: macOS arm64
+            os: macos-14
+            target: aarch64-apple-darwin
+            lib_ext: dylib
+            asset_name: libsudachi_ffi-darwin-arm64.dylib
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2.8.1
+        with:
+          workspaces: sudachi-ffi -> target
+
+      - name: Build native library
+        working-directory: sudachi-ffi
+        run: cargo build --release --target ${{ matrix.target }}
+
+      - name: Prepare release asset
+        run: |
+          mkdir -p dist
+          cp "sudachi-ffi/target/${{ matrix.target }}/release/libsudachi_ffi.${{ matrix.lib_ext }}" "dist/${{ matrix.asset_name }}"
+
+      - name: Upload release asset
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.event.release.tag_name }}
+          files: dist/${{ matrix.asset_name }}

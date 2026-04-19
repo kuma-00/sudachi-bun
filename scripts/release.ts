@@ -52,61 +52,6 @@ if (head !== upstream) {
   process.exit(1);
 }
 
-const runsResult =
-  await $`gh run list --workflow ci.yml --commit ${head} --json event,status,conclusion,createdAt,headBranch --limit 20`.nothrow();
-if (runsResult.exitCode !== 0) {
-  console.error(
-    `Failed to get CI run status from GitHub CLI (exit code ${runsResult.exitCode}). Check gh authentication/network and retry.`,
-  );
-  process.exit(1);
-}
-type WorkflowRun = {
-  event: string;
-  status: string;
-  conclusion: string | null;
-  createdAt: string;
-  headBranch: string;
-};
-let runs: WorkflowRun[];
-try {
-  runs = JSON.parse(runsResult.stdout.toString()) as WorkflowRun[];
-} catch {
-  console.error("Failed to parse CI run response from GitHub CLI.");
-  process.exit(1);
-}
-const pushRuns = runs
-  .filter((run) => run.event === "push" && run.headBranch === branch)
-  .sort(
-    (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
-  );
-
-if (pushRuns.length === 0) {
-  console.error(
-    `No push CI runs found for this commit on ${branch}. Wait for CI to start before releasing.`,
-  );
-  process.exit(1);
-}
-
-const latestPushRun = pushRuns[0];
-if (!latestPushRun) {
-  console.error(
-    `No push CI runs found for this commit on ${branch}. Wait for CI to start before releasing.`,
-  );
-  process.exit(1);
-}
-if (latestPushRun.status !== "completed") {
-  console.error(
-    `Latest push CI run is ${latestPushRun.status}. Wait for CI to complete before releasing.`,
-  );
-  process.exit(1);
-}
-if (latestPushRun.conclusion !== "success") {
-  console.error(
-    `Latest push CI run concluded with "${latestPushRun.conclusion ?? "null"}". Fix CI failures before releasing.`,
-  );
-  process.exit(1);
-}
-
 const localTag =
   await $`git rev-parse --verify --quiet refs/tags/${tag}`.nothrow();
 if (localTag.exitCode === 0) {

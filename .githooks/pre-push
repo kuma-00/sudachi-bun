@@ -1,0 +1,50 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+resolve_dict_path() {
+  local explicit="${SUDACHI_TEST_DICT_PATH:-${SUDACHI_DICT_PATH:-${SUDACHI_DICTIONARY_PATH:-}}}"
+  if [ -n "$explicit" ] && [ -f "$explicit" ]; then
+    echo "$explicit"
+    return 0
+  fi
+
+  if [ -f "dict/system_core.dic" ]; then
+    echo "dict/system_core.dic"
+    return 0
+  fi
+
+  local nested
+  nested="$(find dict -type f -path '*/system_core.dic' 2>/dev/null | head -n 1 || true)"
+  if [ -n "$nested" ]; then
+    echo "$nested"
+    return 0
+  fi
+
+  return 1
+}
+
+if ! dict_path="$(resolve_dict_path)"; then
+  echo "[pre-push] Dictionary not found."
+  echo "[pre-push] Run: bun run setup:dict -- --type core --version <version> --out ./dict"
+  echo "[pre-push] Or set SUDACHI_TEST_DICT_PATH to an existing dictionary file."
+  exit 1
+fi
+export SUDACHI_TEST_DICT_PATH="$dict_path"
+echo "[pre-push] Using dictionary: $SUDACHI_TEST_DICT_PATH"
+
+echo "[pre-push] Running bun test"
+bun test
+
+echo "[pre-push] Running sudachi-ffi cargo test"
+(cd sudachi-ffi && cargo test)
+
+echo "[pre-push] Running sudachi-ffi cargo clippy"
+(cd sudachi-ffi && cargo clippy)
+
+echo "[pre-push] Running TypeScript type check"
+bunx tsc --noEmit
+
+echo "[pre-push] Running biome check"
+bun run biome:check
+
+echo "[pre-push] All checks passed"
