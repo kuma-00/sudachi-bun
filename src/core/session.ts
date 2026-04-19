@@ -6,6 +6,7 @@ import type {
   NativeLookupLibrary,
   NativeSudachiLibrary,
   PosMatcherResultLayout,
+  PosTupleResultLayout,
 } from "../native/types.ts";
 import {
   loadLookupLibrary,
@@ -13,6 +14,7 @@ import {
   readLookupResultLayout,
   readMorphemeResultLayout,
   readPosMatcherResultLayout,
+  readPosTupleResultLayout,
 } from "../native.ts";
 import { openNativeHandleSession } from "../native-session.ts";
 import { SudachiError, type TokenizerOptions } from "../types.ts";
@@ -60,6 +62,7 @@ export class TokenizerSessionManager {
   #lookupLibrary: NativeLookupLibrary | null;
   #lookupLayout: LookupResultLayout | null;
   #posMatcherLayout: PosMatcherResultLayout | null;
+  #posTupleLayout: PosTupleResultLayout | null;
   #gateway: TokenizerGateway | null;
   #loadOptions: TokenizerOptions;
 
@@ -72,6 +75,7 @@ export class TokenizerSessionManager {
     this.#lookupLibrary = null;
     this.#lookupLayout = null;
     this.#posMatcherLayout = null;
+    this.#posTupleLayout = null;
     this.#gateway = null;
     this.#loadOptions = { ...options };
   }
@@ -129,6 +133,22 @@ export class TokenizerSessionManager {
     return layout;
   }
 
+  getPosTupleLayout(): PosTupleResultLayout | null {
+    const { library } = this.getOpenSession();
+
+    if (library.symbols.sudachi_get_pos_tuple_result_layout === undefined) {
+      return null;
+    }
+
+    if (this.#posTupleLayout !== null) {
+      return this.#posTupleLayout;
+    }
+
+    const layout = readPosTupleResultLayout(library);
+    this.#posTupleLayout = layout;
+    return layout;
+  }
+
   getGateway(): TokenizerGateway {
     this.getOpenSession();
 
@@ -140,6 +160,7 @@ export class TokenizerSessionManager {
       getOpenSession: () => this.getOpenSession(),
       getLookupSession: () => this.getLookupSession(),
       getPosMatcherLayout: () => this.getPosMatcherLayout(),
+      getPosTupleLayout: () => this.getPosTupleLayout(),
     });
     this.#gateway = gateway;
     return gateway;
@@ -157,6 +178,7 @@ export class TokenizerSessionManager {
 
     this.#lookupLayout = null;
     this.#posMatcherLayout = null;
+    this.#posTupleLayout = null;
     this.#gateway = null;
 
     if (this.#handle !== null) {

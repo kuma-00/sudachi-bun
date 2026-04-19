@@ -156,6 +156,18 @@ fn lookup_layout_version_is_stable() {
 }
 
 #[test]
+fn free_pos_tuple_result_accepts_null() {
+    free_pos_tuple_result_array(ptr::null_mut());
+}
+
+#[test]
+fn pos_tuple_layout_version_is_stable() {
+    let layout = pos_tuple_result_layout();
+    assert_eq!(layout.layout_version, POS_TUPLE_RESULT_LAYOUT_VERSION);
+    assert!(layout.result_size > 0);
+}
+
+#[test]
 fn free_sentence_span_array_accepts_null() {
     free_sentence_span_array(ptr::null_mut());
 }

@@ -54,6 +54,10 @@ export const TOKENIZER_NATIVE_SYMBOL_DEFS = {
     args: ["ptr", "cstring", "ptr"],
     returns: "i32",
   },
+  sudachi_resolve_pos_id: {
+    args: ["ptr", "u16", "ptr"],
+    returns: "i32",
+  },
   sudachi_build_system_dictionary: {
     args: ["cstring", "ptr", "usize", "cstring", "cstring", "ptr"],
     returns: "i32",
@@ -74,6 +78,10 @@ export const TOKENIZER_NATIVE_SYMBOL_DEFS = {
     args: ["ptr"],
     returns: "void",
   },
+  sudachi_free_pos_tuple_result: {
+    args: ["ptr"],
+    returns: "void",
+  },
   sudachi_free_dictionary_build_report: {
     args: ["ptr"],
     returns: "void",
@@ -91,6 +99,10 @@ export const TOKENIZER_NATIVE_SYMBOL_DEFS = {
     returns: "i32",
   },
   sudachi_get_pos_matcher_result_layout: {
+    args: ["ptr"],
+    returns: "i32",
+  },
+  sudachi_get_pos_tuple_result_layout: {
     args: ["ptr"],
     returns: "i32",
   },

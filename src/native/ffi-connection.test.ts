@@ -247,7 +247,7 @@ nativeTest(
 
     try {
       const morphemeLayout = readMorphemeResultLayout(tokenizerLibrary);
-      expect(morphemeLayout.layoutVersion).toBe(3);
+      expect(morphemeLayout.layoutVersion).toBe(4);
       expect(morphemeLayout.resultSize).toBeGreaterThan(0);
       expect([0, 1]).toContain(morphemeLayout.arrayLayoutKind);
 
@@ -257,13 +257,13 @@ nativeTest(
       expect([0, 1]).toContain(posMatcherLayout.arrayLayoutKind);
 
       const lookupLayout = readLookupResultLayout(lookupLibrary);
-      expect(lookupLayout.layoutVersion).toBe(1);
+      expect(lookupLayout.layoutVersion).toBe(2);
       expect(lookupLayout.resultSize).toBeGreaterThan(0);
       expect([0, 1]).toContain(lookupLayout.arrayLayoutKind);
 
       const pretokenizedLayout =
         readPretokenizedResultLayout(pretokenizerLibrary);
-      expect(pretokenizedLayout.layoutVersion).toBe(1);
+      expect(pretokenizedLayout.layoutVersion).toBe(2);
       expect(pretokenizedLayout.resultSize).toBeGreaterThan(0);
       expect([0, 1]).toContain(pretokenizedLayout.arrayLayoutKind);
 

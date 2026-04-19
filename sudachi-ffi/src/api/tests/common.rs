@@ -2,7 +2,7 @@ use super::super::*;
 use crate::error::OK;
 use crate::result::{
     DictionaryBuildReportArray, LookupResultArray, MorphemeResult, MorphemeResultArray,
-    PosMatcherResultArray, PretokenizedResultArray,
+    PosMatcherResultArray, PosTupleResultArray, PretokenizedResultArray,
 };
 use std::env;
 use std::ffi::{CStr, CString};
@@ -388,6 +388,22 @@ pub(super) fn collect_pos_matcher_ids(result: *mut PosMatcherResultArray) -> Vec
         }
         let items = std::slice::from_raw_parts(array.items, array.len);
         items.to_vec()
+    }
+}
+
+pub(super) fn collect_pos_tuple_values(result: *mut PosTupleResultArray) -> Vec<String> {
+    assert!(!result.is_null());
+
+    unsafe {
+        let array = &*result;
+        if array.len == 0 {
+            return Vec::new();
+        }
+        let items = std::slice::from_raw_parts(array.items, array.len);
+        items
+            .iter()
+            .map(|item| CStr::from_ptr(*item).to_str().unwrap().to_owned())
+            .collect()
     }
 }
 

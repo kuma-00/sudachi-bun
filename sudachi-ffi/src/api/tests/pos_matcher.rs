@@ -101,3 +101,50 @@ fn compile_pos_matcher_rejects_raw_control_char_in_json_string() {
         );
     });
 }
+
+#[test]
+fn resolve_pos_id_returns_pos_tuple_for_valid_id() {
+    with_test_tokenizer(|handle| {
+        let mut lookup_result = ptr::null_mut();
+        let text = CString::new("東京都").unwrap();
+        let status = sudachi_lookup(
+            handle,
+            text.as_ptr(),
+            Projection::Surface as i32,
+            &mut lookup_result,
+        );
+        assert_eq!(status, crate::error::OK, "{}", last_error_message());
+        let lookup_values = collect_lookup_values(lookup_result);
+        sudachi_free_lookup_result(lookup_result);
+
+        let mut out_result = ptr::null_mut();
+        let pos_id = lookup_values[0].5;
+        let status = sudachi_resolve_pos_id(handle, pos_id, &mut out_result);
+        assert_eq!(status, crate::error::OK, "{}", last_error_message());
+
+        let tuple = collect_pos_tuple_values(out_result);
+        sudachi_free_pos_tuple_result(out_result);
+
+        assert_eq!(
+            tuple,
+            lookup_values[0]
+                .1
+                .split(',')
+                .map(|part| part.to_string())
+                .collect::<Vec<_>>()
+        );
+    });
+}
+
+#[test]
+fn resolve_pos_id_returns_empty_for_out_of_range_id() {
+    with_test_tokenizer(|handle| {
+        let mut out_result = ptr::null_mut();
+        let status = sudachi_resolve_pos_id(handle, u16::MAX, &mut out_result);
+        assert_eq!(status, crate::error::OK, "{}", last_error_message());
+
+        let tuple = collect_pos_tuple_values(out_result);
+        sudachi_free_pos_tuple_result(out_result);
+        assert!(tuple.is_empty());
+    });
+}

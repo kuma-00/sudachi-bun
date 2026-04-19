@@ -3,9 +3,9 @@ use std::mem::{offset_of, size_of};
 use super::{
     DictionaryBuildPartReport, DictionaryBuildReportArray, DictionaryBuildReportLayout,
     LookupResultArray, LookupResultItem, LookupResultLayout, MorphemeResult, MorphemeResultArray,
-    MorphemeResultLayout, PosMatcherResultArray, PosMatcherResultLayout, PretokenizedResult,
-    PretokenizedResultArray, PretokenizedResultLayout, SentenceSpan, SentenceSpanArray,
-    SentenceSpanLayout,
+    MorphemeResultLayout, PosMatcherResultArray, PosMatcherResultLayout, PosTupleResultArray,
+    PosTupleResultLayout, PretokenizedResult, PretokenizedResultArray, PretokenizedResultLayout,
+    SentenceSpan, SentenceSpanArray, SentenceSpanLayout,
 };
 
 pub const DICTIONARY_BUILD_REPORT_ARRAY_LAYOUT_CONTIGUOUS: u64 = 0;
@@ -16,6 +16,8 @@ pub const LOOKUP_RESULT_ARRAY_LAYOUT_CONTIGUOUS: u64 = 0;
 pub const LOOKUP_RESULT_LAYOUT_VERSION: u64 = 2;
 pub const POS_MATCHER_RESULT_ARRAY_LAYOUT_CONTIGUOUS: u64 = 0;
 pub const POS_MATCHER_RESULT_LAYOUT_VERSION: u64 = 1;
+pub const POS_TUPLE_RESULT_ARRAY_LAYOUT_CONTIGUOUS: u64 = 0;
+pub const POS_TUPLE_RESULT_LAYOUT_VERSION: u64 = 1;
 pub const PRETOKENIZED_RESULT_ARRAY_LAYOUT_CONTIGUOUS: u64 = 0;
 pub const PRETOKENIZED_RESULT_LAYOUT_VERSION: u64 = 2;
 pub const SENTENCE_SPAN_ARRAY_LAYOUT_CONTIGUOUS: u64 = 0;
@@ -190,6 +192,24 @@ impl PosMatcherResultLayout {
 }
 
 impl Default for PosMatcherResultLayout {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl PosTupleResultLayout {
+    pub const fn new() -> Self {
+        Self {
+            layout_version: POS_TUPLE_RESULT_LAYOUT_VERSION,
+            array_layout_kind: POS_TUPLE_RESULT_ARRAY_LAYOUT_CONTIGUOUS,
+            array_items_offset: offset_of!(PosTupleResultArray, items) as u64,
+            array_len_offset: offset_of!(PosTupleResultArray, len) as u64,
+            result_size: size_of::<*mut std::os::raw::c_char>() as u64,
+        }
+    }
+}
+
+impl Default for PosTupleResultLayout {
     fn default() -> Self {
         Self::new()
     }

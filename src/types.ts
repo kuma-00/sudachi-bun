@@ -100,6 +100,15 @@ export interface WordInfo {
   wordStructure: string[];
 }
 
+export type PosTuple = readonly [
+  string,
+  string,
+  string,
+  string,
+  string,
+  string,
+];
+
 export interface Morpheme {
   surface: string;
   headWordLength: number;
@@ -120,6 +129,7 @@ export interface Morpheme {
   splitB: string[];
   wordStructure: string[];
   synonymGroupIds: number[];
+  partOfSpeech?(): PosTuple | null;
   getWordInfo(): WordInfo;
 }
 

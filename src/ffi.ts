@@ -3,6 +3,7 @@ import type {
   LookupResultLayout,
   MorphemeResultLayout,
   PosMatcherResultLayout,
+  PosTupleResultLayout,
   PretokenizedResultLayout,
   SentenceSpanResultLayout,
 } from "./native/types.ts";
@@ -10,6 +11,7 @@ import type {
   LookupEntry,
   Morpheme,
   MorphemeList,
+  PosTuple,
   PretokenizedToken,
   SudachiErrorCode,
   WordInfo,
@@ -511,6 +513,46 @@ export function readPosMatcherIdArray(
   }
 
   return results;
+}
+
+export function readPosTupleArray(
+  arrayPtr: Pointer,
+  layout: PosTupleResultLayout,
+): PosTuple | null {
+  const entries = readArrayEntries(
+    arrayPtr,
+    layout.arrayItemsOffset,
+    layout.arrayLenOffset,
+    layout.resultSize,
+    layout.arrayLayoutKind,
+    "POS tuple result layout",
+  );
+
+  if (entries.length !== 6) {
+    return null;
+  }
+
+  const values = new Array<string>(entries.length);
+  for (const { entryBase, index } of entries) {
+    values[index] =
+      layout.arrayLayoutKind === 1
+        ? readCString(entryBase)
+        : readCString(toPointer(read.ptr(entryBase, 0)));
+  }
+
+  const [a, b, c, d, e, f] = values;
+  if (
+    a === undefined ||
+    b === undefined ||
+    c === undefined ||
+    d === undefined ||
+    e === undefined ||
+    f === undefined
+  ) {
+    return null;
+  }
+
+  return [a, b, c, d, e, f];
 }
 
 export function readSentenceSpanArray(

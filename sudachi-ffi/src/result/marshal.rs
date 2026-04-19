@@ -16,9 +16,9 @@ use crate::error::{ERR_INTERNAL, ERR_NULL_POINTER, error};
 use super::{
     DictionaryBuildPartReport, DictionaryBuildReportArray, DictionaryBuildReportLayout,
     LookupResultItem, LookupResultLayout, MorphemeResult, MorphemeResultArray,
-    MorphemeResultLayout, PosMatcherResultArray, PosMatcherResultLayout, PretokenizedItem,
-    PretokenizedResult, PretokenizedResultArray, PretokenizedResultLayout, SentenceSpanArray,
-    SentenceSpanLayout,
+    MorphemeResultLayout, PosMatcherResultArray, PosMatcherResultLayout, PosTupleResultArray,
+    PosTupleResultLayout, PretokenizedItem, PretokenizedResult, PretokenizedResultArray,
+    PretokenizedResultLayout, SentenceSpanArray, SentenceSpanLayout,
 };
 
 pub(crate) fn boxed_slice_into_raw_parts<T>(mut boxed: Box<[T]>) -> (*mut T, usize) {
@@ -255,6 +255,13 @@ fn word_id_strings_to_raw_parts(word_ids: Vec<String>) -> Result<(*mut *mut c_ch
         }
     }
     Ok(boxed_slice_into_raw_parts(strings.into_boxed_slice()))
+}
+
+pub(crate) fn strings_to_pos_tuple_result_array(
+    values: Vec<String>,
+) -> Result<Box<PosTupleResultArray>, i32> {
+    let (items, len) = word_id_strings_to_raw_parts(values)?;
+    Ok(Box::new(PosTupleResultArray { items, len }))
 }
 
 struct OwnedFieldsGuard<T> {
@@ -634,6 +641,21 @@ pub(crate) fn free_pos_matcher_result_array(result: *mut PosMatcherResultArray) 
     unsafe {
         let boxed = Box::from_raw(result);
         free_u16_slice(boxed.items, boxed.len);
+    }
+}
+
+pub(crate) fn pos_tuple_result_layout() -> PosTupleResultLayout {
+    PosTupleResultLayout::new()
+}
+
+pub(crate) fn free_pos_tuple_result_array(result: *mut PosTupleResultArray) {
+    if result.is_null() {
+        return;
+    }
+
+    unsafe {
+        let boxed = Box::from_raw(result);
+        free_c_string_slice(boxed.items, boxed.len);
     }
 }
 

@@ -124,6 +124,14 @@ export interface PosMatcherResultLayout {
   resultSize: number;
 }
 
+export interface PosTupleResultLayout {
+  layoutVersion: number;
+  arrayLayoutKind: number;
+  arrayItemsOffset: number;
+  arrayLenOffset: number;
+  resultSize: number;
+}
+
 export interface NativeSudachiLibrary {
   symbols: {
     sudachi_create_tokenizer: (
@@ -196,6 +204,11 @@ export interface NativeSudachiLibrary {
       patternsJson: string,
       outResult: NodeJS.TypedArray | Pointer | null,
     ) => number;
+    sudachi_resolve_pos_id?: (
+      handle: Pointer | NodeJS.TypedArray | null,
+      posId: number,
+      outResult: NodeJS.TypedArray | Pointer | null,
+    ) => number;
     sudachi_build_system_dictionary?: (
       matrixPath: string,
       lexiconPaths: Pointer | NodeJS.TypedArray | null,
@@ -221,6 +234,9 @@ export interface NativeSudachiLibrary {
     sudachi_free_pos_matcher_result: (
       result: Pointer | NodeJS.TypedArray | null,
     ) => void;
+    sudachi_free_pos_tuple_result?: (
+      result: Pointer | NodeJS.TypedArray | null,
+    ) => void;
     sudachi_free_dictionary_build_report?: (
       report: Pointer | NodeJS.TypedArray | null,
     ) => void;
@@ -234,6 +250,9 @@ export interface NativeSudachiLibrary {
       outLayout: NodeJS.TypedArray | Pointer | null,
     ) => number;
     sudachi_get_pos_matcher_result_layout: (
+      outLayout: NodeJS.TypedArray | Pointer | null,
+    ) => number;
+    sudachi_get_pos_tuple_result_layout?: (
       outLayout: NodeJS.TypedArray | Pointer | null,
     ) => number;
     sudachi_get_last_error: () => CString;

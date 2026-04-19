@@ -271,7 +271,22 @@ pub struct PosMatcherResultArray {
 }
 
 #[repr(C)]
+pub struct PosTupleResultArray {
+    pub items: *mut *mut c_char,
+    pub len: usize,
+}
+
+#[repr(C)]
 pub struct PosMatcherResultLayout {
+    pub layout_version: u64,
+    pub array_layout_kind: u64,
+    pub array_items_offset: u64,
+    pub array_len_offset: u64,
+    pub result_size: u64,
+}
+
+#[repr(C)]
+pub struct PosTupleResultLayout {
     pub layout_version: u64,
     pub array_layout_kind: u64,
     pub array_items_offset: u64,
@@ -443,6 +458,7 @@ pub use layout::{
     LOOKUP_RESULT_ARRAY_LAYOUT_CONTIGUOUS, LOOKUP_RESULT_LAYOUT_VERSION,
     MORPHEME_RESULT_ARRAY_LAYOUT_CONTIGUOUS, MORPHEME_RESULT_LAYOUT_VERSION,
     POS_MATCHER_RESULT_ARRAY_LAYOUT_CONTIGUOUS, POS_MATCHER_RESULT_LAYOUT_VERSION,
+    POS_TUPLE_RESULT_ARRAY_LAYOUT_CONTIGUOUS, POS_TUPLE_RESULT_LAYOUT_VERSION,
     PRETOKENIZED_RESULT_ARRAY_LAYOUT_CONTIGUOUS, PRETOKENIZED_RESULT_LAYOUT_VERSION,
     SENTENCE_SPAN_ARRAY_LAYOUT_CONTIGUOUS, SENTENCE_SPAN_LAYOUT_VERSION,
 };
@@ -452,10 +468,11 @@ pub(crate) use marshal::{
     boxed_slice_into_raw_parts, free_c_string, free_lookup_result_array,
     free_partial_lookup_results, free_partial_pretokenized_results, free_partial_results,
     free_pos_matcher_result_array, free_pretokenized_result_array, free_result_array,
-    free_sentence_span_array, free_u32_slice, lookup_morpheme_to_result, lookup_result_layout,
-    morpheme_list_to_pretokenized_items, morpheme_result_layout, morpheme_to_pretokenized_result,
-    morpheme_to_result, pos_matcher_result_layout, pretokenized_items_to_array,
-    pretokenized_result_layout, require_non_null, sentence_span_layout, write_box_ptr, write_ptr,
-    Utf8OffsetMap, dictionary_build_report_layout, dictionary_build_reports_to_array,
+    free_pos_tuple_result_array, free_sentence_span_array, free_u32_slice, lookup_morpheme_to_result,
+    lookup_result_layout, morpheme_list_to_pretokenized_items, morpheme_result_layout,
+    morpheme_to_pretokenized_result, morpheme_to_result, pos_matcher_result_layout,
+    pos_tuple_result_layout, pretokenized_items_to_array, pretokenized_result_layout,
+    require_non_null, sentence_span_layout, strings_to_pos_tuple_result_array, write_box_ptr,
+    write_ptr, Utf8OffsetMap, dictionary_build_report_layout, dictionary_build_reports_to_array,
     free_dictionary_build_report_array,
 };

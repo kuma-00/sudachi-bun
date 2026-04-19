@@ -89,6 +89,16 @@ type MorphemeListWithInternalCost = Morpheme[] & {
   internalCost: number;
 };
 
+type PosTupleLike = readonly [string, string, string, string, string, string];
+
+type TokenizerWithPosOf = Tokenizer & {
+  posOf(posId: number): PosTupleLike | null;
+};
+
+type MorphemeWithPartOfSpeech = Morpheme & {
+  partOfSpeech(): PosTupleLike;
+};
+
 function attachGetWordInfo(morpheme: Omit<Morpheme, "getWordInfo">): Morpheme {
   const withWordInfo = morpheme as Morpheme;
   const wordInfoSnapshot: WordInfo = {
@@ -902,6 +912,54 @@ test("tokenize with pos uses the subset native symbol and returns the POS string
       subsetTokenizeSpy.mockRestore();
       tokenizeSpy.mockRestore();
     }
+  });
+});
+
+test("tokenizer.posOf returns a six-element tuple for a valid pos id", () => {
+  withTokenizer(({ tokenizer }) => {
+    const withPosOf = tokenizer as TokenizerWithPosOf;
+    expect(typeof withPosOf.posOf).toBe("function");
+    expect(withPosOf.posOf(12)).toEqual([
+      "名詞",
+      "普通名詞",
+      "一般",
+      "*",
+      "*",
+      "*",
+    ]);
+  });
+});
+
+test("tokenizer.posOf returns null for an invalid pos id", () => {
+  withTokenizer(({ tokenizer }) => {
+    const withPosOf = tokenizer as TokenizerWithPosOf;
+    expect(typeof withPosOf.posOf).toBe("function");
+    expect(withPosOf.posOf(999_999)).toBeNull();
+  });
+});
+
+test("morpheme.partOfSpeech coexists with morpheme.pos string", () => {
+  withTokenizer(({ tokenizer }) => {
+    const result = tokenizer.tokenize({
+      text: "東京都に",
+      projection: DEFAULT_PROJECTION,
+      mode: "C",
+      subset: { fields: ["pos"] },
+    });
+    const morpheme = requireDefined(
+      result[0],
+      "result[0]",
+    ) as MorphemeWithPartOfSpeech;
+    expect(morpheme.pos).toBe("名詞,普通名詞,一般,*,*,*");
+    expect(typeof morpheme.partOfSpeech).toBe("function");
+    expect(morpheme.partOfSpeech()).toEqual([
+      "名詞",
+      "普通名詞",
+      "一般",
+      "*",
+      "*",
+      "*",
+    ]);
   });
 });
 

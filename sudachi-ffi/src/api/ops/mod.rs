@@ -43,9 +43,11 @@ pub(crate) use self::sentence::{
 pub(crate) use self::layout::{
     get_dictionary_build_report_layout_impl, get_dictionary_inspection_result_layout_impl,
     get_lookup_result_layout_impl, get_morpheme_result_layout_impl,
-    get_pos_matcher_result_layout_impl, get_pretokenized_result_layout_impl,
+    get_pos_matcher_result_layout_impl, get_pos_tuple_result_layout_impl,
+    get_pretokenized_result_layout_impl,
     get_sentence_span_layout_impl,
 };
+pub(crate) use self::pos_matcher::resolve_pos_id_impl;
 pub(crate) use self::split::{split_morpheme_impl, split_morphemes_impl};
 pub(crate) use self::tokenize::{
     create_stateful_tokenizer_from_tokenizer_impl, stateful_tokenizer_do_tokenize_impl,

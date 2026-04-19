@@ -4,6 +4,7 @@ import {
   readLookupEntryArray,
   readMorphemeArray,
   readPosMatcherIdArray,
+  readPosTupleArray,
 } from "../ffi.ts";
 import { createNativeSudachiError } from "../native/error/mapper.ts";
 import type {
@@ -12,6 +13,7 @@ import type {
   NativeLookupLibrary,
   NativeSudachiLibrary,
   PosMatcherResultLayout,
+  PosTupleResultLayout,
 } from "../native/types.ts";
 import { readOwnedNativeResult } from "../native-session.ts";
 import {
@@ -19,6 +21,7 @@ import {
   type LookupEntry,
   type MorphemeList,
   type PosMatcherPatterns,
+  type PosTuple,
   SudachiError,
   type SurfaceProjection,
   type TokenizeMode,
@@ -56,6 +59,7 @@ interface TokenizerGatewayDeps {
   getOpenSession: () => NativeTokenizerSession;
   getLookupSession: () => NativeLookupSession;
   getPosMatcherLayout: () => PosMatcherResultLayout;
+  getPosTupleLayout: () => PosTupleResultLayout | null;
 }
 
 export interface TokenizerGateway {
@@ -71,6 +75,7 @@ export interface TokenizerGateway {
     options?: InfoSubset,
   ): LookupEntry[];
   compilePosMatcher(patterns: PosMatcherPatterns): number[];
+  posOf?(posId: number): PosTuple | null;
   splitMorpheme(
     sourceText: string,
     sourceMode: TokenizeMode,
@@ -216,6 +221,44 @@ export function createTokenizerGateway(
         (resultPtr) =>
           library.symbols.sudachi_free_pos_matcher_result(resultPtr),
         (resultPtr) => readPosMatcherIdArray(resultPtr, layout),
+      );
+    },
+
+    posOf(posId) {
+      if (!Number.isInteger(posId) || posId < 0 || posId > 0xffff) {
+        return null;
+      }
+
+      const { library, handle } = deps.getOpenSession();
+      const layout = deps.getPosTupleLayout();
+      if (
+        layout === null ||
+        library.symbols.sudachi_resolve_pos_id === undefined ||
+        library.symbols.sudachi_free_pos_tuple_result === undefined
+      ) {
+        return null;
+      }
+
+      const resultOut = new BigUint64Array(1);
+      const status = library.symbols.sudachi_resolve_pos_id(
+        handle,
+        posId,
+        resultOut,
+      );
+      if (status !== 0) {
+        throw createNativeSudachiError(
+          library,
+          status,
+          "POS id resolution failed.",
+        );
+      }
+
+      return readOwnedNativeResult(
+        resultOut,
+        "POS id resolution returned a null result pointer.",
+        (resultPtr) =>
+          library.symbols.sudachi_free_pos_tuple_result?.(resultPtr),
+        (resultPtr) => readPosTupleArray(resultPtr, layout),
       );
     },
 

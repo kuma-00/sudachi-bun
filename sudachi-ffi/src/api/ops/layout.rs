@@ -1,8 +1,9 @@
 use crate::result::{
     DictionaryBuildReportLayout, LookupResultLayout, MorphemeResultLayout, PosMatcherResultLayout,
-    PretokenizedResultLayout, SentenceSpanLayout, dictionary_build_report_layout,
-    lookup_result_layout, morpheme_result_layout, pos_matcher_result_layout,
-    pretokenized_result_layout, sentence_span_layout, write_ptr,
+    PosTupleResultLayout, PretokenizedResultLayout, SentenceSpanLayout,
+    dictionary_build_report_layout, lookup_result_layout, morpheme_result_layout,
+    pos_matcher_result_layout, pos_tuple_result_layout, pretokenized_result_layout,
+    sentence_span_layout, write_ptr,
 };
 
 use super::dictionary::{
@@ -71,6 +72,16 @@ pub(crate) fn get_pos_matcher_result_layout_impl(out_layout: *mut PosMatcherResu
         write_ptr(
             out_layout,
             pos_matcher_result_layout(),
+            "out_layout pointer was null",
+        )
+    })
+}
+
+pub(crate) fn get_pos_tuple_result_layout_impl(out_layout: *mut PosTupleResultLayout) -> i32 {
+    run_ffi(|| {
+        write_ptr(
+            out_layout,
+            pos_tuple_result_layout(),
             "out_layout pointer was null",
         )
     })

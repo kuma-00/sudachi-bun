@@ -271,6 +271,25 @@ Task-07 相当の lookup API も利用できます。
 
 `LookupEntry` は `surface`, `headWordLength`, `pos`, `wordId`, `dictionaryId`, `isOov`, `splitA`, `splitB`, `wordStructure` を持ちます。`headWordLength` は数値、`splitA` / `splitB` / `wordStructure` は word ID 文字列（`(dic, word)` 形式）の配列です。subset で未要求（または古い FFI layout）なら `headWordLength = 0` と空配列を返します。lookup 用の Rust FFI シンボルが未実装または古いライブラリでは `lookup()` が失敗するため、その場合は最新の `sudachi-ffi` をビルドしてください。
 
+Task-04 相当の POS API も利用できます。
+
+- `tokenizer.posOf(posId)`: `posId` から `PosTuple`（6要素）を返す。範囲外や未知の `posId` は `null`
+- `morpheme.partOfSpeech()`: 当該 morpheme の `PosTuple`（6要素）を返す
+
+```ts
+const tokens = tokenizer.tokenize({
+  text: "東京都に",
+  projection: "surface",
+  mode: "C",
+  subset: { fields: ["pos"] },
+});
+const m = tokens[0];
+const posTuple = m?.partOfSpeech(); // ["名詞", "普通名詞", "一般", "*", "*", "*"]
+const samePos = m?.pos; // "名詞,普通名詞,一般,*,*,*"
+const fromPosId = m ? tokenizer.posOf(m.posId) : null;
+const unknown = tokenizer.posOf(999999); // null
+```
+
 `createSudachi()` が返す `pretokenizer` は辞書設定から pretokenized 形式を生成する API です。
 
 ```ts

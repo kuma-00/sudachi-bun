@@ -2,9 +2,12 @@ import type { Pointer } from "bun:ffi";
 import { resolveInfoSubsetBits } from "./core/info-subset.ts";
 import { MorphemeStateTracker } from "./core/morpheme-state.ts";
 import {
+  attachPartOfSpeech,
   compilePosMatcher,
   lookupEntries,
+  parsePosTuple,
   rememberTokenProjection,
+  resolvePosTuple,
   splitMorpheme,
   splitMorphemes,
   tokenizeMorphemes,
@@ -20,6 +23,7 @@ import type {
   LookupEntry,
   Morpheme,
   MorphemeList,
+  PosTuple,
   SplitArgs,
   SplitIntoArgs,
   StatefulTokenizeArgs,
@@ -62,11 +66,13 @@ export class Tokenizer {
   #session: TokenizerSessionManager;
   #state: MorphemeStateTracker;
   #statefulTokenizers: Set<StatefulTokenizer>;
+  #resolvedPosCache: Map<number, PosTuple | null>;
 
   constructor(session: TokenizerSessionManager, state: MorphemeStateTracker) {
     this.#session = session;
     this.#state = state;
     this.#statefulTokenizers = new Set();
+    this.#resolvedPosCache = new Map();
   }
 
   get closed(): boolean {
@@ -118,6 +124,31 @@ export class Tokenizer {
     return splitMorphemes(this.#context(), morphemes, projection, mode);
   }
 
+  posOf(posId: number): PosTuple | null {
+    if (!Number.isInteger(posId) || posId < 0 || posId > 0xffff) {
+      return null;
+    }
+
+    const cached = this.#resolvedPosCache.get(posId);
+    if (cached !== undefined || this.#resolvedPosCache.has(posId)) {
+      return cached ?? null;
+    }
+
+    let resolved = resolvePosTuple(this.#context(), posId);
+    if (resolved === null) {
+      const { library } = this.#session.getOpenSession();
+      if (
+        library.symbols.sudachi_resolve_pos_id === undefined ||
+        library.symbols.sudachi_get_pos_tuple_result_layout === undefined ||
+        library.symbols.sudachi_free_pos_tuple_result === undefined
+      ) {
+        resolved = this.#probePosTuple(posId);
+      }
+    }
+    this.#resolvedPosCache.set(posId, resolved);
+    return resolved;
+  }
+
   close(): void {
     for (const stateful of [...this.#statefulTokenizers]) {
       stateful.close();
@@ -139,6 +170,26 @@ export class Tokenizer {
       session: this.#session,
       state: this.#state,
     };
+  }
+
+  #probePosTuple(posId: number): PosTuple | null {
+    const probeTexts = ["東京", "に", "する", "。"];
+    for (const text of probeTexts) {
+      const probed = tokenizeMorphemes(this.#context(), text, "surface", "C", {
+        fields: ["pos", "posId"],
+      });
+      for (const morpheme of probed) {
+        const tuple = parsePosTuple(morpheme.pos);
+        if (tuple === null) {
+          continue;
+        }
+        this.#resolvedPosCache.set(morpheme.posId, tuple);
+        if (morpheme.posId === posId) {
+          return tuple;
+        }
+      }
+    }
+    return null;
   }
 }
 
@@ -287,6 +338,14 @@ export class StatefulTokenizer {
       "owned",
     );
     rememberTokenProjection(attached, projection);
+    const owner = this.#owner as { posOf?: (posId: number) => PosTuple | null };
+    const gateway = this.#session.getGateway();
+    attachPartOfSpeech(attached, (posId) => {
+      if (!Number.isInteger(posId) || posId < 0 || posId > 0xffff) {
+        return null;
+      }
+      return owner.posOf?.(posId) ?? gateway.posOf?.(posId) ?? null;
+    });
     return attached;
   }
 

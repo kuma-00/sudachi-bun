@@ -4,6 +4,7 @@ import {
   type Morpheme,
   type MorphemeList,
   type PosMatcherPatterns,
+  type PosTuple,
   SudachiError,
   type SurfaceProjection,
   type TokenizeMode,
@@ -135,6 +136,7 @@ function tokenize(
     "owned",
   );
   rememberMorphemeProjection(attached, projection);
+  attachPartOfSpeech(attached, posResolverFromContext(context));
   return attached;
 }
 
@@ -164,6 +166,66 @@ export function compilePosMatcher(
   return getGateway(context).compilePosMatcher(patterns);
 }
 
+export function resolvePosTuple(
+  context: TokenizerExecutionContext,
+  posId: number,
+): PosTuple | null {
+  return getGateway(context).posOf?.(posId) ?? null;
+}
+
+export function parsePosTuple(value: string): PosTuple | null {
+  if (value.length === 0) {
+    return null;
+  }
+
+  const parts = value.split(",");
+  if (parts.length !== 6) {
+    return null;
+  }
+
+  const [a, b, c, d, e, f] = parts;
+  if (
+    a === undefined ||
+    b === undefined ||
+    c === undefined ||
+    d === undefined ||
+    e === undefined ||
+    f === undefined
+  ) {
+    return null;
+  }
+
+  return [a, b, c, d, e, f];
+}
+
+function posResolverFromContext(
+  context: TokenizerExecutionContext,
+): (posId: number) => PosTuple | null {
+  const owner = context.owner as {
+    posOf?: (posId: number) => PosTuple | null;
+  };
+  if (typeof owner.posOf === "function") {
+    return (posId) => owner.posOf?.(posId) ?? null;
+  }
+
+  return (posId) => resolvePosTuple(context, posId);
+}
+
+export function attachPartOfSpeech(
+  morphemes: readonly Morpheme[],
+  resolveByPosId: (posId: number) => PosTuple | null,
+): void {
+  for (const morpheme of morphemes) {
+    Object.defineProperty(morpheme, "partOfSpeech", {
+      value: (): PosTuple | null =>
+        parsePosTuple(morpheme.pos) ?? resolveByPosId(morpheme.posId),
+      writable: false,
+      configurable: true,
+      enumerable: false,
+    });
+  }
+}
+
 export function splitMorpheme(
   context: TokenizerExecutionContext,
   morpheme: Morpheme,
@@ -187,6 +249,7 @@ export function splitMorpheme(
     "split",
   );
   rememberMorphemeProjection(attached, projection);
+  attachPartOfSpeech(attached, posResolverFromContext(context));
   return attached;
 }
 
@@ -229,6 +292,7 @@ export function splitMorphemes(
       "owned",
     );
     rememberMorphemeProjection(attached, projection);
+    attachPartOfSpeech(attached, posResolverFromContext(context));
     return attached;
   }
 

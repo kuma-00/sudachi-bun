@@ -89,6 +89,11 @@ interface NativeSymbols extends CommonNativeSymbols {
     patternsJson: NativeCStringArg,
     outResult: NodeJS.TypedArray | Pointer | null,
   ) => number;
+  sudachi_resolve_pos_id?: (
+    handle: Pointer | NodeJS.TypedArray | null,
+    posId: number,
+    outResult: NodeJS.TypedArray | Pointer | null,
+  ) => number;
   sudachi_build_system_dictionary?: (
     matrixPath: NativeCStringArg,
     lexiconPaths: Pointer | NodeJS.TypedArray | null,
@@ -114,6 +119,9 @@ interface NativeSymbols extends CommonNativeSymbols {
   sudachi_free_pos_matcher_result: (
     result: Pointer | NodeJS.TypedArray | null,
   ) => void;
+  sudachi_free_pos_tuple_result?: (
+    result: Pointer | NodeJS.TypedArray | null,
+  ) => void;
   sudachi_free_dictionary_build_report?: (
     report: Pointer | NodeJS.TypedArray | null,
   ) => void;
@@ -127,6 +135,9 @@ interface NativeSymbols extends CommonNativeSymbols {
     outLayout: NodeJS.TypedArray | Pointer | null,
   ) => number;
   sudachi_get_pos_matcher_result_layout: (
+    outLayout: NodeJS.TypedArray | Pointer | null,
+  ) => number;
+  sudachi_get_pos_tuple_result_layout?: (
     outLayout: NodeJS.TypedArray | Pointer | null,
   ) => number;
 }
@@ -394,6 +405,10 @@ export function createNativeSudachiLibrary(
           toNativeCString(patternsJson),
           outResult,
         ),
+      sudachi_resolve_pos_id: symbols.sudachi_resolve_pos_id
+        ? (handle, posId, outResult) =>
+            symbols.sudachi_resolve_pos_id?.(handle, posId, outResult) ?? -1
+        : undefined,
       sudachi_build_system_dictionary: buildSystemDictionary
         ? (
             matrixPath,
@@ -434,6 +449,7 @@ export function createNativeSudachiLibrary(
         symbols.sudachi_inspect_dictionary_bytes(bytesPtr, bytesLen, outResult),
       sudachi_free_result: symbols.sudachi_free_result,
       sudachi_free_pos_matcher_result: symbols.sudachi_free_pos_matcher_result,
+      sudachi_free_pos_tuple_result: symbols.sudachi_free_pos_tuple_result,
       sudachi_free_dictionary_build_report:
         symbols.sudachi_free_dictionary_build_report,
       sudachi_get_morpheme_result_layout:
@@ -444,6 +460,8 @@ export function createNativeSudachiLibrary(
         symbols.sudachi_get_dictionary_build_report_layout,
       sudachi_get_pos_matcher_result_layout:
         symbols.sudachi_get_pos_matcher_result_layout,
+      sudachi_get_pos_tuple_result_layout:
+        symbols.sudachi_get_pos_tuple_result_layout,
       sudachi_get_last_error: symbols.sudachi_get_last_error,
       sudachi_status_code_name: symbols.sudachi_status_code_name,
     },

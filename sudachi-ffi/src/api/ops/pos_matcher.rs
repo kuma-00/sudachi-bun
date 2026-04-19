@@ -5,7 +5,8 @@ use sudachi::pos::PosMatcher;
 use crate::convert::cstr_to_string;
 use crate::error::error;
 use crate::result::{
-    PosMatcherResultArray, boxed_slice_into_raw_parts, require_non_null, write_box_ptr,
+    PosMatcherResultArray, PosTupleResultArray, boxed_slice_into_raw_parts, require_non_null,
+    strings_to_pos_tuple_result_array, write_box_ptr,
 };
 
 use super::handles::TokenizerHandle;
@@ -301,6 +302,29 @@ pub(crate) fn compile_pos_matcher_impl(
         let tokenizer = unsafe { tokenizer.as_ref() };
         let patterns_json = cstr_to_string(patterns_json)?;
         let array = compile_pos_matcher_array(tokenizer, &patterns_json)?;
+
+        write_box_ptr(out_result, array, "out_result pointer was null")
+    })
+}
+
+pub(super) fn resolve_pos_id_array(
+    tokenizer: &TokenizerHandle,
+    pos_id: u16,
+) -> Result<Box<PosTupleResultArray>, i32> {
+    let pos = tokenizer.dictionary.grammar().pos_list.get(pos_id as usize);
+    let values = pos.map_or_else(Vec::new, |parts| parts.to_vec());
+    strings_to_pos_tuple_result_array(values)
+}
+
+pub(crate) fn resolve_pos_id_impl(
+    handle: *const TokenizerHandle,
+    pos_id: u16,
+    out_result: *mut *mut PosTupleResultArray,
+) -> i32 {
+    run_ffi(|| {
+        let tokenizer = require_non_null(handle, "tokenizer handle was null")?;
+        let tokenizer = unsafe { tokenizer.as_ref() };
+        let array = resolve_pos_id_array(tokenizer, pos_id)?;
 
         write_box_ptr(out_result, array, "out_result pointer was null")
     })

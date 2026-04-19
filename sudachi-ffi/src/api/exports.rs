@@ -4,8 +4,8 @@ use super::ops;
 use crate::result::{
     DictionaryBuildReportArray, DictionaryBuildReportLayout,
     LookupResultArray, LookupResultLayout, MorphemeResultArray, MorphemeResultLayout,
-    PosMatcherResultArray, PosMatcherResultLayout, PretokenizedResultArray,
-    PretokenizedResultLayout, SentenceSpanArray, SentenceSpanLayout,
+    PosMatcherResultArray, PosMatcherResultLayout, PosTupleResultArray, PosTupleResultLayout,
+    PretokenizedResultArray, PretokenizedResultLayout, SentenceSpanArray, SentenceSpanLayout,
 };
 use sudachi::dic::subset::InfoSubset;
 
@@ -237,6 +237,15 @@ pub extern "C" fn sudachi_compile_pos_matcher(
 }
 
 #[unsafe(no_mangle)]
+pub extern "C" fn sudachi_resolve_pos_id(
+    handle: *const ops::TokenizerHandle,
+    pos_id: u16,
+    out_result: *mut *mut PosTupleResultArray,
+) -> i32 {
+    ops::resolve_pos_id_impl(handle, pos_id, out_result)
+}
+
+#[unsafe(no_mangle)]
 pub extern "C" fn sudachi_split_morpheme(
     handle: *mut ops::TokenizerHandle,
     input_utf8: *const c_char,
@@ -351,6 +360,11 @@ pub extern "C" fn sudachi_free_pos_matcher_result(result: *mut PosMatcherResultA
 }
 
 #[unsafe(no_mangle)]
+pub extern "C" fn sudachi_free_pos_tuple_result(result: *mut PosTupleResultArray) {
+    crate::result::free_pos_tuple_result_array(result);
+}
+
+#[unsafe(no_mangle)]
 pub extern "C" fn sudachi_free_sentence_spans(result: *mut SentenceSpanArray) {
     crate::result::free_sentence_span_array(result);
 }
@@ -389,6 +403,13 @@ pub extern "C" fn sudachi_get_pos_matcher_result_layout(
     out_layout: *mut PosMatcherResultLayout,
 ) -> i32 {
     ops::get_pos_matcher_result_layout_impl(out_layout)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn sudachi_get_pos_tuple_result_layout(
+    out_layout: *mut PosTupleResultLayout,
+) -> i32 {
+    ops::get_pos_tuple_result_layout_impl(out_layout)
 }
 
 #[unsafe(no_mangle)]

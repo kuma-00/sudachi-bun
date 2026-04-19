@@ -1,8 +1,9 @@
 use super::super::*;
+use crate::api::exports::sudachi_get_pos_tuple_result_layout;
 use crate::error::{ERR_NULL_POINTER, OK, status_code_name};
 use crate::result::{
-    DictionaryBuildReportLayout, MorphemeResultLayout, PretokenizedResultLayout,
-    SentenceSpanLayout,
+    DictionaryBuildReportLayout, MorphemeResultLayout, PosTupleResultLayout,
+    PretokenizedResultLayout, SentenceSpanLayout,
 };
 use std::mem::MaybeUninit;
 use std::ptr;
@@ -127,4 +128,26 @@ fn get_pretokenized_result_layout_returns_stable_offsets() {
     assert!(layout.split_b_len_offset > 0);
     assert!(layout.word_structure_offset > 0);
     assert!(layout.word_structure_len_offset > 0);
+}
+
+#[test]
+fn get_pos_tuple_result_layout_requires_output_pointer() {
+    let status = sudachi_get_pos_tuple_result_layout(ptr::null_mut());
+
+    assert_eq!(status, ERR_NULL_POINTER);
+    assert_eq!(status_code_name(status), "NULL_POINTER");
+}
+
+#[test]
+fn get_pos_tuple_result_layout_returns_stable_offsets() {
+    let mut layout = MaybeUninit::<PosTupleResultLayout>::uninit();
+    let status = sudachi_get_pos_tuple_result_layout(layout.as_mut_ptr());
+
+    assert_eq!(status, OK);
+    let layout = unsafe { layout.assume_init() };
+    assert_eq!(
+        layout.layout_version,
+        crate::result::POS_TUPLE_RESULT_LAYOUT_VERSION
+    );
+    assert!(layout.result_size > 0);
 }

@@ -60,6 +60,7 @@ export type {
   NativeSudachiErrorCode,
   PosMatcherPattern,
   PosMatcherPatterns,
+  PosTuple,
   PretokenizedResult,
   PretokenizedToken,
   PretokenizeOptions,
