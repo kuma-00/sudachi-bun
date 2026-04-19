@@ -43,6 +43,8 @@ jobs:
         run: cargo build --release
 
       - name: Setup dictionary
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
         run: bun run setup:dict -- --type core --version latest --out ./dict
 
       - name: Resolve dictionary path

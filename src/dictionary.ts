@@ -60,6 +60,7 @@ export type DictionarySetupResult = {
 const GITHUB_RELEASES_API =
   "https://api.github.com/repos/WorksApplications/SudachiDict/releases";
 const DEFAULT_VERSION = "latest";
+const GITHUB_API_VERSION = "2022-11-28";
 const GENERIC_DICT_FILES = ["system.dic", "system.dic.test"] as const;
 const DICT_FILE_BY_TYPE: Record<DictionaryType, string> = {
   core: "system_core.dic",
@@ -451,12 +452,23 @@ export function resolveDictionaryAsset(
 
 async function fetchReleaseMetadata(version: string): Promise<ReleaseMetadata> {
   const url = buildReleaseApiUrl(version);
+  const token =
+    process.env.GITHUB_TOKEN ??
+    process.env.GH_TOKEN ??
+    process.env.SUDACHI_GITHUB_TOKEN;
+  const headers: Record<string, string> = {
+    Accept: "application/vnd.github+json",
+    "User-Agent": "sudachi-bun-dict-setup",
+    "X-GitHub-Api-Version": GITHUB_API_VERSION,
+  };
+  if (token && token.trim().length > 0) {
+    headers.Authorization = `Bearer ${token.trim()}`;
+  }
+
   let response: Response;
   try {
     response = await fetch(url, {
-      headers: {
-        Accept: "application/vnd.github+json",
-      },
+      headers,
     });
   } catch (error) {
     throw new Error(
@@ -467,8 +479,19 @@ async function fetchReleaseMetadata(version: string): Promise<ReleaseMetadata> {
   }
 
   if (!response.ok) {
+    const bodyText = await response.text().catch(() => "");
+    const rateLimit = response.headers.get("x-ratelimit-remaining");
+    const rateReset = response.headers.get("x-ratelimit-reset");
+    const diagnostics = [
+      bodyText ? `Response: ${bodyText}` : undefined,
+      rateLimit !== null ? `x-ratelimit-remaining: ${rateLimit}` : undefined,
+      rateReset !== null ? `x-ratelimit-reset: ${rateReset}` : undefined,
+    ]
+      .filter((line): line is string => Boolean(line))
+      .join("\n");
     throw new Error(
-      `SudachiDict release metadata request failed for ${url} with HTTP ${response.status} ${response.statusText}`,
+      `SudachiDict release metadata request failed for ${url} with HTTP ${response.status} ${response.statusText}` +
+        (diagnostics ? `\n${diagnostics}` : ""),
     );
   }
 
