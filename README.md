@@ -319,7 +319,7 @@ Pretokenized 出力も `headWordLength`, `splitA`, `splitB`, `wordStructure` を
 
 byte は Rust 側の生の UTF-8 オフセット、char は JavaScript string index として扱う文字位置です。`Morpheme` と pretokenized 出力の両方でこの境界を共有します。
 
-`createHuggingFacePretokenizer()` は `Pretokenizer` を HuggingFace tokenizers の pre-tokenizer として使うためのアダプタです。第2引数の `PretokenizeOptions`（`mode` / `projection` / `subset`）は内部の `pretokenize` 呼び出しへ渡されますが、HuggingFace 側の `pre_tokenize(pretok)` は surface projection のみ対応し、`projection: "reading"` などの非 surface projection は例外になります。raw string の確認用には `pre_tokenize_str()` と `pre_tokenize_text()` があり、こちらは projected token text をそのまま返します。byte offset が必要な場合は、`Pretokenizer` の生の出力にある `beginByte` / `endByte` を参照してください。
+`createHuggingFacePretokenizer()` は `Pretokenizer` を HuggingFace tokenizers の pre-tokenizer として使うためのアダプタです。第2引数には `PretokenizeOptions`（`mode` / `projection` / `subset`）に加えて、token 列を加工する `handler(tokens)` を渡せます。`handler` は `pre_tokenize_str()` / `pre_tokenize_text()` / `pre_tokenize(pretok)` の全経路で同じ変換として適用されます。なお HuggingFace 側の `pre_tokenize(pretok)` は最終的に normalized text への slice へ投影されるため、surface projection 前提です。`projection: "reading"` などの非 surface projection は `pre_tokenize(pretok)` で例外になります。raw string の確認用には `pre_tokenize_str()` と `pre_tokenize_text()` があり、こちらは projected token text を返します。byte offset が必要な場合は、`Pretokenizer` の生の出力にある `beginByte` / `endByte` を参照してください。
 
 ```ts
 import { createDictionary, createHuggingFacePretokenizer } from "sudachi-bun";
@@ -330,7 +330,14 @@ const dictionary = createDictionary({
 
 const hfPretokenizer = createHuggingFacePretokenizer(dictionary.pretokenizer, {
   projection: "surface",
+  handler(tokens) {
+    // 例: 助詞を除外して HF 側へ渡す token 列を調整
+    return tokens.filter((token) => !token.pos.startsWith("助詞"));
+  },
 });
+
+// 注意: pre_tokenize(pretok) は normalized text の surface slice を返す。
+// projection: "reading" などを使いたい場合は pre_tokenize_str()/pre_tokenize_text() を使う。
 ```
 
 `Morpheme` は以下の情報を含みます。

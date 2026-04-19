@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 
 import { createHuggingFacePretokenizer } from "../index.ts";
-import type { InfoSubsetField } from "./types.ts";
+import type { InfoSubsetField, PretokenizedToken } from "./types.ts";
 
 type HfNormalizedStringMock = {
   toString(): string;
@@ -28,6 +28,140 @@ function createNormalizedStringMock(text: string): HfNormalizedStringMock {
   };
 }
 
+function createToken(
+  text: string,
+  beginChar: number,
+  endChar: number,
+  surface?: string,
+): PretokenizedToken {
+  return {
+    surface: surface ?? text.slice(beginChar, endChar),
+    headWordLength: endChar - beginChar,
+    normalized: text.slice(beginChar, endChar),
+    dictionaryForm: text.slice(beginChar, endChar),
+    reading: text.slice(beginChar, endChar),
+    pos: "名詞",
+    beginByte: beginChar,
+    endByte: endChar,
+    beginChar,
+    endChar,
+    wordId: `${beginChar}-${endChar}`,
+    posId: 0,
+    dictionaryId: 0,
+    isOov: false,
+    splitA: [],
+    splitB: [],
+    wordStructure: [],
+    synonymGroupIds: [],
+  };
+}
+
+test("createHuggingFacePretokenizer handler can transform token sequence and all entrypoints share conversion semantics", () => {
+  const sourceText = "東京都";
+  const pretokenizer = {
+    pretokenize(text: string) {
+      return [createToken(text, 0, 2), createToken(text, 2, 3)];
+    },
+  };
+
+  const options = {
+    projection: "surface",
+    handler(tokens: PretokenizedToken[]) {
+      return [
+        {
+          ...tokens[1],
+          surface: `[${tokens[1]?.surface}]`,
+        },
+        {
+          ...tokens[0],
+          surface: `[${tokens[0]?.surface}]`,
+        },
+      ];
+    },
+  };
+
+  const adapter = createHuggingFacePretokenizer(
+    pretokenizer as never,
+    options as never,
+  );
+
+  const preTokenizeStr = adapter.pre_tokenize_str(sourceText);
+  const preTokenizeText = adapter.pre_tokenize_text(sourceText);
+
+  expect(preTokenizeStr).toEqual([
+    ["[都]", [2, 3]],
+    ["[東京]", [0, 2]],
+  ]);
+  expect(preTokenizeText).toEqual(preTokenizeStr);
+
+  const splitResult: string[] = [];
+  adapter.pre_tokenize({
+    split(
+      callback: (
+        index: number,
+        normalized: HfNormalizedStringMock,
+      ) => HfNormalizedStringMock[],
+    ) {
+      const chunks = callback(0, createNormalizedStringMock(sourceText));
+      splitResult.splice(0, splitResult.length, ...chunks.map(String));
+    },
+  } as HfPreTokenizedStringMock);
+
+  expect(splitResult).toEqual(["都", "東京"]);
+  expect(
+    preTokenizeStr.map(([, [begin, end]]) => sourceText.slice(begin, end)),
+  ).toEqual(splitResult);
+});
+
+test("createHuggingFacePretokenizer wraps handler exceptions with user-facing context", () => {
+  const pretokenizer = {
+    pretokenize(text: string) {
+      return [createToken(text, 0, text.length)];
+    },
+  };
+
+  const adapter = createHuggingFacePretokenizer(
+    pretokenizer as never,
+    {
+      projection: "surface",
+      handler() {
+        throw new Error("boom");
+      },
+    } as never,
+  );
+
+  expect(() => adapter.pre_tokenize_str("東京")).toThrow(/pre_tokenize_str/i);
+  expect(() => adapter.pre_tokenize_str("東京")).toThrow(/handler/i);
+
+  expect(() => adapter.pre_tokenize_text("東京")).toThrow(/pre_tokenize_text/i);
+  expect(() => adapter.pre_tokenize_text("東京")).toThrow(/handler/i);
+
+  expect(() =>
+    adapter.pre_tokenize({
+      split(
+        callback: (
+          index: number,
+          normalized: HfNormalizedStringMock,
+        ) => HfNormalizedStringMock[],
+      ) {
+        callback(0, createNormalizedStringMock("東京"));
+      },
+    } as HfPreTokenizedStringMock),
+  ).toThrow(/pre_tokenize/i);
+  expect(() =>
+    adapter.pre_tokenize({
+      split(
+        callback: (
+          index: number,
+          normalized: HfNormalizedStringMock,
+        ) => HfNormalizedStringMock[],
+      ) {
+        callback(0, createNormalizedStringMock("東京"));
+      },
+    } as HfPreTokenizedStringMock),
+  ).toThrow(/handler/i);
+});
+
 test("createHuggingFacePretokenizer forwards options, preserves projected token surfaces, and rejects non-surface projection in the pipeline path", () => {
   const calls: Array<{ text: string; options: unknown }> = [];
   const options = {
@@ -40,11 +174,8 @@ test("createHuggingFacePretokenizer forwards options, preserves projected token 
       calls.push({ text, options });
       return [
         {
+          ...createToken(text, 0, text.length),
           surface: text === "東京" ? "とうきょう" : "きょうと",
-          beginByte: 0,
-          endByte: Buffer.byteLength(text, "utf8"),
-          beginChar: 0,
-          endChar: text.length,
         },
       ];
     },
@@ -90,29 +221,18 @@ test("createHuggingFacePretokenizer forwards options, preserves projected token 
   ]);
 });
 
-test("createHuggingFacePretokenizer pre_tokenize uses the PreTokenizedString split pipeline", () => {
+test("createHuggingFacePretokenizer behavior remains unchanged without handler", () => {
   const calls: Array<{ text: string; options: unknown }> = [];
   const pretokenizer = {
     pretokenize(text: string, options?: unknown) {
       calls.push({ text, options });
-      return [
-        {
-          surface: text === "東京" ? "とうきょう" : "きょうと",
-          beginByte: 0,
-          endByte: Buffer.byteLength(text, "utf8"),
-          beginChar: 0,
-          endChar: text.length,
-        },
-      ];
+      return [createToken(text, 0, text.length)];
     },
   };
 
-  const adapter = createHuggingFacePretokenizer(pretokenizer as never, {
-    projection: "surface",
-  });
+  const adapter = createHuggingFacePretokenizer(pretokenizer as never);
 
-  let splitResult: string[] | null = null;
-  const splitCalls: number[] = [];
+  const splitResult: string[] = [];
   adapter.pre_tokenize({
     split(
       callback: (
@@ -120,14 +240,18 @@ test("createHuggingFacePretokenizer pre_tokenize uses the PreTokenizedString spl
         normalized: HfNormalizedStringMock,
       ) => HfNormalizedStringMock[],
     ) {
-      splitCalls.push(1);
       const normalized = createNormalizedStringMock("東京");
-      splitResult = callback(0, normalized).map(String);
+      splitResult.splice(
+        0,
+        splitResult.length,
+        ...callback(0, normalized).map(String),
+      );
     },
   } as HfPreTokenizedStringMock);
 
-  expect(splitCalls).toEqual([1]);
-  expect((splitResult ?? []) as string[]).toEqual(["東京"]);
+  expect(adapter.pre_tokenize_str("東京")).toEqual([["東京", [0, 2]]]);
+  expect(adapter.pre_tokenize_text("東京")).toEqual([["東京", [0, 2]]]);
+  expect(splitResult).toEqual(["東京"]);
   expect(calls).toEqual([
     {
       text: "東京",
@@ -135,43 +259,12 @@ test("createHuggingFacePretokenizer pre_tokenize uses the PreTokenizedString spl
         projection: "surface",
       },
     },
-  ]);
-});
-
-test("createHuggingFacePretokenizer defaults adapter calls to surface projection", () => {
-  const calls: Array<{ text: string; options: unknown }> = [];
-  const pretokenizer = {
-    pretokenize(text: string, options?: unknown) {
-      calls.push({ text, options });
-      return [
-        {
-          surface: text,
-          beginByte: 0,
-          endByte: Buffer.byteLength(text, "utf8"),
-          beginChar: 0,
-          endChar: text.length,
-        },
-      ];
+    {
+      text: "東京",
+      options: {
+        projection: "surface",
+      },
     },
-  };
-
-  const adapter = createHuggingFacePretokenizer(pretokenizer as never);
-
-  let splitResult: string[] | null = null;
-  adapter.pre_tokenize({
-    split(
-      callback: (
-        index: number,
-        normalized: HfNormalizedStringMock,
-      ) => HfNormalizedStringMock[],
-    ) {
-      const normalized = createNormalizedStringMock("東京");
-      splitResult = callback(0, normalized).map(String);
-    },
-  } as HfPreTokenizedStringMock);
-
-  expect((splitResult ?? []) as string[]).toEqual(["東京"]);
-  expect(calls).toEqual([
     {
       text: "東京",
       options: {
@@ -192,20 +285,8 @@ test("createHuggingFacePretokenizer adds surface to subset fields without mutati
       calls.push({ text, options });
       return [
         {
+          ...createToken(text, 0, text.length),
           surface: text === "東京" ? "とうきょう" : "きょうと",
-          beginByte: 0,
-          endByte: Buffer.byteLength(text, "utf8"),
-          beginChar: 0,
-          endChar: text.length,
-          normalized: text,
-          dictionaryForm: text,
-          reading: text,
-          pos: "名詞",
-          wordId: "0",
-          posId: 0,
-          dictionaryId: 0,
-          isOov: false,
-          synonymGroupIds: [],
         },
       ];
     },

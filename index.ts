@@ -8,10 +8,16 @@ import type { Pretokenizer } from "./src/pretokenizer.ts";
 import {
   createHfPretokenizerAdapter,
   ensureHfPretokenizeOptions,
+  HF_PRETOKENIZER_ALL_SUBSET_FIELDS,
   type HfPretokenizedToken,
+  type HfPretokenizedTokenHandler,
   type HfPretokenizerAdapter,
 } from "./src/pretokenizer-hf.ts";
-import type { PretokenizedResult, PretokenizeOptions } from "./src/types.ts";
+import type {
+  InfoSubsetField,
+  PretokenizedResult,
+  PretokenizeOptions,
+} from "./src/types.ts";
 
 export { runTokenizeCommand } from "./src/cli/execute.ts";
 export { parseCliArgs } from "./src/cli/parser.ts";
@@ -40,6 +46,7 @@ export type {
   HfOffsets,
   HfPreTokenizedStringLike,
   HfPretokenizedToken,
+  HfPretokenizedTokenHandler,
   HfPretokenizerAdapter,
 } from "./src/pretokenizer-hf.ts";
 export type {
@@ -90,21 +97,34 @@ export { runMain as main };
 
 export interface HuggingFacePretokenizerAdapter extends HfPretokenizerAdapter {
   readonly pretokenizer: Pretokenizer;
-  readonly options: PretokenizeOptions;
+  readonly options: HuggingFacePretokenizerOptions;
   pre_tokenize_str(text: string): HfPretokenizedToken[];
   pre_tokenize(
     pretok: Parameters<HfPretokenizerAdapter["pre_tokenize"]>[0],
   ): void;
 }
 
+export interface HuggingFacePretokenizerOptions extends PretokenizeOptions {
+  handler?: HfPretokenizedTokenHandler;
+  handlerSubsetFields?: readonly InfoSubsetField[];
+}
+
 export function createHuggingFacePretokenizer(
   pretokenizer: Pretokenizer,
-  options: PretokenizeOptions = {},
+  options: HuggingFacePretokenizerOptions = {},
 ): HuggingFacePretokenizerAdapter {
-  const pretokenizeOptions = ensureHfPretokenizeOptions({
-    projection: "surface",
-    ...options,
-  });
+  const { handler, handlerSubsetFields, ...pretokenizeOptionsInput } = options;
+  const requiredFields =
+    handler === undefined
+      ? []
+      : [...(handlerSubsetFields ?? HF_PRETOKENIZER_ALL_SUBSET_FIELDS)];
+  const pretokenizeOptions = ensureHfPretokenizeOptions(
+    {
+      projection: "surface",
+      ...pretokenizeOptionsInput,
+    },
+    requiredFields,
+  );
   const adapter = createHfPretokenizerAdapter(
     {
       pretokenize(text: string): PretokenizedResult {
@@ -112,6 +132,7 @@ export function createHuggingFacePretokenizer(
       },
     },
     pretokenizeOptions,
+    handler,
   );
 
   return {
