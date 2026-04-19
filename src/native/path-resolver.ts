@@ -6,6 +6,34 @@ import { fileURLToPath } from "node:url";
 const MODULE_DIR = dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = resolve(MODULE_DIR, "../..");
 
+function getCandidateBinaryNamesFromPlatform(): string[] {
+  const platformAliases: Record<string, string[]> = {
+    darwin: ["darwin", "macos"],
+    linux: ["linux"],
+    win32: ["windows", "win32"],
+  };
+  const archAliases: Record<string, string[]> = {
+    x64: ["x86_64", "x64", "amd64"],
+    arm64: ["aarch64", "arm64"],
+  };
+
+  const platforms = platformAliases[process.platform] ?? [process.platform];
+  const arches = archAliases[process.arch] ?? [process.arch];
+  const variants = new Set<string>();
+
+  for (const platform of platforms) {
+    for (const arch of arches) {
+      variants.add(`libsudachi_ffi-${platform}-${arch}.${suffix}`);
+      variants.add(`sudachi_ffi-${platform}-${arch}.${suffix}`);
+      variants.add(`sudachi-ffi-${platform}-${arch}.${suffix}`);
+      variants.add(`libsudachi_ffi_${platform}_${arch}.${suffix}`);
+      variants.add(`sudachi_ffi_${platform}_${arch}.${suffix}`);
+    }
+  }
+
+  return Array.from(variants);
+}
+
 function resolveBinaryNameFromEnv(): string | null {
   const raw = process.env.SUDACHI_FFI_BINARY_NAME?.trim();
   if (!raw) {
@@ -42,6 +70,7 @@ export function loadNativeLibraryPath(libraryPath?: string): string {
         resolveBinaryNameFromEnv(),
         `libsudachi_ffi.${suffix}`,
         `sudachi_ffi.${suffix}`,
+        ...getCandidateBinaryNamesFromPlatform(),
       ].filter((name): name is string => Boolean(name)),
     ),
   ];

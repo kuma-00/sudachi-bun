@@ -140,5 +140,13 @@ test("loadNativeLibraryPath throws with looked-up candidates when not found", as
     expect(message).toContain(
       join(resolve(nestedExplicitDir), `sudachi_ffi.${suffix}`),
     );
+    if (process.platform === "linux" && process.arch === "x64") {
+      expect(message).toContain(
+        join(
+          resolve(nestedExplicitDir),
+          `libsudachi_ffi-linux-x86_64.${suffix}`,
+        ),
+      );
+    }
   }
 });
