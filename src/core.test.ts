@@ -9,7 +9,7 @@ import type {
   PosMatcherResultLayout,
 } from "./native/types.ts";
 import * as native from "./native.ts";
-import type { LookupEntry, Morpheme } from "./types.ts";
+import type { LookupEntry, Morpheme, WordInfo } from "./types.ts";
 import { SudachiError } from "./types.ts";
 
 const INFO_SUBSET_FFI_POS_TEXT_BIT = 1 << 30;
@@ -89,6 +89,28 @@ type MorphemeListWithInternalCost = Morpheme[] & {
   internalCost: number;
 };
 
+function attachGetWordInfo(morpheme: Omit<Morpheme, "getWordInfo">): Morpheme {
+  const withWordInfo = morpheme as Morpheme;
+  const wordInfoSnapshot: WordInfo = {
+    headWordLength: withWordInfo.headWordLength,
+    splitA: [...withWordInfo.splitA],
+    splitB: [...withWordInfo.splitB],
+    wordStructure: [...withWordInfo.wordStructure],
+  };
+  Object.defineProperty(withWordInfo, "getWordInfo", {
+    value: (): WordInfo => ({
+      headWordLength: wordInfoSnapshot.headWordLength,
+      splitA: [...wordInfoSnapshot.splitA],
+      splitB: [...wordInfoSnapshot.splitB],
+      wordStructure: [...wordInfoSnapshot.wordStructure],
+    }),
+    writable: false,
+    configurable: false,
+    enumerable: false,
+  });
+  return withWordInfo;
+}
+
 function createMorpheme(
   surface: string,
   begin: number,
@@ -96,7 +118,7 @@ function createMorpheme(
   posId = 0,
   totalCost = 0,
 ): Morpheme {
-  return {
+  return attachGetWordInfo({
     surface,
     headWordLength: 0,
     normalized: surface,
@@ -116,7 +138,7 @@ function createMorpheme(
     splitB: [],
     wordStructure: [],
     synonymGroupIds: [],
-  };
+  });
 }
 
 function createSubsetMorpheme(
@@ -131,7 +153,7 @@ function createSubsetMorpheme(
   splitB: string[] = [],
   wordStructure: string[] = [],
 ): Morpheme {
-  return {
+  return attachGetWordInfo({
     surface,
     headWordLength,
     normalized: "",
@@ -151,7 +173,7 @@ function createSubsetMorpheme(
     splitB,
     wordStructure,
     synonymGroupIds: [],
-  };
+  });
 }
 
 function createLookupEntry(
@@ -828,6 +850,25 @@ test("tokenize with fields uses the subset native symbol and omits unrequested f
   });
 });
 
+test("morpheme.getWordInfo defaults to zero and empty arrays when fields are omitted", () => {
+  withTokenizer(({ tokenizer }) => {
+    const result = tokenizer.tokenize({
+      text: "東京都に",
+      projection: DEFAULT_PROJECTION,
+      mode: "C",
+      subset: { fields: ["surface", "posId"] },
+    });
+
+    const first = requireDefined(result[0], "result[0]");
+    expect(first.getWordInfo()).toEqual({
+      headWordLength: 0,
+      splitA: [],
+      splitB: [],
+      wordStructure: [],
+    });
+  });
+});
+
 test("tokenize with pos uses the subset native symbol and returns the POS string", () => {
   withTokenizer(({ library, tokenizer, readSpy }) => {
     const tokenizeSpy = spyOn(library.symbols, "sudachi_tokenize");
@@ -898,6 +939,99 @@ test("tokenize with new subset fields forwards expected bit flags and returns fi
     } finally {
       subsetTokenizeSpy.mockRestore();
     }
+  });
+});
+
+test("morpheme.getWordInfo returns word info from existing morpheme fields", () => {
+  withTokenizer(({ tokenizer }) => {
+    const result = tokenizer.tokenize({
+      text: "東京都に",
+      projection: DEFAULT_PROJECTION,
+      mode: "C",
+      subset: {
+        fields: ["headWordLength", "splitA", "splitB", "wordStructure"],
+      },
+    });
+
+    const first = requireDefined(result[0], "result[0]");
+    const wordInfo = first.getWordInfo();
+    expect(wordInfo).toEqual({
+      headWordLength: 2,
+      splitA: ["(0, 1001)", "(0, 1002)"],
+      splitB: ["(0, 2001)"],
+      wordStructure: ["(0, 3001)", "(0, 3002)", "(0, 3003)"],
+    });
+  });
+});
+
+test("morpheme.getWordInfo keeps morpheme fields safe from caller mutations", () => {
+  withTokenizer(({ tokenizer }) => {
+    const result = tokenizer.tokenize({
+      text: "東京都に",
+      projection: DEFAULT_PROJECTION,
+      mode: "C",
+      subset: {
+        fields: ["headWordLength", "splitA", "splitB", "wordStructure"],
+      },
+    });
+
+    const first = requireDefined(result[0], "result[0]");
+    const wordInfo = first.getWordInfo();
+    wordInfo.splitA.push("(0, 9999)");
+    wordInfo.splitB.push("(0, 9999)");
+    wordInfo.wordStructure.push("(0, 9999)");
+
+    expect(first.splitA).toEqual(["(0, 1001)", "(0, 1002)"]);
+    expect(first.splitB).toEqual(["(0, 2001)"]);
+    expect(first.wordStructure).toEqual([
+      "(0, 3001)",
+      "(0, 3002)",
+      "(0, 3003)",
+    ]);
+    expect(first.getWordInfo()).toEqual({
+      headWordLength: 2,
+      splitA: ["(0, 1001)", "(0, 1002)"],
+      splitB: ["(0, 2001)"],
+      wordStructure: ["(0, 3001)", "(0, 3002)", "(0, 3003)"],
+    });
+  });
+});
+
+test("morpheme.getWordInfo is stable even if morpheme fields are mutated before and after calls", () => {
+  withTokenizer(({ tokenizer }) => {
+    const result = tokenizer.tokenize({
+      text: "東京都に",
+      projection: DEFAULT_PROJECTION,
+      mode: "C",
+      subset: {
+        fields: ["headWordLength", "splitA", "splitB", "wordStructure"],
+      },
+    });
+
+    const first = requireDefined(result[0], "result[0]");
+    first.headWordLength = 9999;
+    first.splitA.push("(0, 9999)");
+    first.splitB.push("(0, 9999)");
+    first.wordStructure.push("(0, 9999)");
+
+    expect(first.getWordInfo()).toEqual({
+      headWordLength: 2,
+      splitA: ["(0, 1001)", "(0, 1002)"],
+      splitB: ["(0, 2001)"],
+      wordStructure: ["(0, 3001)", "(0, 3002)", "(0, 3003)"],
+    });
+
+    first.headWordLength = 1234;
+    first.splitA = ["(0, 7777)"];
+    first.splitB = ["(0, 8888)"];
+    first.wordStructure = ["(0, 9998)"];
+
+    expect(first.getWordInfo()).toEqual({
+      headWordLength: 2,
+      splitA: ["(0, 1001)", "(0, 1002)"],
+      splitB: ["(0, 2001)"],
+      wordStructure: ["(0, 3001)", "(0, 3002)", "(0, 3003)"],
+    });
   });
 });
 

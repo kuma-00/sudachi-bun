@@ -3,7 +3,7 @@ import * as fs from "node:fs";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-
+import * as cliOutput from "./cli/output.ts";
 import { runCli } from "./cli.ts";
 import * as core from "./core.ts";
 import * as sentenceSplitter from "./sentence-splitter.ts";
@@ -428,6 +428,122 @@ test("runCli handles sentence splitting and byte/char offsets", async () => {
     splitSpy.mockRestore();
     fakeSplitter.split.mockRestore();
     splitterCloseSpy.mockRestore();
+  }
+});
+
+test("runCli keeps getWordInfo on morphemes after sentence split offset adjustment", async () => {
+  const { io, errors } = createCapturedIo();
+  const fakeWordInfo = {
+    headWordLength: 2,
+    splitA: [],
+    splitB: [],
+    wordStructure: [],
+  };
+  const createMorpheme = (
+    surface: string,
+    begin: number,
+    end: number,
+    beginChar: number,
+    endChar: number,
+  ) => {
+    const morpheme = {
+      surface,
+      normalized: surface,
+      dictionaryForm: surface,
+      reading: surface,
+      pos: "名詞",
+      begin,
+      end,
+      beginChar,
+      endChar,
+      wordId: "1",
+      posId: 1,
+      dictionaryId: 0,
+      isOov: false,
+      totalCost: 0,
+      synonymGroupIds: [],
+    };
+    Object.defineProperty(morpheme, "getWordInfo", {
+      value: () => fakeWordInfo,
+      enumerable: false,
+    });
+    return morpheme;
+  };
+  const tokenizeSpy = spyOn(core, "createTokenizer").mockImplementation(
+    () =>
+      ({
+        tokenize({
+          text = "",
+        }: {
+          text: string;
+          mode?: string;
+          projection?: Projection;
+        }) {
+          return [
+            createMorpheme(
+              text,
+              0,
+              Buffer.byteLength(text, "utf8"),
+              0,
+              text.length,
+            ),
+          ];
+        },
+        lookup() {
+          return [];
+        },
+        close() {},
+      }) as never,
+  );
+  const splitSpy = spyOn(
+    sentenceSplitter,
+    "createSentenceSplitter",
+  ).mockImplementation(
+    () =>
+      ({
+        split() {
+          return [
+            { text: "A。", start: 0, end: 4 },
+            { text: "B。", start: 4, end: 8 },
+          ];
+        },
+        close() {},
+      }) as never,
+  );
+  const formatSpy = spyOn(cliOutput, "formatTokenizeOutput").mockImplementation(
+    (morphemes) => {
+      expect(morphemes).toHaveLength(2);
+      expect(typeof morphemes[0]?.getWordInfo).toBe("function");
+      expect(typeof morphemes[1]?.getWordInfo).toBe("function");
+      expect(morphemes[0]?.getWordInfo()).toEqual(fakeWordInfo);
+      expect(morphemes[1]?.getWordInfo()).toEqual(fakeWordInfo);
+      return "ok";
+    },
+  );
+
+  try {
+    const exitCode = await runCliMaybeAsync(
+      [
+        "tokenize",
+        "--dict-path",
+        "/tmp/dict",
+        "--projection",
+        "surface",
+        "--split-sentences",
+        "--text",
+        "A。B。",
+      ],
+      {},
+      io,
+    );
+
+    expect(exitCode).toBe(0);
+    expect(errors).toEqual([]);
+    expect(formatSpy).toHaveBeenCalledTimes(1);
+  } finally {
+    tokenizeSpy.mockRestore();
+    splitSpy.mockRestore();
+    formatSpy.mockRestore();
   }
 });
 

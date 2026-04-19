@@ -93,6 +93,13 @@ export interface SentenceDetector {
   withLimit(limit: number): SentenceDetector;
 }
 
+export interface WordInfo {
+  headWordLength: number;
+  splitA: string[];
+  splitB: string[];
+  wordStructure: string[];
+}
+
 export interface Morpheme {
   surface: string;
   headWordLength: number;
@@ -113,6 +120,7 @@ export interface Morpheme {
   splitB: string[];
   wordStructure: string[];
   synonymGroupIds: number[];
+  getWordInfo(): WordInfo;
 }
 
 export interface MorphemeList extends Array<Morpheme> {

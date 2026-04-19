@@ -1,6 +1,6 @@
 import { expect, spyOn, test } from "bun:test";
 
-import type { Morpheme, MorphemeList } from "../types.ts";
+import type { Morpheme, MorphemeList, WordInfo } from "../types.ts";
 import { MorphemeStateTracker } from "./morpheme-state.ts";
 import {
   splitMorpheme,
@@ -10,7 +10,7 @@ import {
 import type { TokenizerGateway, TokenizerSessionManager } from "./session.ts";
 
 function createMorpheme(surface: string, begin: number, end: number): Morpheme {
-  return {
+  const morpheme: Omit<Morpheme, "getWordInfo"> = {
     surface,
     headWordLength: 0,
     normalized: surface,
@@ -31,6 +31,30 @@ function createMorpheme(surface: string, begin: number, end: number): Morpheme {
     wordStructure: [],
     synonymGroupIds: [],
   };
+  const withWordInfo = morpheme as Morpheme;
+  let wordInfoCache: WordInfo | undefined;
+  Object.defineProperty(withWordInfo, "getWordInfo", {
+    value: (): WordInfo => {
+      if (wordInfoCache === undefined) {
+        wordInfoCache = {
+          headWordLength: withWordInfo.headWordLength,
+          splitA: [...withWordInfo.splitA],
+          splitB: [...withWordInfo.splitB],
+          wordStructure: [...withWordInfo.wordStructure],
+        };
+      }
+      return {
+        headWordLength: wordInfoCache.headWordLength,
+        splitA: [...wordInfoCache.splitA],
+        splitB: [...wordInfoCache.splitB],
+        wordStructure: [...wordInfoCache.wordStructure],
+      };
+    },
+    writable: false,
+    configurable: false,
+    enumerable: false,
+  });
+  return withWordInfo;
 }
 
 function createMorphemeList(

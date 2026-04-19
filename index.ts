@@ -73,6 +73,7 @@ export type {
   SurfaceProjection,
   TokenizeMode,
   TokenizerOptions,
+  WordInfo,
 } from "./src/types.ts";
 export {
   formatSudachiError,

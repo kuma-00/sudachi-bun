@@ -72,13 +72,17 @@ function tokenizeSentenceUnits(
       mode,
     });
     morphemes.push(
-      ...unitMorphemes.map((morpheme) => ({
-        ...morpheme,
-        begin: morpheme.begin + unit.start,
-        end: morpheme.end + unit.start,
-        beginChar: morpheme.beginChar + startChar,
-        endChar: morpheme.endChar + startChar,
-      })),
+      ...unitMorphemes.map((morpheme) => {
+        const adjusted = Object.create(
+          Object.getPrototypeOf(morpheme),
+          Object.getOwnPropertyDescriptors(morpheme),
+        ) as Morpheme;
+        adjusted.begin = morpheme.begin + unit.start;
+        adjusted.end = morpheme.end + unit.start;
+        adjusted.beginChar = morpheme.beginChar + startChar;
+        adjusted.endChar = morpheme.endChar + startChar;
+        return adjusted;
+      }),
     );
   }
 

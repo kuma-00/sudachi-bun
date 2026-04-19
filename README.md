@@ -329,6 +329,21 @@ const hfPretokenizer = createHuggingFacePretokenizer(sudachi.pretokenizer, {
 - `totalCost`
 - `splitA`, `splitB`, `wordStructure`
 - `synonymGroupIds`
+- `getWordInfo()`
+
+`Morpheme#getWordInfo()` は追加のネイティブ呼び出しを行わず、すでに取得済みの `headWordLength`, `splitA`, `splitB`, `wordStructure` をまとめて返します。subset で未要求（または古い FFI layout）の場合は `headWordLength = 0` と空配列です。
+
+```ts
+const tokens = tokenizer.tokenize({
+  text: "東京都に",
+  projection: "surface",
+  mode: "C",
+  subset: { fields: ["headWordLength", "splitA", "splitB", "wordStructure"] },
+});
+
+const info = tokens[0]?.getWordInfo();
+// { headWordLength: 2, splitA: ["(0, 1001)", ...], ... }
+```
 
 ## 開発者向け
 

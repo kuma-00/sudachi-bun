@@ -12,6 +12,7 @@ import type {
   MorphemeList,
   PretokenizedToken,
   SudachiErrorCode,
+  WordInfo,
 } from "./types.ts";
 import { SudachiError } from "./types.ts";
 
@@ -227,17 +228,86 @@ function readWordIdLists(
   };
 }
 
+const MUTATING_ARRAY_METHOD_NAMES = new Set([
+  "copyWithin",
+  "fill",
+  "pop",
+  "push",
+  "reverse",
+  "shift",
+  "sort",
+  "splice",
+  "unshift",
+]);
+
+function createCopyOnWriteArray(source: string[]): string[] {
+  let detached: string[] | undefined;
+  const ensureDetached = (): string[] => {
+    if (detached === undefined) {
+      detached = [...source];
+    }
+    return detached;
+  };
+
+  return new Proxy(source, {
+    get(target, property, receiver) {
+      const active = detached ?? target;
+      const value = Reflect.get(active, property, receiver);
+      if (typeof value !== "function") {
+        return value;
+      }
+      return (...args: unknown[]) => {
+        if (
+          typeof property === "string" &&
+          MUTATING_ARRAY_METHOD_NAMES.has(property)
+        ) {
+          const writable = ensureDetached();
+          return Reflect.apply(value, writable, args);
+        }
+        return Reflect.apply(value, active, args);
+      };
+    },
+    set(_target, property, value, receiver) {
+      if (detached !== undefined) {
+        return Reflect.set(detached, property, value, receiver);
+      }
+      const writable = ensureDetached();
+      return Reflect.set(writable, property, value, receiver);
+    },
+    deleteProperty(_target, property) {
+      if (detached !== undefined) {
+        return Reflect.deleteProperty(detached, property);
+      }
+      const writable = ensureDetached();
+      return Reflect.deleteProperty(writable, property);
+    },
+    defineProperty(_target, property, descriptor) {
+      if (detached !== undefined) {
+        return Reflect.defineProperty(detached, property, descriptor);
+      }
+      const writable = ensureDetached();
+      return Reflect.defineProperty(writable, property, descriptor);
+    },
+  });
+}
+
 function readMorpheme(
   itemPtr: Pointer,
   layout: MorphemeResultLayout,
 ): Morpheme {
   const wordIdLists = readWordIdLists(itemPtr, layout);
-  return {
-    surface: readCStringField(itemPtr, layout.surfaceOffset),
+  const wordInfoSource = {
     headWordLength:
       layout.headWordLengthOffset > 0
         ? readUsizeField(itemPtr, layout.headWordLengthOffset, "headWordLength")
         : 0,
+    splitA: wordIdLists.splitA,
+    splitB: wordIdLists.splitB,
+    wordStructure: wordIdLists.wordStructure,
+  };
+  const morpheme = {
+    surface: readCStringField(itemPtr, layout.surfaceOffset),
+    headWordLength: wordInfoSource.headWordLength,
     normalized: readCStringField(itemPtr, layout.normalizedOffset),
     dictionaryForm: readCStringField(itemPtr, layout.dictionaryFormOffset),
     reading: readCStringField(itemPtr, layout.readingOffset),
@@ -254,11 +324,34 @@ function readMorpheme(
       layout.totalCostOffset > 0
         ? readNumberField(itemPtr, layout.totalCostOffset)
         : 0,
-    splitA: wordIdLists.splitA,
-    splitB: wordIdLists.splitB,
-    wordStructure: wordIdLists.wordStructure,
+    splitA: createCopyOnWriteArray(wordInfoSource.splitA),
+    splitB: createCopyOnWriteArray(wordInfoSource.splitB),
+    wordStructure: createCopyOnWriteArray(wordInfoSource.wordStructure),
     synonymGroupIds: readSynonymGroupIds(itemPtr, layout),
-  };
+  } as Morpheme;
+  let wordInfoSnapshot: WordInfo | undefined;
+  Object.defineProperty(morpheme, "getWordInfo", {
+    value: (): WordInfo => {
+      if (wordInfoSnapshot === undefined) {
+        wordInfoSnapshot = {
+          headWordLength: wordInfoSource.headWordLength,
+          splitA: [...wordInfoSource.splitA],
+          splitB: [...wordInfoSource.splitB],
+          wordStructure: [...wordInfoSource.wordStructure],
+        };
+      }
+      return {
+        headWordLength: wordInfoSnapshot.headWordLength,
+        splitA: [...wordInfoSnapshot.splitA],
+        splitB: [...wordInfoSnapshot.splitB],
+        wordStructure: [...wordInfoSnapshot.wordStructure],
+      };
+    },
+    writable: false,
+    configurable: false,
+    enumerable: false,
+  });
+  return morpheme;
 }
 
 function attachInternalCost(
