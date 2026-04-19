@@ -1,138 +1,72 @@
 import { expect, spyOn, test } from "bun:test";
 
-import * as core from "./core.ts";
-import * as pretokenizerModule from "./pretokenizer.ts";
-import * as sentenceSplitterModule from "./sentence-splitter.ts";
+import * as dictionaryModule from "./dictionary.ts";
 import { createSudachi } from "./sudachi.ts";
 
-function createCloseable(name: string, calls: string[], error?: Error) {
-  return {
-    name,
-    close() {
-      calls.push(name);
-      if (error) {
-        throw error;
-      }
+test("createSudachi delegates to createDictionary and returns compatible object", () => {
+  const options = {
+    dictPath: "/tmp/dict",
+    splitter: { dictPath: "/tmp/split-dict" },
+    pretokenizer: { dictPath: "/tmp/pre-dict", projection: "surface" as const },
+  };
+  const expected = {
+    tokenizer: { close() {} },
+    splitter: { close() {} },
+    pretokenizer: { close() {} },
+    tokenize() {
+      return [];
     },
+    lookup() {
+      return [];
+    },
+    createPosMatcher() {
+      return {
+        matches: () => false,
+        filter: <T>(items: readonly T[]) => [...items],
+      };
+    },
+    pretokenize() {
+      return [];
+    },
+    splitSentences() {
+      return [];
+    },
+    getEos() {
+      return null;
+    },
+    close() {},
+    [Symbol.dispose]() {},
   };
-}
-
-test("createSudachi returns tokenizer/splitter/pretokenizer and close()", () => {
-  const calls: string[] = [];
-  const tokenizer = createCloseable("tokenizer", calls);
-  const splitter = createCloseable("splitter", calls);
-  const pretokenizer = createCloseable("pretokenizer", calls);
-  const options = { dictPath: "/tmp/dict", debug: true };
-  const splitterOptions = { dictPath: "/tmp/split-dict", debug: false };
-  const pretokenizerOptions = {
-    dictPath: "/tmp/pre-dict",
-    projection: "normalized" as const,
-  };
-  const createTokenizerSpy = spyOn(core, "createTokenizer").mockReturnValue(
-    tokenizer as never,
-  );
-  const createSplitterSpy = spyOn(
-    sentenceSplitterModule,
-    "createSentenceSplitter",
-  ).mockReturnValue(splitter as never);
-  const createPretokenizerSpy = spyOn(
-    pretokenizerModule,
-    "createPretokenizer",
-  ).mockReturnValue(pretokenizer as never);
+  const createDictionarySpy = spyOn(
+    dictionaryModule,
+    "createDictionary",
+  ).mockReturnValue(expected as never);
 
   try {
-    const sudachi = createSudachi({
-      ...options,
-      splitter: splitterOptions,
-      pretokenizer: pretokenizerOptions,
-    });
-
-    expect(sudachi.tokenizer as unknown).toBe(tokenizer);
-    expect(sudachi.splitter as unknown).toBe(splitter);
-    expect(sudachi.pretokenizer as unknown).toBe(pretokenizer);
+    const sudachi = createSudachi(options);
+    expect(createDictionarySpy).toHaveBeenCalledWith(options);
+    expect(sudachi as unknown).toBe(expected);
+    expect(sudachi.tokenizer as unknown).toBe(expected.tokenizer);
+    expect(sudachi.splitter as unknown).toBe(expected.splitter);
+    expect(sudachi.pretokenizer as unknown).toBe(expected.pretokenizer);
     expect(typeof sudachi.close).toBe("function");
-
-    expect(createTokenizerSpy).toHaveBeenCalledWith({
-      ...options,
-      splitter: splitterOptions,
-      pretokenizer: pretokenizerOptions,
-    });
-    expect(createSplitterSpy).toHaveBeenCalledWith(splitterOptions);
-    expect(createPretokenizerSpy).toHaveBeenCalledWith(pretokenizerOptions);
-
-    sudachi.close();
-    expect(calls).toEqual(["pretokenizer", "splitter", "tokenizer"]);
   } finally {
-    createTokenizerSpy.mockRestore();
-    createSplitterSpy.mockRestore();
-    createPretokenizerSpy.mockRestore();
+    createDictionarySpy.mockRestore();
   }
 });
 
-test("createSudachi closes already-created resources when construction fails", () => {
-  const calls: string[] = [];
-  const tokenizer = createCloseable("tokenizer", calls);
-  const splitter = createCloseable("splitter", calls);
-  const constructionError = new Error("pretokenizer init failed");
-  const createTokenizerSpy = spyOn(core, "createTokenizer").mockReturnValue(
-    tokenizer as never,
-  );
-  const createSplitterSpy = spyOn(
-    sentenceSplitterModule,
-    "createSentenceSplitter",
-  ).mockReturnValue(splitter as never);
-  const createPretokenizerSpy = spyOn(
-    pretokenizerModule,
-    "createPretokenizer",
+test("createSudachi rethrows createDictionary errors", () => {
+  const expected = new Error("dictionary init failed");
+  const createDictionarySpy = spyOn(
+    dictionaryModule,
+    "createDictionary",
   ).mockImplementation(() => {
-    throw constructionError;
+    throw expected;
   });
 
   try {
-    expect(() => createSudachi({ dictPath: "/tmp/dict" })).toThrow(
-      constructionError,
-    );
-    expect(calls).toEqual(["splitter", "tokenizer"]);
-    expect(createTokenizerSpy).toHaveBeenCalledTimes(1);
-    expect(createSplitterSpy).toHaveBeenCalledTimes(1);
-    expect(createPretokenizerSpy).toHaveBeenCalledTimes(1);
+    expect(() => createSudachi({ dictPath: "/tmp/dict" })).toThrow(expected);
   } finally {
-    createTokenizerSpy.mockRestore();
-    createSplitterSpy.mockRestore();
-    createPretokenizerSpy.mockRestore();
-  }
-});
-
-test("close throws first close error but attempts all component closes", () => {
-  const calls: string[] = [];
-  const pretokenizerError = new Error("pretokenizer close failed");
-  const splitterError = new Error("splitter close failed");
-  const tokenizer = createCloseable("tokenizer", calls);
-  const splitter = createCloseable("splitter", calls, splitterError);
-  const pretokenizer = createCloseable(
-    "pretokenizer",
-    calls,
-    pretokenizerError,
-  );
-  const createTokenizerSpy = spyOn(core, "createTokenizer").mockReturnValue(
-    tokenizer as never,
-  );
-  const createSplitterSpy = spyOn(
-    sentenceSplitterModule,
-    "createSentenceSplitter",
-  ).mockReturnValue(splitter as never);
-  const createPretokenizerSpy = spyOn(
-    pretokenizerModule,
-    "createPretokenizer",
-  ).mockReturnValue(pretokenizer as never);
-
-  try {
-    const sudachi = createSudachi({ dictPath: "/tmp/dict" });
-    expect(() => sudachi.close()).toThrow(pretokenizerError);
-    expect(calls).toEqual(["pretokenizer", "splitter", "tokenizer"]);
-  } finally {
-    createTokenizerSpy.mockRestore();
-    createSplitterSpy.mockRestore();
-    createPretokenizerSpy.mockRestore();
+    createDictionarySpy.mockRestore();
   }
 });

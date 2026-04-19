@@ -187,6 +187,11 @@ export interface PretokenizerOptions
   resourceDir?: string;
 }
 
+export interface DictionaryOptions extends TokenizerOptions {
+  splitter?: SentenceSplitterOptions;
+  pretokenizer?: PretokenizerOptions;
+}
+
 export type PosMatcherPatternItem = string | null | undefined;
 export type PosMatcherPattern = readonly PosMatcherPatternItem[];
 export type PosMatcherPatterns = readonly PosMatcherPattern[];

@@ -1,6 +1,13 @@
 import { existsSync, readdirSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
 import { dirname, join, resolve, sep } from "node:path";
+import { createTokenizer, type Tokenizer } from "./core.ts";
+import { createPretokenizer, type Pretokenizer } from "./pretokenizer.ts";
+import {
+  createSentenceSplitter,
+  type SentenceSplitter,
+} from "./sentence-splitter.ts";
+import type { DictionaryOptions } from "./types.ts";
 
 export type DictionaryType = "core" | "small" | "full";
 
@@ -59,6 +66,97 @@ const DICT_FILE_BY_TYPE: Record<DictionaryType, string> = {
   small: "system_small.dic",
   full: "system_full.dic",
 };
+
+export class Dictionary {
+  readonly tokenizer: Tokenizer;
+  readonly splitter: SentenceSplitter;
+  readonly pretokenizer: Pretokenizer;
+
+  constructor(
+    tokenizer: Tokenizer,
+    splitter: SentenceSplitter,
+    pretokenizer: Pretokenizer,
+  ) {
+    this.tokenizer = tokenizer;
+    this.splitter = splitter;
+    this.pretokenizer = pretokenizer;
+  }
+
+  tokenize(
+    ...args: Parameters<Tokenizer["tokenize"]>
+  ): ReturnType<Tokenizer["tokenize"]> {
+    return this.tokenizer.tokenize(...args);
+  }
+
+  lookup(
+    ...args: Parameters<Tokenizer["lookup"]>
+  ): ReturnType<Tokenizer["lookup"]> {
+    return this.tokenizer.lookup(...args);
+  }
+
+  createPosMatcher(
+    ...args: Parameters<Tokenizer["createPosMatcher"]>
+  ): ReturnType<Tokenizer["createPosMatcher"]> {
+    return this.tokenizer.createPosMatcher(...args);
+  }
+
+  pretokenize(
+    ...args: Parameters<Pretokenizer["pretokenize"]>
+  ): ReturnType<Pretokenizer["pretokenize"]> {
+    return this.pretokenizer.pretokenize(...args);
+  }
+
+  splitSentences(
+    ...args: Parameters<SentenceSplitter["split"]>
+  ): ReturnType<SentenceSplitter["split"]> {
+    return this.splitter.split(...args);
+  }
+
+  getEos(
+    ...args: Parameters<SentenceSplitter["getEos"]>
+  ): ReturnType<SentenceSplitter["getEos"]> {
+    return this.splitter.getEos(...args);
+  }
+
+  close(): void {
+    const errors: unknown[] = [];
+
+    for (const resource of [this.pretokenizer, this.splitter, this.tokenizer]) {
+      try {
+        resource.close();
+      } catch (error) {
+        errors.push(error);
+      }
+    }
+
+    if (errors.length > 0) {
+      throw errors[0];
+    }
+  }
+
+  [Symbol.dispose](): void {
+    this.close();
+  }
+}
+
+export function createDictionary(options: DictionaryOptions): Dictionary {
+  const tokenizer = createTokenizer(options);
+
+  try {
+    const splitter = createSentenceSplitter(options.splitter ?? options);
+
+    try {
+      const pretokenizer = createPretokenizer(options.pretokenizer ?? options);
+      return new Dictionary(tokenizer, splitter, pretokenizer);
+    } catch (error) {
+      splitter.close();
+      throw error;
+    }
+  } catch (error) {
+    tokenizer.close();
+    throw error;
+  }
+}
 
 function normalizeOutDir(outDir: string): string {
   return outDir.replace(/\/$/, "");

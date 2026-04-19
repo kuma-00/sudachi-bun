@@ -1,4 +1,7 @@
-export { createSudachi } from "./src/sudachi.ts";
+export {
+  createSudachi,
+  createSudachi as createDictionary,
+} from "./src/sudachi.ts";
 
 import { main as runMain } from "./src/cli.ts";
 import type { Pretokenizer } from "./src/pretokenizer.ts";
@@ -41,7 +44,9 @@ export type {
 } from "./src/pretokenizer-hf.ts";
 export type {
   CreateSudachiOptions,
+  CreateSudachiOptions as DictionaryOptions,
   Sudachi,
+  Sudachi as Dictionary,
 } from "./src/sudachi.ts";
 export type {
   BuildSystemDictionaryOptions,

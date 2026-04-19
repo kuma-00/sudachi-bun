@@ -9,7 +9,7 @@ TypeScript から Rust FFI (`sudachi-ffi`) を呼び出して、日本語テキ�
 - Rust 側の sentence splitter を通して `SentenceSpan[]` を取得し、UTF-8 バイトオフセットをそのまま扱う
 - CLI の `tokenize` サブコマンドで `--mode A|B|C` の分割モードと必須の `--projection surface|normalized|dictionary_form|reading|dictionary_and_surface|normalized_and_surface|normalized_nouns`、`--wakati` / `--all` / `--output <path>`、`--split-sentences` / `--debug` / `--resource-dir` を指定して出力
 - CLI で `--text`、stdin、位置引数のファイル入力に対応
-- TypeScript API として package root の `createSudachi` から tokenizer/splitter/pretokenizer をまとめて生成
+- TypeScript API として package root の `createDictionary` から tokenizer/splitter/pretokenizer をまとめて生成（`createSudachi` は互換 API）
 - TypeScript API として package root の `createHuggingFacePretokenizer` から HuggingFace tokenizers 向けアダプタを生成
 - TypeScript API から既存 morpheme の再分割（単一 morpheme / morpheme list）
 - TypeScript API から辞書 lookup 候補を `LookupEntry[]` として取得
@@ -160,19 +160,19 @@ console.log(installed.dictPath);
 
 ## TypeScript API
 
-`createSudachi` を package root から import して使います。
+`createDictionary` を package root から import して使います。`createSudachi` は互換 API のため引き続き利用できます。
 
 ```ts
-import { createSudachi } from "sudachi-bun";
+import { createDictionary } from "sudachi-bun";
 
-const sudachi = createSudachi({
+const dictionary = createDictionary({
   dictPath: "./dict/system_core.dic",
   // configPath: "./dict/sudachi.json",
   // libraryPath: "./sudachi-ffi/target/release/libsudachi_ffi.dylib",
 });
 
 try {
-  const { tokenizer, splitter, pretokenizer } = sudachi;
+  const { tokenizer, splitter, pretokenizer } = dictionary;
   const text = "今日は晴れです。明日も晴れです。";
   const tokenText = "東京都に";
   const tokens = tokenizer.tokenize({ text: tokenText, projection: "surface", mode: "C" });
@@ -188,7 +188,7 @@ try {
     console.log(span.start, span.end, morphemes);
   }
 } finally {
-  sudachi.close();
+  dictionary.close();
 }
 ```
 
@@ -231,9 +231,9 @@ console.log(user.report);
 
 `tokenizer.tokenize()` / `tokenizer.split()` / `tokenizer.splitInto()` / `stateful.doTokenize()` が返す morpheme 配列には、解析全体のコスト指標 `internalCost` が数値プロパティとして付与されます。各 `Morpheme` には、そのノードまでの累積コスト `totalCost` が含まれます。
 
-`createSudachi()` が返す `splitter` は Rust FFI の sentence splitter ハンドルを保持し、`split(text)` で `SentenceSpan[]` を返します。各 span は文テキスト `text` と UTF-8 バイトオフセット `start` / `end` を持ちます。
+`createDictionary()` が返す `splitter` は Rust FFI の sentence splitter ハンドルを保持し、`split(text)` で `SentenceSpan[]` を返します。各 span は文テキスト `text` と UTF-8 バイトオフセット `start` / `end` を持ちます。
 
-`createSudachi()` が返す `tokenizer` には再分割 API があります。
+`createDictionary()` が返す `tokenizer` には再分割 API があります。
 
 - `tokenizer.split({ morpheme, projection, mode })`: 既存の単一 morpheme をより細かい `mode` へ再分割する
 - `tokenizer.splitInto({ morphemes, projection, mode })`: morpheme list 全体を再分割する
@@ -290,12 +290,12 @@ const fromPosId = m ? tokenizer.posOf(m.posId) : null;
 const unknown = tokenizer.posOf(999999); // null
 ```
 
-`createSudachi()` が返す `pretokenizer` は辞書設定から pretokenized 形式を生成する API です。
+`createDictionary()` が返す `pretokenizer` は辞書設定から pretokenized 形式を生成する API です。
 
 ```ts
-import { createSudachi } from "sudachi-bun";
+import { createDictionary } from "sudachi-bun";
 
-const { pretokenizer } = createSudachi({
+const { pretokenizer } = createDictionary({
   dictPath: "./dict/system_core.dic",
 });
 
@@ -322,13 +322,13 @@ byte は Rust 側の生の UTF-8 オフセット、char は JavaScript string in
 `createHuggingFacePretokenizer()` は `Pretokenizer` を HuggingFace tokenizers の pre-tokenizer として使うためのアダプタです。第2引数の `PretokenizeOptions`（`mode` / `projection` / `subset`）は内部の `pretokenize` 呼び出しへ渡されますが、HuggingFace 側の `pre_tokenize(pretok)` は surface projection のみ対応し、`projection: "reading"` などの非 surface projection は例外になります。raw string の確認用には `pre_tokenize_str()` と `pre_tokenize_text()` があり、こちらは projected token text をそのまま返します。byte offset が必要な場合は、`Pretokenizer` の生の出力にある `beginByte` / `endByte` を参照してください。
 
 ```ts
-import { createHuggingFacePretokenizer, createSudachi } from "sudachi-bun";
+import { createDictionary, createHuggingFacePretokenizer } from "sudachi-bun";
 
-const sudachi = createSudachi({
+const dictionary = createDictionary({
   dictPath: "./dict/system_core.dic",
 });
 
-const hfPretokenizer = createHuggingFacePretokenizer(sudachi.pretokenizer, {
+const hfPretokenizer = createHuggingFacePretokenizer(dictionary.pretokenizer, {
   projection: "surface",
 });
 ```
