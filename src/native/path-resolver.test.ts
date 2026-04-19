@@ -7,6 +7,7 @@ import { join, resolve } from "node:path";
 
 const ORIGINAL_SUDACHI_FFI_PATH = process.env.SUDACHI_FFI_PATH;
 const ORIGINAL_SUDACHI_FFI_DIR = process.env.SUDACHI_FFI_DIR;
+const ORIGINAL_SUDACHI_FFI_BINARY_NAME = process.env.SUDACHI_FFI_BINARY_NAME;
 
 async function importPathResolver(moduleSuffix = "") {
   return import(`./path-resolver.ts${moduleSuffix}`);
@@ -23,6 +24,12 @@ afterEach(() => {
     delete process.env.SUDACHI_FFI_DIR;
   } else {
     process.env.SUDACHI_FFI_DIR = ORIGINAL_SUDACHI_FFI_DIR;
+  }
+
+  if (ORIGINAL_SUDACHI_FFI_BINARY_NAME === undefined) {
+    delete process.env.SUDACHI_FFI_BINARY_NAME;
+  } else {
+    process.env.SUDACHI_FFI_BINARY_NAME = ORIGINAL_SUDACHI_FFI_BINARY_NAME;
   }
 
   mock.restore();
@@ -50,6 +57,7 @@ test("loadNativeLibraryPath uses SUDACHI_FFI_PATH when no explicit argument is p
 test("loadNativeLibraryPath resolves from SUDACHI_FFI_DIR candidates when present", async () => {
   const { loadNativeLibraryPath } = await importPathResolver();
   delete process.env.SUDACHI_FFI_PATH;
+  delete process.env.SUDACHI_FFI_BINARY_NAME;
 
   const resolverDir = mkdtempSync(join(tmpdir(), "sudachi-path-resolver-"));
   process.env.SUDACHI_FFI_DIR = resolverDir;
@@ -58,6 +66,45 @@ test("loadNativeLibraryPath resolves from SUDACHI_FFI_DIR candidates when presen
   writeFileSync(expectedPath, "");
 
   expect(loadNativeLibraryPath()).toBe(expectedPath);
+});
+
+test("loadNativeLibraryPath resolves SUDACHI_FFI_BINARY_NAME from SUDACHI_FFI_DIR", async () => {
+  const { loadNativeLibraryPath } = await importPathResolver();
+  delete process.env.SUDACHI_FFI_PATH;
+
+  const resolverDir = mkdtempSync(join(tmpdir(), "sudachi-path-resolver-"));
+  process.env.SUDACHI_FFI_DIR = resolverDir;
+  process.env.SUDACHI_FFI_BINARY_NAME = "custom-native.dylib";
+
+  const expectedPath = join(resolverDir, "custom-native.dylib");
+  writeFileSync(expectedPath, "");
+
+  expect(loadNativeLibraryPath()).toBe(expectedPath);
+});
+
+test("loadNativeLibraryPath rejects SUDACHI_FFI_BINARY_NAME with directory segments", async () => {
+  const { loadNativeLibraryPath } = await importPathResolver();
+  delete process.env.SUDACHI_FFI_PATH;
+  process.env.SUDACHI_FFI_BINARY_NAME = "nested/custom-native.dylib";
+
+  expect(() => loadNativeLibraryPath()).toThrow(
+    "SUDACHI_FFI_BINARY_NAME must be a file name without directory segments.",
+  );
+});
+
+test("loadNativeLibraryPath rejects SUDACHI_FFI_BINARY_NAME as dot segments", async () => {
+  const { loadNativeLibraryPath } = await importPathResolver();
+  delete process.env.SUDACHI_FFI_PATH;
+
+  process.env.SUDACHI_FFI_BINARY_NAME = ".";
+  expect(() => loadNativeLibraryPath()).toThrow(
+    "SUDACHI_FFI_BINARY_NAME must be a file name without directory segments.",
+  );
+
+  process.env.SUDACHI_FFI_BINARY_NAME = "..";
+  expect(() => loadNativeLibraryPath()).toThrow(
+    "SUDACHI_FFI_BINARY_NAME must be a file name without directory segments.",
+  );
 });
 
 test("loadNativeLibraryPath throws with looked-up candidates when not found", async () => {

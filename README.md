@@ -18,9 +18,22 @@
 
 ```bash
 bun install
-cd sudachi-ffi && cargo build --release && cd ..
 bun run setup:dict -- --type core --version latest --out ./dict
 ```
+
+`bun install` 時にネイティブライブラリを自動準備します（環境一致の配布バイナリをダウンロードし、見つからない場合は `cargo build --release` を試行）。
+
+利用可能な環境変数:
+
+- `SUDACHI_FFI_BINARY_URL`: 配布バイナリの直接URL
+- `SUDACHI_FFI_BINARY_NAME`: `SUDACHI_FFI_BINARY_URL` を保存するファイル名（ディレクトリ不可）
+- `SUDACHI_FFI_GITHUB_REPOSITORY`: `owner/repo` 形式でリリース取得元を明示
+
+リリース取得元の優先順位:
+
+1. `SUDACHI_FFI_GITHUB_REPOSITORY`
+2. `GITHUB_REPOSITORY`
+3. 既定値（`kuma-00/sudachi-bun`）
 
 ## ライブラリ利用（最小例）
 
