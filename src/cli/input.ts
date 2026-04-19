@@ -50,6 +50,21 @@ function readStdinText(deps: InputResolutionDependencies): string {
   return readFileSync(0, "utf8");
 }
 
+function readPipedStdinText(
+  deps: InputResolutionDependencies,
+): string | undefined {
+  if (!hasStdinInput(deps)) {
+    return undefined;
+  }
+
+  try {
+    return readStdinText(deps);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw invalidInputError(`Failed to read stdin: ${message}`);
+  }
+}
+
 function readInputFile(
   path: string,
   deps: InputResolutionDependencies,
@@ -88,6 +103,16 @@ export function resolveInputText(
   deps: InputResolutionDependencies = {},
 ): string {
   const positionalFiles = options.positionalFiles ?? [];
+  let stdinTextResolved = false;
+  let stdinText: string | undefined;
+  const getStdinText = (): string | undefined => {
+    if (!stdinTextResolved) {
+      stdinText = readPipedStdinText(deps);
+      stdinTextResolved = true;
+    }
+
+    return stdinText;
+  };
 
   if (options.text !== undefined) {
     if (positionalFiles.length > 0) {
@@ -96,7 +121,8 @@ export function resolveInputText(
       );
     }
 
-    if (hasStdinInput(deps)) {
+    const resolvedStdinText = getStdinText();
+    if (resolvedStdinText !== undefined && resolvedStdinText.length > 0) {
       throw invalidInputError("Cannot combine --text with stdin input.");
     }
 
@@ -104,7 +130,8 @@ export function resolveInputText(
   }
 
   if (positionalFiles.length > 0) {
-    if (hasStdinInput(deps)) {
+    const resolvedStdinText = getStdinText();
+    if (resolvedStdinText !== undefined && resolvedStdinText.length > 0) {
       throw invalidInputError(
         "Cannot combine positional file input with stdin input.",
       );
@@ -118,21 +145,13 @@ export function resolveInputText(
     return resolvedText;
   }
 
-  if (hasStdinInput(deps)) {
-    let stdinText: string;
-
-    try {
-      stdinText = readStdinText(deps);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      throw invalidInputError(`Failed to read stdin: ${message}`);
-    }
-
-    if (stdinText.length === 0) {
+  const resolvedStdinText = getStdinText();
+  if (resolvedStdinText !== undefined) {
+    if (resolvedStdinText.length === 0) {
       throw noInputError();
     }
 
-    return stdinText;
+    return resolvedStdinText;
   }
 
   throw noInputError();

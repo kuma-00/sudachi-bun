@@ -84,6 +84,7 @@ test("resolveInputText rejects combining --text with positional files", () => {
 test("resolveInputText rejects combining --text with stdin", () => {
   const { deps, state } = createDeps({
     isStdinPiped: () => true,
+    readStdinText: () => "stdin text",
   });
 
   expectInvalidArgumentError(
@@ -92,12 +93,13 @@ test("resolveInputText rejects combining --text with stdin", () => {
   );
   expect(state.fileReads).toEqual([]);
   expect(state.stdinChecks).toBe(1);
-  expect(state.stdinReads).toBe(0);
+  expect(state.stdinReads).toBe(1);
 });
 
 test("resolveInputText rejects combining positional files with stdin", () => {
   const { deps, state } = createDeps({
     isStdinPiped: () => true,
+    readStdinText: () => "stdin text",
   });
 
   expectInvalidArgumentError(
@@ -106,7 +108,36 @@ test("resolveInputText rejects combining positional files with stdin", () => {
   );
   expect(state.fileReads).toEqual([]);
   expect(state.stdinChecks).toBe(1);
-  expect(state.stdinReads).toBe(0);
+  expect(state.stdinReads).toBe(1);
+});
+
+test("resolveInputText accepts --text when piped stdin is empty", () => {
+  const { deps, state } = createDeps({
+    isStdinPiped: () => true,
+    readStdinText: () => "",
+  });
+
+  expect(resolveInputText({ text: "explicit text" }, deps)).toBe(
+    "explicit text",
+  );
+  expect(state.fileReads).toEqual([]);
+  expect(state.stdinChecks).toBe(1);
+  expect(state.stdinReads).toBe(1);
+});
+
+test("resolveInputText accepts positional files when piped stdin is empty", () => {
+  const { deps, state } = createDeps({
+    isStdinPiped: () => true,
+    readStdinText: () => "",
+    readFileText: () => "file input",
+  });
+
+  expect(resolveInputText({ positionalFiles: ["input.txt"] }, deps)).toBe(
+    "file input",
+  );
+  expect(state.fileReads).toEqual(["input.txt"]);
+  expect(state.stdinChecks).toBe(1);
+  expect(state.stdinReads).toBe(1);
 });
 
 test("resolveInputText concatenates multiple positional files with newlines", () => {
