@@ -1,6 +1,7 @@
+import { randomUUID } from "node:crypto";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
-import { mkdir } from "node:fs/promises";
-import { dirname, join, resolve, sep } from "node:path";
+import { mkdir, rename, unlink } from "node:fs/promises";
+import { dirname, join, resolve } from "node:path";
 import { createTokenizer, type Tokenizer } from "./core.ts";
 import { createPretokenizer, type Pretokenizer } from "./pretokenizer.ts";
 import {
@@ -235,68 +236,15 @@ function inferReleaseTagFromAssetName(
   assetName: string,
   type: DictionaryType,
 ): string | undefined {
-  const match = new RegExp(`^sudachi-dictionary-(\\d+)-${type}\\.zip$`).exec(
-    assetName,
-  );
-  if (!match?.[1]) {
+  const match = new RegExp(
+    `^(?:sudachidict_${type}-(\\d+)-py3-none-any\\.whl|sudachi-dictionary-(\\d+)-${type}\\.zip)$`,
+    "i",
+  ).exec(assetName);
+  if (!match?.[1] && !match?.[2]) {
     return undefined;
   }
 
-  return `v${match[1]}`;
-}
-
-function findBestInstalledDictionary(options: {
-  type: DictionaryType;
-  requestedVersion: string;
-  resolvedVersion: string;
-  beforeInstall: InstalledDictionary[];
-  afterInstall: InstalledDictionary[];
-}): InstalledDictionary | null {
-  const installed = options.afterInstall.filter(
-    (entry) => entry.type === options.type,
-  );
-  if (installed.length === 0) {
-    return null;
-  }
-
-  const expectedVersion = normalizeVersion(options.resolvedVersion);
-  if (expectedVersion !== DEFAULT_VERSION) {
-    const exact = installed.find((entry) => entry.version === expectedVersion);
-    if (exact) {
-      return exact;
-    }
-  }
-
-  if (options.requestedVersion !== DEFAULT_VERSION) {
-    const requested = normalizeVersion(options.requestedVersion);
-    const exact = installed.find((entry) => entry.version === requested);
-    if (exact) {
-      return exact;
-    }
-  }
-
-  const beforePaths = new Set(
-    options.beforeInstall.map((entry) => entry.dictPath),
-  );
-  const added = installed.filter((entry) => !beforePaths.has(entry.dictPath));
-  if (added.length > 0) {
-    added.sort((left, right) =>
-      compareVersionDescending(left.version, right.version),
-    );
-    return added[0] ?? null;
-  }
-
-  // When installation overwrites an existing root dictionary in-place,
-  // the path is not "added". Prefer that root entry over unrelated versioned entries.
-  const root = installed.find((entry) => entry.version === null);
-  if (root) {
-    return root;
-  }
-
-  installed.sort((left, right) =>
-    compareVersionDescending(left.version, right.version),
-  );
-  return installed[0] ?? null;
+  return `v${match[1] ?? match[2]}`;
 }
 
 export function listInstalledDictionaries(
@@ -438,7 +386,7 @@ export function buildExpectedAssetName(
   releaseTag: string,
 ): string {
   const versionPart = releaseTag.replace(/^v/, "");
-  return `sudachi-dictionary-${versionPart}-${type}.zip`;
+  return `sudachidict_${type}-${versionPart}-py3-none-any.whl`;
 }
 
 export function resolveDictionaryAsset(
@@ -446,7 +394,14 @@ export function resolveDictionaryAsset(
   type: DictionaryType,
 ): ReleaseAsset {
   const expectedName = buildExpectedAssetName(type, release.tag_name);
-  const match = release.assets.find((asset) => asset.name === expectedName);
+  const legacyName = `sudachi-dictionary-${normalizeVersion(release.tag_name)}-${type}.zip`;
+  const match =
+    release.assets.find(
+      (asset) => asset.name.toLowerCase() === expectedName.toLowerCase(),
+    ) ??
+    release.assets.find(
+      (asset) => asset.name.toLowerCase() === legacyName.toLowerCase(),
+    );
   if (match) {
     return match;
   }
@@ -455,7 +410,7 @@ export function resolveDictionaryAsset(
   throw new Error(
     [
       `Could not find dictionary asset for type "${type}" in release ${release.tag_name}.`,
-      `Expected: ${expectedName}`,
+      `Expected: ${expectedName} or ${legacyName}`,
       available ? `Available: ${available}` : "Available: (none)",
       release.html_url ? `Release: ${release.html_url}` : undefined,
     ]
@@ -516,8 +471,14 @@ export async function resolveDictionaryDownload(
   options: SetupDictionaryOptions,
 ): Promise<DictionaryDownload> {
   if (options.url) {
+    let pathname: string;
+    try {
+      pathname = new URL(options.url).pathname;
+    } catch {
+      pathname = options.url.split(/[?#]/, 1)[0] ?? "";
+    }
     const name =
-      options.url.split("/").pop() ?? `sudachi-dictionary-${options.type}.zip`;
+      pathname.split("/").pop() || `sudachi-dictionary-${options.type}.zip`;
     return {
       name,
       url: options.url,
@@ -594,22 +555,6 @@ function resolveSudachiRsRevision(): string {
   return FALLBACK_SUDACHI_RS_REVISION;
 }
 
-function toAbsoluteIfInsideOutDir(
-  outDir: string,
-  candidate: string,
-): string | null {
-  const absoluteOutDir = toAbsolute(outDir);
-  const absoluteCandidate = toAbsolute(join(outDir, candidate));
-  if (
-    absoluteCandidate === absoluteOutDir ||
-    absoluteCandidate.startsWith(`${absoluteOutDir}${sep}`)
-  ) {
-    return absoluteCandidate;
-  }
-
-  return null;
-}
-
 async function listArchiveEntries(archivePath: string): Promise<string[]> {
   const process = Bun.spawn(["unzip", "-Z1", archivePath], {
     stdout: "pipe",
@@ -628,32 +573,44 @@ async function listArchiveEntries(archivePath: string): Promise<string[]> {
 }
 
 function resolveDictionaryPathsFromArchiveEntries(
-  outDir: string,
   archiveEntries: string[],
   type: DictionaryType,
-): string[] {
+): string | null {
   const typeSpecificName = DICT_FILE_BY_TYPE[type];
-  const preferredNames = new Set([
-    typeSpecificName,
-    "system.dic",
-    "system.dic.test",
-  ]);
-  const basename = (entry: string): string => entry.split("/").at(-1) ?? entry;
-  const preferredEntries = archiveEntries.filter((entry) =>
-    preferredNames.has(basename(entry)),
+  const normalizeEntry = (entry: string): string => entry.replaceAll("\\", "/");
+  const basename = (entry: string): string => {
+    const normalized = normalizeEntry(entry);
+    return normalized.split("/").at(-1) ?? normalized;
+  };
+  const packagePrefix = `sudachidict_${type.toLowerCase()}/`;
+  const mismatchedPackage = /(?:^|\/)sudachidict_(core|small|full)\//i;
+  const candidates = archiveEntries.filter((entry) => {
+    const normalized = normalizeEntry(entry);
+    const packageMatch = mismatchedPackage.exec(normalized);
+    return !packageMatch || packageMatch[1]?.toLowerCase() === type;
+  });
+  const exactWheel = candidates.find(
+    (entry) =>
+      normalizeEntry(entry).toLowerCase() ===
+      `${packagePrefix}resources/system.dic`,
   );
-  const fallbackEntries =
-    preferredEntries.length > 0
-      ? preferredEntries
-      : archiveEntries.filter((entry) => {
-          const file = basename(entry);
-          return file.endsWith(".dic") || file.endsWith(".dic.test");
-        });
-
-  const resolved = fallbackEntries
-    .map((entry) => toAbsoluteIfInsideOutDir(outDir, entry))
-    .filter((entry): entry is string => entry !== null);
-  return [...new Set(resolved)];
+  if (exactWheel) return exactWheel;
+  const preferred = candidates.find(
+    (entry) => basename(entry) === typeSpecificName,
+  );
+  if (preferred) return preferred;
+  const system = candidates.find((entry) => basename(entry) === "system.dic");
+  if (system) return system;
+  const test = candidates.find(
+    (entry) => basename(entry) === "system.dic.test",
+  );
+  if (test) return test;
+  return (
+    candidates.find((entry) => {
+      const file = basename(entry);
+      return file.endsWith(".dic") || file.endsWith(".dic.test");
+    }) ?? null
+  );
 }
 
 export async function downloadArchive(
@@ -773,19 +730,54 @@ export async function unzipArchive(
   }
 }
 
+async function extractArchiveEntry(
+  archivePath: string,
+  entry: string,
+  outputPath: string,
+): Promise<void> {
+  const tempPath = `${outputPath}.tmp-${process.pid}-${randomUUID()}`;
+  await ensureDirectory(dirname(outputPath));
+  try {
+    const process = Bun.spawn(["unzip", "-p", archivePath, entry], {
+      stdout: Bun.file(tempPath),
+      stderr: "pipe",
+    });
+    const exitCode = await process.exited;
+    if (exitCode !== 0) {
+      throw new Error(
+        `Failed to extract dictionary entry ${entry} from ${archivePath}`,
+      );
+    }
+    await rename(tempPath, outputPath);
+  } catch (error) {
+    await unlink(tempPath).catch(() => {});
+    throw error;
+  }
+}
+
+function versionFromArchiveEntries(
+  entries: string[],
+  type: DictionaryType,
+): string | null {
+  for (const entry of entries) {
+    const match = /(?:^|\/)sudachi-dictionary-(\d+)\//.exec(entry);
+    if (match?.[1]) return match[1];
+
+    const wheelMetadata = new RegExp(
+      `(?:^|\\/)sudachidict_${type}-(\\d+)\\.dist-info(?:\\/|$)`,
+      "i",
+    ).exec(entry);
+    if (wheelMetadata?.[1]) return wheelMetadata[1];
+  }
+  return null;
+}
+
 export async function setupDictionary(
   options: SetupDictionaryOptions,
 ): Promise<DictionarySetupResult> {
   const outDir = normalizeOutDir(options.outDir);
-  const beforeInstall = listInstalledDictionaries(outDir);
   const download = await resolveDictionaryDownload(options);
   const archivePath = `${outDir}/${download.name}`;
-  const resolvedVersion = download.releaseTag ?? options.version;
-  const fallbackExtractedDir = extractedDirFromVersion(outDir, resolvedVersion);
-  const fallbackDictPath = join(
-    fallbackExtractedDir,
-    DICT_FILE_BY_TYPE[options.type],
-  );
 
   await ensureDirectory(outDir);
 
@@ -797,12 +789,11 @@ export async function setupDictionary(
 
   await downloadArchive(download.url, archivePath);
   const archiveEntries = await listArchiveEntries(archivePath);
-  const extractedDictPaths = resolveDictionaryPathsFromArchiveEntries(
-    outDir,
+  const selectedEntry = resolveDictionaryPathsFromArchiveEntries(
     archiveEntries,
     options.type,
   );
-  if (extractedDictPaths.length === 0) {
+  if (!selectedEntry) {
     throw new Error(
       `The downloaded archive does not contain a dictionary file for type "${options.type}".\n` +
         `expected one of: ${DICT_FILE_BY_TYPE[options.type]}, system.dic, *.dic\n` +
@@ -811,39 +802,32 @@ export async function setupDictionary(
     );
   }
 
-  await unzipArchive(archivePath, outDir);
-
-  const installed = findBestInstalledDictionary({
-    type: options.type,
-    requestedVersion: options.version,
-    resolvedVersion,
-    beforeInstall,
-    afterInstall: listInstalledDictionaries(outDir),
-  });
-  const dictPathFromArchive = extractedDictPaths.find((candidatePath) =>
-    existsSync(candidatePath),
+  const archiveVersion = versionFromArchiveEntries(
+    archiveEntries,
+    options.type,
   );
-  const dictPathCandidate =
-    dictPathFromArchive ?? installed?.dictPath ?? fallbackDictPath;
-  if (!existsSync(dictPathCandidate)) {
+  const effectiveVersion = normalizeVersion(
+    download.releaseTag ??
+      inferReleaseTagFromAssetName(download.name, options.type) ??
+      archiveVersion ??
+      options.version,
+  );
+  if (!/^\d+$/.test(effectiveVersion)) {
     throw new Error(
-      `Could not locate extracted dictionary file after installation.\n` +
-        `expected: ${DICT_FILE_BY_TYPE[options.type]}\n` +
-        `outDir: ${toAbsolute(outDir)}\n` +
-        `archive: ${toAbsolute(archivePath)}`,
+      "Could not determine a numeric dictionary version from the custom archive. " +
+        "Pass an explicit numeric --version (for example, --version 20260116).",
     );
   }
-  const extractedDir = dictPathFromArchive
-    ? dirname(dictPathFromArchive)
-    : (installed?.baseDir ?? fallbackExtractedDir);
-  const dictPath = dictPathCandidate;
+  const extractedDir = extractedDirFromVersion(outDir, effectiveVersion);
+  const dictPath = join(extractedDir, DICT_FILE_BY_TYPE[options.type]);
+  await extractArchiveEntry(archivePath, selectedEntry, dictPath);
   console.log("Downloading resources");
   const resources = await setupSudachiResources(outDir);
 
   console.log(`Dictionary setup complete: ${outDir}`);
   return {
     type: options.type,
-    version: installed?.version ?? normalizeVersion(resolvedVersion),
+    version: effectiveVersion,
     outDir: toAbsolute(outDir),
     archivePath: toAbsolute(archivePath),
     extractedDir: toAbsolute(extractedDir),

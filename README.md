@@ -12,7 +12,7 @@
 
 - Bun
 - Rust (`cargo`)
-- `unzip`（辞書展開用）
+- `unzip`（wheel/ZIP 辞書展開用）
 
 ## セットアップ
 
@@ -23,6 +23,9 @@ bun run setup:dict -- --type core --version latest --out ./dict
 
 `setup:dict` は辞書アーカイブに加えて `sudachi.rs` の `resources` も `./dict/resources` にダウンロードします。  
 辞書ファイルと `resources` は分離して保持され、`resources/system.dic` は作成しません。必要な場合は `dictPath` / `resourceDir` / `configPath` を利用側で明示指定してください。
+セットアップ完了時に、解決した `version`、`dictPath`、`resourceDir`、`defaultConfigPath` を絶対パスで表示します。利用側では、その出力の `dictPath` を指定してください（例: `dictPath: /work/project/dict/sudachi-dictionary-20260116/system_core.dic`）。
+
+公式配布は wheel（ZIP 互換）を使用します。`--url <archive-url>` では wheel または legacy ZIP を指定できますが、辞書を含まない `.tar.gz` は指定できません。URL のファイル名やアーカイブ内から数値バージョンを推論できないカスタムアーカイブでは、数値の `--version`（例: `--version 20260116`）を指定してください。
 
 `bun install` 時にネイティブライブラリを自動準備します（環境一致の配布バイナリをダウンロードし、見つからない場合は `cargo build --release` を試行）。
 
@@ -44,7 +47,8 @@ bun run setup:dict -- --type core --version latest --out ./dict
 import { createDictionary } from "sudachi-bun";
 
 const dictionary = createDictionary({
-  dictPath: "./dict/system_core.dic",
+  // setup:dict の完了出力に表示された dictPath を指定します。
+  dictPath: "/work/project/dict/sudachi-dictionary-20260116/system_core.dic",
 });
 
 try {

@@ -146,9 +146,13 @@ morpheme 配列を再分割します。
 主なオプション:
 
 - `--type core|small|full`（default: `core`）
-- `--version <tag|latest>`（default: `latest`）
+- `--version <YYYYMMDD|vYYYYMMDD|latest>`（default: `latest`）
 - `--out <dir>`（default: `./dict`）
-- `--url <zip-url>`（独自配布元）
+- `--url <archive-url>`（wheel または legacy ZIP の独自配布元。辞書を含まない `.tar.gz` は指定不可）
+
+カスタムアーカイブのバージョンは、リリースタグ、URL のファイル名、アーカイブ内の wheel `dist-info` または legacy ZIP のパス、明示した `--version` の順に解決します。これらから数値バージョンを推論できない場合、`--version 20260116` のように数値のバージョンを明示する必要があります。`latest` やその他の非数値バージョンを保存することはできません。
+
+セットアップ完了時、CLI は解決した結果を標準出力に表示します。出力には `version`、辞書ファイルの絶対パス `dictPath`、リソースディレクトリの絶対パス `resourceDir`、既定設定ファイルの絶対パス `defaultConfigPath` を含めます。利用側は表示された `dictPath` などをそのまま `createDictionary()` のオプションに指定できます。
 
 ### ライブラリ API
 
@@ -163,4 +167,4 @@ morpheme 配列を再分割します。
 - 辞書ダウンロード失敗:
   ネットワーク、タグ、URL を確認
 - 展開失敗:
-  `unzip` の導入を確認
+  `unzip` の導入を確認（wheel は ZIP 互換形式）

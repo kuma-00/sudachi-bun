@@ -1,4 +1,5 @@
 import {
+  type DictionarySetupResult,
   type DictionaryType,
   type SetupDictionaryOptions,
   setupDictionary,
@@ -10,12 +11,15 @@ const VALID_TYPES: DictionaryType[] = ["core", "small", "full"];
 
 function printHelp(): void {
   console.log(`Usage:
-  bun run setup:dict -- [--type core|small|full] [--version <version>] [--out <dir>] [--url <url>]
+  bun run setup:dict -- [--type core|small|full] [--version <YYYYMMDD|vYYYYMMDD|latest>] [--out <dir>] [--url <url>]
 
 Examples:
   bun run setup:dict -- --type core --version latest --out ./dict
   bun run setup:dict -- --type full --version v20240416
-  bun run setup:dict -- --url https://example.com/sudachi-dictionary.zip --out ./dict
+  bun run setup:dict -- --url https://example.com/sudachidict_core-20260723-py3-none-any.whl --out ./dict
+
+  --url accepts a SudachiDict wheel or a legacy ZIP archive. Source tar.gz files do not contain the dictionary.
+  Custom archives whose filename and contents do not expose a numeric version require a numeric --version.
 `);
 }
 
@@ -116,8 +120,21 @@ export function parseSetupDictionaryArgs(
   return parsed;
 }
 
+export function formatSetupDictionaryResult(
+  result: DictionarySetupResult,
+): string {
+  return [
+    "Resolved dictionary paths:",
+    `  version: ${result.version}`,
+    `  dictPath: ${result.dictPath}`,
+    `  resourceDir: ${result.resourceDir}`,
+    `  defaultConfigPath: ${result.defaultConfigPath}`,
+  ].join("\n");
+}
+
 export async function main(argv = process.argv.slice(2)): Promise<void> {
-  await setupDictionary(parseSetupDictionaryArgs(argv));
+  const result = await setupDictionary(parseSetupDictionaryArgs(argv));
+  console.log(formatSetupDictionaryResult(result));
 }
 
 if (import.meta.main) {
